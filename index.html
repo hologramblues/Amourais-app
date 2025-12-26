@@ -1108,32 +1108,50 @@
             });
             canvas.add(textBox);
 
-            // Watermark
+            // Watermark (logo or text fallback)
             const wm = template.watermark;
-            watermark = new fabric.Text('SAMOURAÏS', {
-                left: wm.x + offset,
-                top: wm.y + offset,
-                fontSize: template.width * 0.04,
-                fontFamily: 'Impact, sans-serif',
-                fontWeight: '800',
-                fill: '#ffffff',
-                stroke: '#333333',
-                strokeWidth: 2,
-                angle: -3,
-                originX: 'right',
-                originY: 'bottom',
-                shadow: new fabric.Shadow({
-                    color: 'rgba(0,0,0,0.3)',
-                    blur: 4,
-                    offsetX: 2,
-                    offsetY: 2
-                }),
-                selectable: true,
-                hasControls: true,
-                cornerSize: 16,
-                hoverCursor: 'move',
-                moveCursor: 'move'
-            });
+            if (logoImage) {
+                // Use logo image
+                watermark = new fabric.Image(logoImage.getElement(), {
+                    left: wm.x + offset,
+                    top: wm.y + offset,
+                    originX: 'right',
+                    originY: 'bottom',
+                    scaleX: 0.15,
+                    scaleY: 0.15,
+                    selectable: true,
+                    hasControls: true,
+                    cornerSize: 16,
+                    hoverCursor: 'move',
+                    moveCursor: 'move'
+                });
+            } else {
+                // Fallback to text if logo not loaded yet
+                watermark = new fabric.Text('SAMOURAÏS', {
+                    left: wm.x + offset,
+                    top: wm.y + offset,
+                    fontSize: template.width * 0.04,
+                    fontFamily: 'Impact, sans-serif',
+                    fontWeight: '800',
+                    fill: '#ffffff',
+                    stroke: '#333333',
+                    strokeWidth: 2,
+                    angle: -3,
+                    originX: 'right',
+                    originY: 'bottom',
+                    shadow: new fabric.Shadow({
+                        color: 'rgba(0,0,0,0.3)',
+                        blur: 4,
+                        offsetX: 2,
+                        offsetY: 2
+                    }),
+                    selectable: true,
+                    hasControls: true,
+                    cornerSize: 16,
+                    hoverCursor: 'move',
+                    moveCursor: 'move'
+                });
+            }
             canvas.add(watermark);
 
             canvas.renderAll();
@@ -1906,6 +1924,48 @@
         // Change this to your Railway URL after deployment
         const BACKEND_URL = localStorage.getItem('samourais_backend_url') || '';
 
+        // ============================================
+        // LOGO WATERMARK CONFIG
+        // ============================================
+        const LOGO_URL = 'https://raw.githubusercontent.com/hologramblues/Amourais-app/main/samourais_logo_transparent_smooth.png';
+        let logoImage = null;
+        
+        // Preload logo
+        function loadLogo() {
+            fabric.Image.fromURL(LOGO_URL, (img) => {
+                if (img) {
+                    logoImage = img;
+                    console.log('Logo loaded successfully');
+                    // Refresh watermark if canvas already initialized
+                    if (canvas && watermark) {
+                        const template = TEMPLATES[state.currentTemplate];
+                        const wm = template.watermark;
+                        const offset = CANVAS_PADDING;
+                        
+                        // Remove old text watermark
+                        canvas.remove(watermark);
+                        
+                        // Add logo watermark
+                        watermark = new fabric.Image(logoImage.getElement(), {
+                            left: wm.x + offset,
+                            top: wm.y + offset,
+                            originX: 'right',
+                            originY: 'bottom',
+                            scaleX: 0.15,
+                            scaleY: 0.15,
+                            selectable: true,
+                            hasControls: true,
+                            cornerSize: 16,
+                            hoverCursor: 'move',
+                            moveCursor: 'move'
+                        });
+                        canvas.add(watermark);
+                        canvas.renderAll();
+                    }
+                }
+            }, { crossOrigin: 'anonymous' });
+        }
+
         window.startVideoProcessing = async function() {
             const modal = document.getElementById('export-modal');
             const params = window._videoExportParams;
@@ -2140,6 +2200,7 @@
         // INIT
         // ============================================
         function init() {
+            loadLogo(); // Preload logo for watermark
             initCanvas();
             setupEventListeners();
             setupTimelineInteraction();
