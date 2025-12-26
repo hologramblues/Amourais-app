@@ -1,0 +1,2151 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Samouraïs Meme Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        .app {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 360px;
+            background: #111;
+            border-right: 1px solid #222;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .logo {
+            font-size: 22px;
+            font-weight: 700;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo span {
+            color: #ef4444;
+        }
+
+        .section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #666;
+        }
+
+        /* Format selector */
+        .format-selector {
+            display: flex;
+            gap: 6px;
+        }
+
+        .format-btn {
+            flex: 1;
+            padding: 10px 6px;
+            background: #1a1a1a;
+            border: 2px solid #333;
+            border-radius: 8px;
+            color: #999;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .format-btn:hover {
+            border-color: #444;
+            color: #fff;
+        }
+
+        .format-btn.active {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+            color: #fff;
+        }
+
+        .format-btn .ratio {
+            font-size: 10px;
+            color: #666;
+        }
+
+        .format-btn.active .ratio {
+            color: #ef4444;
+        }
+
+        /* Upload zone */
+        .upload-zone {
+            border: 2px dashed #333;
+            border-radius: 10px;
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .upload-zone:hover {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.05);
+        }
+
+        .upload-zone.has-file {
+            border-style: solid;
+            border-color: #333;
+            padding: 10px;
+        }
+
+        .upload-icon {
+            font-size: 28px;
+            margin-bottom: 6px;
+        }
+
+        .upload-text {
+            font-size: 13px;
+            color: #999;
+        }
+
+        .upload-text strong {
+            color: #ef4444;
+        }
+
+        .file-preview {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-preview img {
+            width: 56px;
+            height: 56px;
+            object-fit: cover;
+            border-radius: 6px;
+        }
+
+        .file-info {
+            flex: 1;
+            text-align: left;
+        }
+
+        .file-name {
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 160px;
+        }
+
+        .file-size {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .remove-file {
+            padding: 6px;
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .remove-file:hover {
+            color: #ef4444;
+        }
+
+        /* Text input */
+        .text-input {
+            width: 100%;
+            background: #1a1a1a;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 14px;
+            color: #fff;
+            font-size: 15px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 80px;
+            transition: border-color 0.2s;
+        }
+
+        .text-input:focus {
+            outline: none;
+            border-color: #ef4444;
+        }
+
+        .text-input::placeholder {
+            color: #666;
+        }
+
+        /* Slider */
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .slider {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #ef4444;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .slider::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+        }
+
+        .slider-value {
+            font-size: 13px;
+            color: #999;
+            min-width: 45px;
+            text-align: right;
+        }
+
+        /* Checkbox toggle */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            background: #1a1a1a;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .toggle-row span {
+            font-size: 13px;
+        }
+
+        .toggle-switch {
+            width: 40px;
+            height: 22px;
+            background: #333;
+            border-radius: 11px;
+            position: relative;
+            transition: background 0.2s;
+        }
+
+        .toggle-switch.active {
+            background: #ef4444;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background: #fff;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.2s;
+        }
+
+        .toggle-switch.active::after {
+            transform: translateX(18px);
+        }
+
+        /* Buttons */
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #dc2626;
+        }
+
+        .btn-primary:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #1a1a1a;
+            color: #fff;
+            border: 2px solid #333;
+        }
+
+        .btn-secondary:hover {
+            border-color: #ef4444;
+        }
+
+        .spacer {
+            flex: 1;
+        }
+
+        /* Preview area */
+        .preview-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            background: #0a0a0a;
+            position: relative;
+        }
+
+        .canvas-container {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border-radius: 4px;
+            overflow: visible !important; /* Allow controls to show outside */
+            border: 1px solid #333;
+        }
+
+        /* Fabric.js creates its own wrapper div with class canvas-container - override it */
+        .preview-area .canvas-container {
+            overflow: visible !important;
+        }
+        
+        .preview-area canvas {
+            display: block;
+        }
+
+        .help-text {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+
+        /* Hidden file input */
+        #file-input {
+            display: none;
+        }
+
+        /* Image controls hint */
+        .image-hint {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 12px;
+            color: #888;
+            line-height: 1.5;
+        }
+
+        .image-hint strong {
+            color: #ef4444;
+        }
+
+        /* Video Timeline */
+        .timeline-container {
+            background: #1a1a1a;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 10px;
+        }
+
+        .timeline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .timeline-header span {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .timeline-duration {
+            font-size: 11px;
+            color: #ef4444;
+            font-family: monospace;
+        }
+
+        .timeline-wrapper {
+            position: relative;
+            height: 50px;
+            background: #111;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .timeline-thumbnails {
+            display: flex;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+        }
+
+        .timeline-thumbnails canvas {
+            height: 100%;
+            flex-shrink: 0;
+        }
+
+        .timeline-selection {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(239, 68, 68, 0.2);
+            border-left: 3px solid #ef4444;
+            border-right: 3px solid #ef4444;
+            cursor: move;
+        }
+
+        .timeline-handle {
+            position: absolute;
+            top: 0;
+            width: 16px;
+            height: 100%;
+            background: #ef4444;
+            cursor: ew-resize;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .timeline-handle::after {
+            content: '';
+            width: 4px;
+            height: 20px;
+            background: #fff;
+            border-radius: 2px;
+        }
+
+        .timeline-handle.start {
+            left: 0;
+            border-radius: 4px 0 0 4px;
+            transform: translateX(-100%);
+        }
+
+        .timeline-handle.end {
+            right: 0;
+            border-radius: 0 4px 4px 0;
+            transform: translateX(100%);
+        }
+
+        .timeline-playhead {
+            position: absolute;
+            top: 0;
+            width: 2px;
+            height: 100%;
+            background: #fff;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .timeline-times {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 6px;
+            font-size: 10px;
+            color: #666;
+            font-family: monospace;
+        }
+
+        .video-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .video-controls button {
+            flex: 1;
+            padding: 8px;
+            background: #333;
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .video-controls button:hover {
+            background: #444;
+        }
+
+        .video-controls button.active {
+            background: #ef4444;
+        }
+
+        /* Hidden video element */
+        #video-source {
+            display: none;
+        }
+
+        /* Media type indicator */
+        .media-type-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-left: 8px;
+        }
+
+        .media-type-badge.image {
+            background: #22c55e;
+            color: #fff;
+        }
+
+        .media-type-badge.video {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .app {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 50vh;
+                border-right: none;
+                border-bottom: 1px solid #222;
+            }
+            .preview-area {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="sidebar">
+            <div class="logo">
+                <span>⚔️</span> Samouraïs Studio
+            </div>
+
+            <!-- Format Selection -->
+            <div class="section">
+                <div class="section-title">Format</div>
+                <div class="format-selector">
+                    <button class="format-btn active" data-format="square" data-width="1080" data-height="1080">
+                        Feed
+                        <span class="ratio">1:1</span>
+                    </button>
+                    <button class="format-btn" data-format="portrait" data-width="1080" data-height="1350">
+                        Portrait
+                        <span class="ratio">4:5</span>
+                    </button>
+                    <button class="format-btn" data-format="story" data-width="1080" data-height="1920">
+                        Reel
+                        <span class="ratio">9:16</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Media Upload (Image or Video) -->
+            <div class="section">
+                <div class="section-title">
+                    Média
+                    <span class="media-type-badge image" id="media-type-badge" style="display: none;">Image</span>
+                </div>
+                <div class="upload-zone" id="upload-zone">
+                    <div class="upload-icon">🖼️</div>
+                    <div class="upload-text"><strong>Clique</strong> ou glisse une image/vidéo</div>
+                </div>
+                <input type="file" id="file-input" accept="image/*,video/*">
+                <div class="image-hint">
+                    <strong>Astuce :</strong> Clique sur le média dans le canvas pour le déplacer et le redimensionner. La frame reste fixe.
+                </div>
+                <button class="btn btn-secondary" id="select-image-btn" style="display: none; margin-top: 8px;">🎯 Sélectionner le média</button>
+                
+                <!-- Video Timeline (hidden by default) -->
+                <div class="timeline-container" id="timeline-container" style="display: none;">
+                    <div class="timeline-header">
+                        <span>✂️ Trim vidéo</span>
+                        <span class="timeline-duration" id="trim-duration">0:00</span>
+                    </div>
+                    <div class="timeline-wrapper" id="timeline-wrapper">
+                        <div class="timeline-thumbnails" id="timeline-thumbnails"></div>
+                        <div class="timeline-selection" id="timeline-selection">
+                            <div class="timeline-handle start" id="handle-start"></div>
+                            <div class="timeline-handle end" id="handle-end"></div>
+                        </div>
+                        <div class="timeline-playhead" id="timeline-playhead"></div>
+                    </div>
+                    <div class="timeline-times">
+                        <span id="time-start">0:00</span>
+                        <span id="time-end">0:00</span>
+                    </div>
+                    <div class="video-controls">
+                        <button id="btn-play">▶️ Play</button>
+                        <button id="btn-preview">👁️ Preview</button>
+                    </div>
+                </div>
+                
+                <!-- Hidden video element for processing -->
+                <video id="video-source" muted playsinline></video>
+            </div>
+
+            <!-- Top Text -->
+            <div class="section">
+                <div class="section-title">Texte du meme</div>
+                <textarea class="text-input" id="meme-text" placeholder="Quand tu réalises que..."></textarea>
+            </div>
+
+            <!-- Text Size -->
+            <div class="section">
+                <div class="section-title">Taille du texte</div>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="text-size" min="24" max="72" value="42">
+                    <span class="slider-value" id="text-size-value">42px</span>
+                </div>
+            </div>
+
+            <!-- Image Scale -->
+            <div class="section" id="image-scale-section" style="display: none;">
+                <div class="section-title">Zoom image</div>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="image-scale" min="50" max="200" value="100">
+                    <span class="slider-value" id="image-scale-value">100%</span>
+                </div>
+            </div>
+
+            <!-- Overlay Text Toggle -->
+            <div class="section">
+                <div class="toggle-row" id="overlay-toggle">
+                    <span>Texte sur l'image</span>
+                    <div class="toggle-switch" id="overlay-switch"></div>
+                </div>
+                <input type="text" class="text-input" id="overlay-text" placeholder="Texte overlay..." style="display: none; min-height: auto; padding: 12px;">
+            </div>
+
+            <div class="spacer"></div>
+
+            <!-- Actions -->
+            <button class="btn btn-secondary" id="reset-btn">🔄 Réinitialiser</button>
+            <button class="btn btn-primary" id="export-btn" disabled>📥 Télécharger le meme</button>
+        </div>
+
+        <div class="preview-area">
+            <div class="canvas-container">
+                <canvas id="meme-canvas"></canvas>
+            </div>
+            <div class="help-text">
+                Frame fixe • Glisse l'image pour la repositionner • Zoom avec le slider ou les poignées
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // TEMPLATES DEFINITION
+        // ============================================
+        const TEMPLATES = {
+            square: {
+                width: 1080,
+                height: 1080,
+                frame: {
+                    x: 54,          // 5% padding
+                    y: 195,         // ~18% from top
+                    width: 972,     // 90% width
+                    height: 810,    // 75% height
+                    radius: 27      // 2.5% corner radius
+                },
+                textArea: {
+                    x: 54,
+                    y: 40,
+                    width: 972,
+                    maxY: 180       // Don't go below this
+                },
+                watermark: {
+                    x: 1010,
+                    y: 1040
+                }
+            },
+            portrait: {
+                width: 1080,
+                height: 1350,
+                frame: {
+                    x: 54,
+                    y: 220,
+                    width: 972,
+                    height: 1020,
+                    radius: 27
+                },
+                textArea: {
+                    x: 54,
+                    y: 40,
+                    width: 972,
+                    maxY: 200
+                },
+                watermark: {
+                    x: 1010,
+                    y: 1300
+                }
+            },
+            story: {
+                width: 1080,
+                height: 1920,
+                frame: {
+                    x: 54,
+                    y: 350,
+                    width: 972,
+                    height: 1300,
+                    radius: 27
+                },
+                textArea: {
+                    x: 54,
+                    y: 280,
+                    width: 972,
+                    maxY: 330
+                },
+                watermark: {
+                    x: 1010,
+                    y: 1700
+                }
+            }
+        };
+
+        // ============================================
+        // STATE
+        // ============================================
+        const state = {
+            currentTemplate: 'square',
+            // Media state (image or video)
+            mediaType: null, // 'image' or 'video'
+            imageSrc: null,
+            imageName: '',
+            imageSize: 0,
+            imageScale: 100,
+            imageOffsetX: 0,
+            imageOffsetY: 0,
+            // Video-specific state
+            videoFile: null,
+            videoDuration: 0,
+            trimStart: 0,
+            trimEnd: 0,
+            isPlaying: false,
+            // Text state
+            text: '',
+            textSize: 42,
+            overlayText: '',
+            showOverlay: false,
+            // Canvas state
+            scale: 1
+        };
+
+        // ============================================
+        // DOM ELEMENTS
+        // ============================================
+        const uploadZone = document.getElementById('upload-zone');
+        const fileInput = document.getElementById('file-input');
+        const memeTextInput = document.getElementById('meme-text');
+        const textSizeSlider = document.getElementById('text-size');
+        const textSizeValue = document.getElementById('text-size-value');
+        const imageScaleSection = document.getElementById('image-scale-section');
+        const imageScaleSlider = document.getElementById('image-scale');
+        const imageScaleValue = document.getElementById('image-scale-value');
+        const selectImageBtn = document.getElementById('select-image-btn');
+        const overlayToggle = document.getElementById('overlay-toggle');
+        const overlaySwitch = document.getElementById('overlay-switch');
+        const overlayTextInput = document.getElementById('overlay-text');
+        const resetBtn = document.getElementById('reset-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const formatBtns = document.querySelectorAll('.format-btn');
+        
+        // Video-related elements
+        const mediaTypeBadge = document.getElementById('media-type-badge');
+        const timelineContainer = document.getElementById('timeline-container');
+        const timelineWrapper = document.getElementById('timeline-wrapper');
+        const timelineThumbnails = document.getElementById('timeline-thumbnails');
+        const timelineSelection = document.getElementById('timeline-selection');
+        const handleStart = document.getElementById('handle-start');
+        const handleEnd = document.getElementById('handle-end');
+        const timelinePlayhead = document.getElementById('timeline-playhead');
+        const timeStartEl = document.getElementById('time-start');
+        const timeEndEl = document.getElementById('time-end');
+        const trimDurationEl = document.getElementById('trim-duration');
+        const btnPlay = document.getElementById('btn-play');
+        const btnPreview = document.getElementById('btn-preview');
+        const videoSource = document.getElementById('video-source');
+
+        // ============================================
+        // FABRIC CANVAS
+        // ============================================
+        let canvas;
+        let textBox, imageObj, overlayTextObj, frameRect, frameBorder, watermark, templateBg;
+        let clipRect; // The fixed clipping rectangle
+
+        // Canvas padding to show controls outside template - needs to be large enough for scaled images
+        const CANVAS_PADDING = 350;
+
+        function initCanvas() {
+            canvas = new fabric.Canvas('meme-canvas', {
+                backgroundColor: '#2a2a2a', // Lighter dark background to distinguish from page
+                selection: true,
+                preserveObjectStacking: true,
+                perPixelTargetFind: false // Click on bounding box, not just visible pixels
+            });
+
+            // Custom controls style - larger and more visible
+            fabric.Object.prototype.set({
+                borderColor: '#ef4444',
+                cornerColor: '#ef4444',
+                cornerStrokeColor: '#ffffff',
+                cornerSize: 16,
+                cornerStyle: 'circle',
+                transparentCorners: false,
+                borderScaleFactor: 2,
+                borderDashArray: [5, 5],
+                padding: 10
+            });
+
+            updateCanvasSize();
+            createElements();
+            setupCanvasHoverEffects();
+            setupSnapping();
+        }
+
+        function setupCanvasHoverEffects() {
+            // Show border on hover
+            canvas.on('mouse:over', function(e) {
+                if (e.target && e.target.selectable) {
+                    e.target._showBorder = true;
+                    e.target.set('dirty', true);
+                    canvas.renderAll();
+                }
+            });
+
+            canvas.on('mouse:out', function(e) {
+                if (e.target && e.target._showBorder) {
+                    e.target._showBorder = false;
+                    e.target.set('dirty', true);
+                    canvas.renderAll();
+                }
+            });
+        }
+
+        // ============================================
+        // SNAPPING / MAGNET SYSTEM
+        // ============================================
+        const SNAP_THRESHOLD = 15; // Distance in pixels to trigger snap
+        let snapLines = []; // Visual guide lines
+
+        function setupSnapping() {
+            canvas.on('object:moving', function(e) {
+                const obj = e.target;
+                if (!obj) return;
+
+                const template = TEMPLATES[state.currentTemplate];
+                const frame = template.frame;
+                const offset = CANVAS_PADDING;
+                const textArea = template.textArea;
+
+                // Define snap points (left edges, centers, right edges)
+                const snapPointsX = [
+                    offset + textArea.x,                           // Text area left
+                    offset + frame.x,                              // Frame left
+                    offset + template.width / 2,                   // Template center
+                    offset + frame.x + frame.width / 2,            // Frame center
+                    offset + frame.x + frame.width,                // Frame right
+                    offset + template.width - textArea.x,          // Text area right (mirrored)
+                ];
+
+                const snapPointsY = [
+                    offset + textArea.y,                           // Text area top
+                    offset + frame.y,                              // Frame top
+                    offset + template.height / 2,                  // Template center
+                    offset + frame.y + frame.height,               // Frame bottom
+                ];
+
+                // Get object bounds
+                const objLeft = obj.left;
+                const objTop = obj.top;
+                const objRight = obj.left + (obj.width * (obj.scaleX || 1));
+                const objCenterX = obj.left + (obj.width * (obj.scaleX || 1)) / 2;
+                const objCenterY = obj.top + (obj.height * (obj.scaleY || 1)) / 2;
+
+                let snappedX = false;
+                let snappedY = false;
+                
+                // Clear previous snap lines
+                clearSnapLines();
+
+                // Check X snapping (left edge)
+                for (const snapX of snapPointsX) {
+                    if (Math.abs(objLeft - snapX) < SNAP_THRESHOLD) {
+                        obj.set('left', snapX);
+                        snappedX = true;
+                        showSnapLine('vertical', snapX);
+                        break;
+                    }
+                }
+
+                // Check X snapping (center) - only for text objects
+                if (!snappedX && (obj === textBox || obj === overlayTextObj)) {
+                    const templateCenterX = offset + template.width / 2;
+                    if (Math.abs(objCenterX - templateCenterX) < SNAP_THRESHOLD) {
+                        obj.set('left', templateCenterX - (obj.width * (obj.scaleX || 1)) / 2);
+                        snappedX = true;
+                        showSnapLine('vertical', templateCenterX);
+                    }
+                }
+
+                // Check Y snapping (top edge)
+                for (const snapY of snapPointsY) {
+                    if (Math.abs(objTop - snapY) < SNAP_THRESHOLD) {
+                        obj.set('top', snapY);
+                        snappedY = true;
+                        showSnapLine('horizontal', snapY);
+                        break;
+                    }
+                }
+
+                canvas.renderAll();
+            });
+
+            canvas.on('object:modified', function() {
+                clearSnapLines();
+                canvas.renderAll();
+            });
+
+            canvas.on('mouse:up', function() {
+                clearSnapLines();
+                canvas.renderAll();
+            });
+        }
+
+        function showSnapLine(orientation, position) {
+            const template = TEMPLATES[state.currentTemplate];
+            const offset = CANVAS_PADDING;
+            
+            let line;
+            if (orientation === 'vertical') {
+                line = new fabric.Line([position, offset, position, offset + template.height], {
+                    stroke: '#ef4444',
+                    strokeWidth: 1,
+                    strokeDashArray: [5, 3],
+                    selectable: false,
+                    evented: false,
+                    opacity: 0.8
+                });
+            } else {
+                line = new fabric.Line([offset, position, offset + template.width, position], {
+                    stroke: '#ef4444',
+                    strokeWidth: 1,
+                    strokeDashArray: [5, 3],
+                    selectable: false,
+                    evented: false,
+                    opacity: 0.8
+                });
+            }
+            
+            canvas.add(line);
+            snapLines.push(line);
+        }
+
+        function clearSnapLines() {
+            snapLines.forEach(line => canvas.remove(line));
+            snapLines = [];
+        }
+
+        function updateCanvasSize() {
+            const template = TEMPLATES[state.currentTemplate];
+            const { width, height } = template;
+            const container = document.querySelector('.preview-area');
+            const maxW = container.clientWidth - 60;
+            const maxH = container.clientHeight - 100;
+            
+            // Calculate scale based on template + padding
+            const totalWidth = width + (CANVAS_PADDING * 2);
+            const totalHeight = height + (CANVAS_PADDING * 2);
+            
+            state.scale = Math.min(maxW / totalWidth, maxH / totalHeight, 0.4);
+            
+            canvas.setWidth(totalWidth * state.scale);
+            canvas.setHeight(totalHeight * state.scale);
+            canvas.setZoom(state.scale);
+        }
+
+        function createElements() {
+            canvas.clear();
+            canvas.backgroundColor = '#2a2a2a'; // Lighter dark area outside template
+
+            const template = TEMPLATES[state.currentTemplate];
+            const frame = template.frame;
+            const offset = CANVAS_PADDING; // Offset for all elements
+
+            // White template background
+            templateBg = new fabric.Rect({
+                left: offset,
+                top: offset,
+                width: template.width,
+                height: template.height,
+                fill: '#ffffff',
+                selectable: false,
+                evented: false
+            });
+            canvas.add(templateBg);
+
+            // Create the clip path (absolute position - stays fixed)
+            clipRect = new fabric.Rect({
+                left: frame.x + offset,
+                top: frame.y + offset,
+                width: frame.width,
+                height: frame.height,
+                rx: frame.radius,
+                ry: frame.radius,
+                absolutePositioned: true
+            });
+
+            // Frame placeholder (gray background when no image)
+            frameRect = new fabric.Rect({
+                left: frame.x + offset,
+                top: frame.y + offset,
+                width: frame.width,
+                height: frame.height,
+                rx: frame.radius,
+                ry: frame.radius,
+                fill: '#f0f0f0',
+                selectable: false,
+                evented: false
+            });
+            canvas.add(frameRect);
+
+            // Frame border - interactive indicator (shows where image area is)
+            frameBorder = new fabric.Rect({
+                left: frame.x + offset,
+                top: frame.y + offset,
+                width: frame.width,
+                height: frame.height,
+                rx: frame.radius,
+                ry: frame.radius,
+                fill: 'transparent',
+                stroke: '#ddd',
+                strokeWidth: 2,
+                strokeDashArray: [8, 4],
+                selectable: false,
+                evented: false
+            });
+            canvas.add(frameBorder);
+
+            // Text box
+            const textArea = template.textArea;
+            textBox = new fabric.Textbox(state.text || 'Tape ton texte...', {
+                left: textArea.x + offset,
+                top: textArea.y + offset,
+                width: textArea.width,
+                fontSize: state.textSize,
+                fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+                fontWeight: '300',
+                fill: '#000000',
+                lineHeight: 1.2,
+                textAlign: 'left',
+                splitByGrapheme: false,
+                hasControls: true,
+                cornerSize: 16,
+                hoverCursor: 'move',
+                moveCursor: 'move'
+            });
+            canvas.add(textBox);
+
+            // Watermark
+            const wm = template.watermark;
+            watermark = new fabric.Text('SAMOURAÏS', {
+                left: wm.x + offset,
+                top: wm.y + offset,
+                fontSize: template.width * 0.04,
+                fontFamily: 'Impact, sans-serif',
+                fontWeight: '800',
+                fill: '#ffffff',
+                stroke: '#333333',
+                strokeWidth: 2,
+                angle: -3,
+                originX: 'right',
+                originY: 'bottom',
+                shadow: new fabric.Shadow({
+                    color: 'rgba(0,0,0,0.3)',
+                    blur: 4,
+                    offsetX: 2,
+                    offsetY: 2
+                }),
+                selectable: true,
+                hasControls: true,
+                cornerSize: 16,
+                hoverCursor: 'move',
+                moveCursor: 'move'
+            });
+            canvas.add(watermark);
+
+            canvas.renderAll();
+        }
+
+        // ============================================
+        // MEDIA HANDLING (IMAGE + VIDEO)
+        // ============================================
+        function loadMedia(file) {
+            const isVideo = file.type.startsWith('video/');
+            state.mediaType = isVideo ? 'video' : 'image';
+            
+            // Update badge
+            mediaTypeBadge.style.display = 'inline-block';
+            mediaTypeBadge.textContent = isVideo ? 'Vidéo' : 'Image';
+            mediaTypeBadge.className = `media-type-badge ${isVideo ? 'video' : 'image'}`;
+            
+            if (isVideo) {
+                loadVideo(file);
+            } else {
+                loadImage(file);
+            }
+        }
+
+        function loadImage(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                state.imageSrc = e.target.result;
+                state.imageName = file.name;
+                state.imageSize = file.size;
+                state.imageScale = 100;
+                state.imageOffsetX = 0;
+                state.imageOffsetY = 0;
+                
+                // Hide video timeline
+                timelineContainer.style.display = 'none';
+                
+                updateUploadZone();
+                addImageToCanvas(e.target.result);
+                
+                imageScaleSection.style.display = 'block';
+                imageScaleSlider.value = 100;
+                imageScaleValue.textContent = '100%';
+                selectImageBtn.style.display = 'block';
+                
+                exportBtn.disabled = false;
+                exportBtn.textContent = '📥 Télécharger le meme';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function loadVideo(file) {
+            state.videoFile = file;
+            state.imageName = file.name;
+            state.imageSize = file.size;
+            state.imageScale = 100;
+            state.imageOffsetX = 0;
+            state.imageOffsetY = 0;
+            
+            const url = URL.createObjectURL(file);
+            videoSource.src = url;
+            
+            videoSource.onloadedmetadata = () => {
+                state.videoDuration = videoSource.duration;
+                state.trimStart = 0;
+                state.trimEnd = Math.min(videoSource.duration, 30); // Max 30s default
+                
+                updateUploadZone();
+                generateThumbnails();
+                updateTimelineUI();
+                
+                // Show video timeline
+                timelineContainer.style.display = 'block';
+                imageScaleSection.style.display = 'block';
+                imageScaleSlider.value = 100;
+                imageScaleValue.textContent = '100%';
+                selectImageBtn.style.display = 'block';
+                
+                // Capture first frame for canvas preview
+                captureVideoFrame(0);
+                
+                exportBtn.disabled = false;
+                exportBtn.textContent = '🎬 Exporter la vidéo';
+            };
+            
+            videoSource.load();
+        }
+
+        function captureVideoFrame(time) {
+            return new Promise((resolve) => {
+                videoSource.currentTime = time;
+                videoSource.onseeked = () => {
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = videoSource.videoWidth;
+                    tempCanvas.height = videoSource.videoHeight;
+                    const ctx = tempCanvas.getContext('2d');
+                    ctx.drawImage(videoSource, 0, 0);
+                    
+                    const dataURL = tempCanvas.toDataURL('image/jpeg', 0.8);
+                    state.imageSrc = dataURL;
+                    
+                    addImageToCanvas(dataURL);
+                    resolve(dataURL);
+                };
+            });
+        }
+
+        async function generateThumbnails() {
+            const numThumbnails = 10;
+            const duration = state.videoDuration;
+            const interval = duration / numThumbnails;
+            
+            timelineThumbnails.innerHTML = '';
+            
+            const thumbWidth = timelineWrapper.clientWidth / numThumbnails;
+            const thumbHeight = 50;
+            
+            for (let i = 0; i < numThumbnails; i++) {
+                const time = i * interval;
+                const thumbCanvas = document.createElement('canvas');
+                thumbCanvas.width = thumbWidth;
+                thumbCanvas.height = thumbHeight;
+                thumbCanvas.style.width = thumbWidth + 'px';
+                
+                timelineThumbnails.appendChild(thumbCanvas);
+                
+                // Capture thumbnail asynchronously
+                await captureThumbnail(time, thumbCanvas);
+            }
+        }
+
+        function captureThumbnail(time, thumbCanvas) {
+            return new Promise((resolve) => {
+                videoSource.currentTime = time;
+                videoSource.onseeked = () => {
+                    const ctx = thumbCanvas.getContext('2d');
+                    const aspectRatio = videoSource.videoWidth / videoSource.videoHeight;
+                    const drawHeight = thumbCanvas.height;
+                    const drawWidth = drawHeight * aspectRatio;
+                    const offsetX = (thumbCanvas.width - drawWidth) / 2;
+                    
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(0, 0, thumbCanvas.width, thumbCanvas.height);
+                    ctx.drawImage(videoSource, offsetX, 0, drawWidth, drawHeight);
+                    resolve();
+                };
+            });
+        }
+
+        // ============================================
+        // TIMELINE CONTROLS
+        // ============================================
+        function updateTimelineUI() {
+            const duration = state.videoDuration;
+            const startPercent = (state.trimStart / duration) * 100;
+            const endPercent = (state.trimEnd / duration) * 100;
+            
+            timelineSelection.style.left = startPercent + '%';
+            timelineSelection.style.width = (endPercent - startPercent) + '%';
+            
+            timeStartEl.textContent = formatTime(state.trimStart);
+            timeEndEl.textContent = formatTime(state.trimEnd);
+            trimDurationEl.textContent = formatTime(state.trimEnd - state.trimStart);
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function setupTimelineInteraction() {
+            let dragging = null;
+            let startX = 0;
+            let startValue = 0;
+            
+            const getTimeFromX = (x) => {
+                const rect = timelineWrapper.getBoundingClientRect();
+                const percent = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+                return percent * state.videoDuration;
+            };
+            
+            handleStart.addEventListener('mousedown', (e) => {
+                dragging = 'start';
+                startX = e.clientX;
+                startValue = state.trimStart;
+                e.preventDefault();
+            });
+            
+            handleEnd.addEventListener('mousedown', (e) => {
+                dragging = 'end';
+                startX = e.clientX;
+                startValue = state.trimEnd;
+                e.preventDefault();
+            });
+            
+            // Also allow dragging the selection area
+            timelineSelection.addEventListener('mousedown', (e) => {
+                if (e.target === timelineSelection) {
+                    dragging = 'selection';
+                    startX = e.clientX;
+                    startValue = state.trimStart;
+                    e.preventDefault();
+                }
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!dragging) return;
+                
+                const time = getTimeFromX(e.clientX);
+                const duration = state.videoDuration;
+                const trimLength = state.trimEnd - state.trimStart;
+                
+                if (dragging === 'start') {
+                    state.trimStart = Math.max(0, Math.min(time, state.trimEnd - 0.5));
+                } else if (dragging === 'end') {
+                    state.trimEnd = Math.min(duration, Math.max(time, state.trimStart + 0.5));
+                } else if (dragging === 'selection') {
+                    const delta = time - getTimeFromX(startX);
+                    let newStart = startValue + delta;
+                    let newEnd = newStart + trimLength;
+                    
+                    if (newStart < 0) {
+                        newStart = 0;
+                        newEnd = trimLength;
+                    }
+                    if (newEnd > duration) {
+                        newEnd = duration;
+                        newStart = duration - trimLength;
+                    }
+                    
+                    state.trimStart = newStart;
+                    state.trimEnd = newEnd;
+                }
+                
+                updateTimelineUI();
+            });
+            
+            document.addEventListener('mouseup', async () => {
+                if (dragging) {
+                    dragging = null;
+                    // Update preview to show trim start frame
+                    await captureVideoFrame(state.trimStart);
+                }
+            });
+            
+            // Click on timeline to seek
+            timelineWrapper.addEventListener('click', async (e) => {
+                if (e.target === handleStart || e.target === handleEnd) return;
+                
+                const time = getTimeFromX(e.clientX);
+                videoSource.currentTime = time;
+                updatePlayhead(time);
+                await captureVideoFrame(time);
+            });
+            
+            // Play button
+            btnPlay.addEventListener('click', () => {
+                if (state.isPlaying) {
+                    pauseVideo();
+                } else {
+                    playVideo();
+                }
+            });
+            
+            // Preview button - play trimmed section
+            btnPreview.addEventListener('click', () => {
+                previewTrimmedSection();
+            });
+        }
+
+        function updatePlayhead(time) {
+            const percent = (time / state.videoDuration) * 100;
+            timelinePlayhead.style.left = percent + '%';
+        }
+
+        function playVideo() {
+            state.isPlaying = true;
+            btnPlay.textContent = '⏸️ Pause';
+            btnPlay.classList.add('active');
+            
+            videoSource.currentTime = state.trimStart;
+            videoSource.play();
+            
+            const updateFrame = () => {
+                if (!state.isPlaying) return;
+                
+                const currentTime = videoSource.currentTime;
+                updatePlayhead(currentTime);
+                
+                // Update canvas preview
+                if (imageObj) {
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = videoSource.videoWidth;
+                    tempCanvas.height = videoSource.videoHeight;
+                    const ctx = tempCanvas.getContext('2d');
+                    ctx.drawImage(videoSource, 0, 0);
+                    
+                    imageObj.setSrc(tempCanvas.toDataURL('image/jpeg', 0.8), () => {
+                        canvas.renderAll();
+                    });
+                }
+                
+                if (currentTime >= state.trimEnd) {
+                    pauseVideo();
+                    return;
+                }
+                
+                requestAnimationFrame(updateFrame);
+            };
+            
+            requestAnimationFrame(updateFrame);
+        }
+
+        function pauseVideo() {
+            state.isPlaying = false;
+            btnPlay.textContent = '▶️ Play';
+            btnPlay.classList.remove('active');
+            videoSource.pause();
+        }
+
+        async function previewTrimmedSection() {
+            await captureVideoFrame(state.trimStart);
+            playVideo();
+        }
+
+        function addImageToCanvas(src) {
+            fabric.Image.fromURL(src, (img) => {
+                if (imageObj) {
+                    canvas.remove(imageObj);
+                }
+
+                const template = TEMPLATES[state.currentTemplate];
+                const frame = template.frame;
+                const offset = CANVAS_PADDING;
+
+                // Calculate scale to cover the frame
+                const scaleX = frame.width / img.width;
+                const scaleY = frame.height / img.height;
+                const baseScale = Math.max(scaleX, scaleY);
+                const finalScale = baseScale * (state.imageScale / 100);
+
+                // Center the image in the frame (with offset)
+                const centerX = frame.x + frame.width / 2 + offset;
+                const centerY = frame.y + frame.height / 2 + offset;
+
+                img.set({
+                    left: centerX + state.imageOffsetX,
+                    top: centerY + state.imageOffsetY,
+                    originX: 'center',
+                    originY: 'center',
+                    scaleX: finalScale,
+                    scaleY: finalScale,
+                    hasControls: true,
+                    hasBorders: true,
+                    cornerSize: 18,
+                    // Lock rotation, only allow scale and move
+                    lockRotation: true,
+                    // Apply the fixed clip path
+                    clipPath: clipRect,
+                    // Visual styling
+                    strokeWidth: 0,
+                    borderColor: '#ef4444',
+                    borderDashArray: [5, 5],
+                    hoverCursor: 'move',
+                    moveCursor: 'move'
+                });
+
+                // Store base scale for slider calculations
+                img._baseScale = baseScale;
+
+                imageObj = img;
+                canvas.add(imageObj);
+                
+                // Reorder layers - templateBg at very back, then frameRect, then image
+                canvas.sendToBack(imageObj);
+                canvas.sendToBack(frameBorder);
+                canvas.sendToBack(frameRect);
+                canvas.sendToBack(templateBg);
+                canvas.bringToFront(textBox);
+                canvas.bringToFront(watermark);
+                
+                if (overlayTextObj) {
+                    canvas.bringToFront(overlayTextObj);
+                }
+
+                // Track image movement
+                imageObj.on('moving', function() {
+                    const template = TEMPLATES[state.currentTemplate];
+                    const frame = template.frame;
+                    const offset = CANVAS_PADDING;
+                    const centerX = frame.x + frame.width / 2 + offset;
+                    const centerY = frame.y + frame.height / 2 + offset;
+                    
+                    state.imageOffsetX = this.left - centerX;
+                    state.imageOffsetY = this.top - centerY;
+                });
+
+                // Track image scaling
+                imageObj.on('scaling', function() {
+                    const currentScale = this.scaleX;
+                    const baseScale = this._baseScale;
+                    const percentage = Math.round((currentScale / baseScale) * 100);
+                    
+                    state.imageScale = percentage;
+                    imageScaleSlider.value = Math.min(200, Math.max(50, percentage));
+                    imageScaleValue.textContent = percentage + '%';
+                });
+
+                canvas.renderAll();
+            }, { crossOrigin: 'anonymous' });
+        }
+
+        function updateImageScale(percentage) {
+            state.imageScale = percentage;
+            imageScaleValue.textContent = percentage + '%';
+            
+            if (imageObj && imageObj._baseScale) {
+                const newScale = imageObj._baseScale * (percentage / 100);
+                imageObj.set({
+                    scaleX: newScale,
+                    scaleY: newScale
+                });
+                canvas.renderAll();
+            }
+        }
+
+        function updateUploadZone() {
+            if (state.imageSrc || state.videoFile) {
+                const sizeKB = Math.round(state.imageSize / 1024);
+                const isVideo = state.mediaType === 'video';
+                const icon = isVideo ? '🎬' : '🖼️';
+                const previewSrc = state.imageSrc || ''; // For video, this is the first frame
+                
+                uploadZone.classList.add('has-file');
+                uploadZone.innerHTML = `
+                    <div class="file-preview">
+                        ${previewSrc ? `<img src="${previewSrc}" alt="preview">` : `<div style="width:56px;height:56px;background:#333;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:24px;">${icon}</div>`}
+                        <div class="file-info">
+                            <div class="file-name">${state.imageName}</div>
+                            <div class="file-size">${sizeKB > 1024 ? (sizeKB/1024).toFixed(1) + ' MB' : sizeKB + ' KB'}${isVideo ? ' • ' + formatTime(state.videoDuration) : ''}</div>
+                        </div>
+                        <button class="remove-file" onclick="removeImage(event)">✕</button>
+                    </div>
+                `;
+            } else {
+                uploadZone.classList.remove('has-file');
+                uploadZone.innerHTML = `
+                    <div class="upload-icon">🖼️</div>
+                    <div class="upload-text"><strong>Clique</strong> ou glisse une image/vidéo</div>
+                `;
+            }
+        }
+
+        window.removeImage = function(e) {
+            e.stopPropagation();
+            
+            // Reset all media state
+            state.mediaType = null;
+            state.imageSrc = null;
+            state.imageName = '';
+            state.imageSize = 0;
+            state.imageScale = 100;
+            state.imageOffsetX = 0;
+            state.imageOffsetY = 0;
+            
+            // Reset video state
+            state.videoFile = null;
+            state.videoDuration = 0;
+            state.trimStart = 0;
+            state.trimEnd = 0;
+            state.isPlaying = false;
+            
+            // Clean up video source
+            if (videoSource.src) {
+                URL.revokeObjectURL(videoSource.src);
+                videoSource.src = '';
+            }
+            
+            fileInput.value = '';
+            
+            if (imageObj) {
+                canvas.remove(imageObj);
+                imageObj = null;
+            }
+            
+            // Hide all media-related UI
+            imageScaleSection.style.display = 'none';
+            selectImageBtn.style.display = 'none';
+            timelineContainer.style.display = 'none';
+            mediaTypeBadge.style.display = 'none';
+            
+            updateUploadZone();
+            exportBtn.disabled = true;
+            exportBtn.textContent = '📥 Télécharger le meme';
+            canvas.renderAll();
+        };
+
+        // ============================================
+        // TEXT HANDLING
+        // ============================================
+        function updateText(text) {
+            state.text = text;
+            if (textBox) {
+                textBox.set({
+                    text: text || 'Tape ton texte...',
+                    fill: '#000000'
+                });
+                canvas.renderAll();
+            }
+        }
+
+        function updateTextSize(size) {
+            state.textSize = size;
+            textSizeValue.textContent = size + 'px';
+            if (textBox) {
+                textBox.set({ fontSize: parseInt(size) });
+                canvas.renderAll();
+            }
+        }
+
+        // ============================================
+        // OVERLAY TEXT
+        // ============================================
+        function toggleOverlay() {
+            state.showOverlay = !state.showOverlay;
+            overlaySwitch.classList.toggle('active', state.showOverlay);
+            overlayTextInput.style.display = state.showOverlay ? 'block' : 'none';
+            
+            if (state.showOverlay && state.overlayText) {
+                addOverlayText();
+            } else if (overlayTextObj) {
+                canvas.remove(overlayTextObj);
+                overlayTextObj = null;
+            }
+            canvas.renderAll();
+        }
+
+        function addOverlayText() {
+            if (overlayTextObj) {
+                canvas.remove(overlayTextObj);
+            }
+
+            const template = TEMPLATES[state.currentTemplate];
+            const frame = template.frame;
+            const offset = CANVAS_PADDING;
+
+            overlayTextObj = new fabric.Text(state.overlayText.toUpperCase(), {
+                left: frame.x + frame.width / 2 + offset,
+                top: frame.y + frame.height - 60 + offset,
+                fontSize: template.width * 0.055,
+                fontFamily: 'Impact, Haettenschweiler, sans-serif',
+                fontWeight: '900',
+                fill: '#ffffff',
+                stroke: '#000000',
+                strokeWidth: template.width * 0.006,
+                textAlign: 'center',
+                originX: 'center',
+                originY: 'bottom',
+                hasControls: true,
+                cornerSize: 16,
+                hoverCursor: 'move',
+                moveCursor: 'move'
+            });
+
+            canvas.add(overlayTextObj);
+            canvas.bringToFront(overlayTextObj);
+            canvas.bringToFront(watermark);
+            canvas.renderAll();
+        }
+
+        function updateOverlayText(text) {
+            state.overlayText = text;
+            if (state.showOverlay && text) {
+                addOverlayText();
+            } else if (overlayTextObj && !text) {
+                canvas.remove(overlayTextObj);
+                overlayTextObj = null;
+                canvas.renderAll();
+            }
+        }
+
+        // ============================================
+        // RESET & EXPORT
+        // ============================================
+        function resetAll() {
+            state.imageOffsetX = 0;
+            state.imageOffsetY = 0;
+            state.imageScale = 100;
+            
+            imageScaleSlider.value = 100;
+            imageScaleValue.textContent = '100%';
+            
+            createElements();
+            
+            if (state.imageSrc) {
+                addImageToCanvas(state.imageSrc);
+            }
+            if (state.showOverlay && state.overlayText) {
+                addOverlayText();
+            }
+            updateText(state.text);
+            updateTextSize(state.textSize);
+        }
+
+        function exportMeme() {
+            if (state.mediaType === 'video') {
+                exportVideo();
+            } else {
+                exportImage();
+            }
+        }
+
+        function exportImage() {
+            // Hide elements we don't want in export
+            frameBorder.set({ visible: false });
+            frameRect.set({ visible: false });
+            
+            // Deselect all
+            canvas.discardActiveObject();
+            canvas.renderAll();
+
+            const template = TEMPLATES[state.currentTemplate];
+            
+            // Reset zoom temporarily for clean export
+            const originalZoom = canvas.getZoom();
+            canvas.setZoom(1);
+            canvas.setWidth(template.width + (CANVAS_PADDING * 2));
+            canvas.setHeight(template.height + (CANVAS_PADDING * 2));
+            canvas.renderAll();
+            
+            // Export only the template area (cropping out the padding)
+            const dataURL = canvas.toDataURL({
+                format: 'png',
+                quality: 1,
+                left: CANVAS_PADDING,
+                top: CANVAS_PADDING,
+                width: template.width,
+                height: template.height
+            });
+
+            // Restore zoom and size
+            canvas.setZoom(originalZoom);
+            updateCanvasSize();
+            
+            // Restore frame border
+            frameBorder.set({ visible: true });
+            frameRect.set({ visible: true });
+            canvas.renderAll();
+
+            // Download
+            const link = document.createElement('a');
+            const timestamp = new Date().toISOString().slice(0, 10);
+            link.download = `samourais_meme_${state.currentTemplate}_${timestamp}.png`;
+            link.href = dataURL;
+            link.click();
+        }
+
+        async function exportVideo() {
+            // Collect all parameters needed for video processing
+            const template = TEMPLATES[state.currentTemplate];
+            
+            const exportParams = {
+                // Template info
+                template: state.currentTemplate,
+                templateWidth: template.width,
+                templateHeight: template.height,
+                // Frame info
+                frameX: template.frame.x,
+                frameY: template.frame.y,
+                frameWidth: template.frame.width,
+                frameHeight: template.frame.height,
+                frameRadius: template.frame.radius,
+                // Video trim
+                trimStart: state.trimStart,
+                trimEnd: state.trimEnd,
+                // Media position/scale
+                imageScale: state.imageScale,
+                imageOffsetX: state.imageOffsetX,
+                imageOffsetY: state.imageOffsetY,
+                // Text
+                text: state.text,
+                textSize: state.textSize,
+                textX: textBox ? textBox.left - CANVAS_PADDING : template.textArea.x,
+                textY: textBox ? textBox.top - CANVAS_PADDING : template.textArea.y,
+                // Overlay
+                overlayText: state.showOverlay ? state.overlayText : '',
+                // Watermark position
+                watermarkX: watermark ? watermark.left - CANVAS_PADDING : template.watermark.x,
+                watermarkY: watermark ? watermark.top - CANVAS_PADDING : template.watermark.y,
+            };
+
+            console.log('Video export params:', exportParams);
+            
+            // Show processing modal
+            showVideoExportModal(exportParams);
+        }
+
+        function showVideoExportModal(params) {
+            // Create modal overlay
+            const modal = document.createElement('div');
+            modal.id = 'export-modal';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.9);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            `;
+            
+            const backendConfigured = !!BACKEND_URL;
+            
+            modal.innerHTML = `
+                <div style="background: #1a1a1a; border-radius: 12px; padding: 32px; max-width: 500px; text-align: center;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">🎬</div>
+                    <h2 style="margin-bottom: 16px; color: #fff;">Export Vidéo</h2>
+                    <p style="color: #888; margin-bottom: 24px; line-height: 1.6;">
+                        ${backendConfigured 
+                            ? `Backend configuré ✅<br><span style="font-size: 11px; color: #666;">${BACKEND_URL}</span>`
+                            : `L'export vidéo nécessite un backend FFmpeg.`
+                        }<br>
+                        <strong style="color: #ef4444;">Durée: ${formatTime(params.trimEnd - params.trimStart)}</strong>
+                    </p>
+                    <div style="background: #111; border-radius: 8px; padding: 16px; margin-bottom: 24px; text-align: left;">
+                        <div style="font-size: 12px; color: #666; margin-bottom: 8px;">PARAMÈTRES D'EXPORT</div>
+                        <div style="font-size: 13px; color: #aaa; font-family: monospace;">
+                            Template: ${params.template} (${params.templateWidth}x${params.templateHeight})<br>
+                            Trim: ${formatTime(params.trimStart)} → ${formatTime(params.trimEnd)}<br>
+                            Scale: ${params.imageScale}%
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 12px;">
+                        <button onclick="document.getElementById('export-modal').remove()" 
+                                style="flex: 1; padding: 12px; background: #333; border: none; border-radius: 8px; color: #fff; cursor: pointer;">
+                            Annuler
+                        </button>
+                        <button onclick="startVideoProcessing()" 
+                                style="flex: 1; padding: 12px; background: #ef4444; border: none; border-radius: 8px; color: #fff; cursor: pointer; font-weight: 600;">
+                            🚀 ${backendConfigured ? 'Exporter' : 'Configurer'}
+                        </button>
+                    </div>
+                    ${backendConfigured ? `
+                        <button onclick="resetBackendUrl()" 
+                                style="margin-top: 12px; padding: 8px; background: none; border: none; color: #666; cursor: pointer; font-size: 11px; text-decoration: underline;">
+                            Changer l'URL du backend
+                        </button>
+                    ` : ''}
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // Store params globally for the export button
+            window._videoExportParams = params;
+        }
+
+        window.resetBackendUrl = function() {
+            localStorage.removeItem('samourais_backend_url');
+            location.reload();
+        };
+
+        // ============================================
+        // BACKEND CONFIG
+        // ============================================
+        // Change this to your Railway URL after deployment
+        const BACKEND_URL = localStorage.getItem('samourais_backend_url') || '';
+
+        window.startVideoProcessing = async function() {
+            const modal = document.getElementById('export-modal');
+            const params = window._videoExportParams;
+            
+            if (!BACKEND_URL) {
+                modal.querySelector('div > div').innerHTML = `
+                    <div style="font-size: 48px; margin-bottom: 16px;">⚙️</div>
+                    <h2 style="margin-bottom: 16px; color: #fff;">Configuration requise</h2>
+                    <p style="color: #888; margin-bottom: 16px;">
+                        Entre l'URL de ton backend Railway :
+                    </p>
+                    <input type="text" id="backend-url-input" placeholder="https://ton-app.railway.app" 
+                           style="width: 100%; padding: 12px; background: #111; border: 2px solid #333; border-radius: 8px; color: #fff; font-size: 14px; margin-bottom: 16px;">
+                    <div style="display: flex; gap: 12px;">
+                        <button onclick="document.getElementById('export-modal').remove()" 
+                                style="flex: 1; padding: 12px; background: #333; border: none; border-radius: 8px; color: #fff; cursor: pointer;">
+                            Annuler
+                        </button>
+                        <button onclick="saveBackendUrl()" 
+                                style="flex: 1; padding: 12px; background: #ef4444; border: none; border-radius: 8px; color: #fff; cursor: pointer; font-weight: 600;">
+                            Sauvegarder
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Show processing state
+            modal.querySelector('div > div').innerHTML = `
+                <div style="font-size: 48px; margin-bottom: 16px; animation: spin 1s linear infinite;">⏳</div>
+                <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+                <h2 style="margin-bottom: 16px; color: #fff;">Processing...</h2>
+                <p style="color: #888; margin-bottom: 24px;">
+                    Upload et traitement de la vidéo en cours...<br>
+                    Cela peut prendre quelques secondes.
+                </p>
+                <div id="progress-bar" style="background: #333; border-radius: 4px; height: 8px; overflow: hidden; margin-bottom: 16px;">
+                    <div id="progress-fill" style="background: #ef4444; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                </div>
+                <p id="progress-text" style="color: #666; font-size: 12px;">Préparation...</p>
+            `;
+            
+            try {
+                // Create form data with video file and params
+                const formData = new FormData();
+                formData.append('video', state.videoFile);
+                formData.append('params', JSON.stringify(params));
+                
+                updateProgress(10, 'Upload de la vidéo...');
+                
+                const response = await fetch(`${BACKEND_URL}/api/process-video`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                updateProgress(50, 'Traitement FFmpeg...');
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Erreur serveur');
+                }
+                
+                updateProgress(90, 'Téléchargement...');
+                
+                // Download the processed video
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `samourais_meme_${state.currentTemplate}_${Date.now()}.mp4`;
+                link.click();
+                URL.revokeObjectURL(url);
+                
+                updateProgress(100, 'Terminé !');
+                
+                // Success state
+                setTimeout(() => {
+                    modal.querySelector('div > div').innerHTML = `
+                        <div style="font-size: 48px; margin-bottom: 16px;">✅</div>
+                        <h2 style="margin-bottom: 16px; color: #fff;">Export réussi !</h2>
+                        <p style="color: #888; margin-bottom: 24px;">
+                            Ta vidéo a été téléchargée.
+                        </p>
+                        <button onclick="document.getElementById('export-modal').remove()" 
+                                style="padding: 12px 32px; background: #ef4444; border: none; border-radius: 8px; color: #fff; cursor: pointer; font-weight: 600;">
+                            Fermer
+                        </button>
+                    `;
+                }, 500);
+                
+            } catch (error) {
+                console.error('Export error:', error);
+                modal.querySelector('div > div').innerHTML = `
+                    <div style="font-size: 48px; margin-bottom: 16px;">❌</div>
+                    <h2 style="margin-bottom: 16px; color: #fff;">Erreur</h2>
+                    <p style="color: #ef4444; margin-bottom: 24px;">
+                        ${error.message}
+                    </p>
+                    <div style="display: flex; gap: 12px;">
+                        <button onclick="document.getElementById('export-modal').remove()" 
+                                style="flex: 1; padding: 12px; background: #333; border: none; border-radius: 8px; color: #fff; cursor: pointer;">
+                            Fermer
+                        </button>
+                        <button onclick="startVideoProcessing()" 
+                                style="flex: 1; padding: 12px; background: #ef4444; border: none; border-radius: 8px; color: #fff; cursor: pointer; font-weight: 600;">
+                            Réessayer
+                        </button>
+                    </div>
+                `;
+            }
+        };
+
+        function updateProgress(percent, text) {
+            const fill = document.getElementById('progress-fill');
+            const textEl = document.getElementById('progress-text');
+            if (fill) fill.style.width = percent + '%';
+            if (textEl) textEl.textContent = text;
+        }
+
+        window.saveBackendUrl = function() {
+            const input = document.getElementById('backend-url-input');
+            const url = input.value.trim().replace(/\/$/, ''); // Remove trailing slash
+            if (url) {
+                localStorage.setItem('samourais_backend_url', url);
+                location.reload(); // Reload to apply
+            }
+        };
+
+        // ============================================
+        // EVENT LISTENERS
+        // ============================================
+        function setupEventListeners() {
+            // Format selection
+            formatBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    formatBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    state.currentTemplate = btn.dataset.format;
+                    state.imageOffsetX = 0;
+                    state.imageOffsetY = 0;
+                    state.imageScale = 100;
+                    
+                    imageScaleSlider.value = 100;
+                    imageScaleValue.textContent = '100%';
+                    
+                    updateCanvasSize();
+                    createElements();
+                    
+                    if (state.imageSrc) {
+                        addImageToCanvas(state.imageSrc);
+                    }
+                    if (state.showOverlay && state.overlayText) {
+                        addOverlayText();
+                    }
+                    updateText(state.text);
+                });
+            });
+
+            // File upload - click
+            uploadZone.addEventListener('click', () => fileInput.click());
+
+            // File upload - drag & drop
+            uploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadZone.style.borderColor = '#ef4444';
+            });
+
+            uploadZone.addEventListener('dragleave', () => {
+                uploadZone.style.borderColor = '#333';
+            });
+
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.style.borderColor = '#333';
+                const file = e.dataTransfer.files[0];
+                if (file && (file.type.startsWith('image/') || file.type.startsWith('video/'))) {
+                    loadMedia(file);
+                }
+            });
+
+            // File input change
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) loadMedia(file);
+            });
+
+            // Meme text
+            memeTextInput.addEventListener('input', (e) => {
+                updateText(e.target.value);
+            });
+
+            // Text size slider
+            textSizeSlider.addEventListener('input', (e) => {
+                updateTextSize(e.target.value);
+            });
+
+            // Image scale slider
+            imageScaleSlider.addEventListener('input', (e) => {
+                updateImageScale(parseInt(e.target.value));
+            });
+
+            // Select image button
+            selectImageBtn.addEventListener('click', () => {
+                if (imageObj) {
+                    canvas.setActiveObject(imageObj);
+                    canvas.renderAll();
+                }
+            });
+
+            // Overlay toggle
+            overlayToggle.addEventListener('click', toggleOverlay);
+
+            // Overlay text
+            overlayTextInput.addEventListener('input', (e) => {
+                updateOverlayText(e.target.value);
+            });
+
+            // Reset
+            resetBtn.addEventListener('click', resetAll);
+
+            // Export
+            exportBtn.addEventListener('click', exportMeme);
+
+            // Window resize
+            window.addEventListener('resize', () => {
+                updateCanvasSize();
+                canvas.renderAll();
+            });
+        }
+
+        // ============================================
+        // INIT
+        // ============================================
+        function init() {
+            initCanvas();
+            setupEventListeners();
+            setupTimelineInteraction();
+        }
+
+        init();
+    </script>
+</body>
+</html>
