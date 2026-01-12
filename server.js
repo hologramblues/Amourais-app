@@ -152,9 +152,9 @@ function processVideo(videoPath, templatePath, outputPath, options) {
         // Scale input video
         `[0:v]scale=${scaledWidth}:-1[scaled]`,
         // Overlay video on background, centered at frame position
-        `[bg][scaled]overlay=x=${videoX}-overlay_w/2:y=${videoY}-overlay_h/2:shortest=1[with_video]`,
+        `[bg][scaled]overlay=x=${videoX}-overlay_w/2:y=${videoY}-overlay_h/2[with_video]`,
         // Overlay template PNG on top (template has transparent hole for video)
-        `[with_video][1:v]overlay=0:0:shortest=1[final]`
+        `[with_video][1:v]overlay=0:0:format=auto[final]`
     ].join(';');
 
     console.log('FFmpeg filter:', filterComplex);
@@ -162,12 +162,13 @@ function processVideo(videoPath, templatePath, outputPath, options) {
     return new Promise((resolve, reject) => {
         ffmpeg()
             .input(videoPath)
-            .setStartTime(trimStart)
-            .setDuration(duration)
+            .inputOptions([`-ss ${trimStart}`, `-t ${duration}`])
             .input(templatePath)
+            .inputOptions(['-loop', '1'])  // Loop the PNG image
             .complexFilter(filterComplex, 'final')
             .outputOptions([
                 '-map', '0:a?',
+                '-t', String(duration),  // Force output duration
                 '-c:v', 'libx264',
                 '-preset', 'fast',
                 '-crf', '23',
@@ -176,8 +177,7 @@ function processVideo(videoPath, templatePath, outputPath, options) {
                 '-ar', '44100',
                 '-movflags', '+faststart',
                 '-pix_fmt', 'yuv420p',
-                '-r', '30',
-                '-shortest'
+                '-r', '30'
             ])
             .on('start', (cmd) => {
                 console.log('FFmpeg command:', cmd);

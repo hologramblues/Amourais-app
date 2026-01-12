@@ -2598,17 +2598,19 @@
             ctx.restore();
             
             // Dessiner le texte principal (meme text)
-            if (textBox && state.text) {
+            if (state.text) {
                 ctx.save();
                 ctx.font = `bold ${state.textSize}px "Bricolage Grotesque", Helvetica, Arial, sans-serif`;
                 ctx.fillStyle = 'black';
-                ctx.textAlign = 'left';
+                ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 
-                // Position du texte (convertir depuis Fabric.js)
-                const textX = textBox.left - offset;
-                const textY = textBox.top - offset;
+                // Position du texte - centré horizontalement
+                const textX = template.width / 2;
+                // Utiliser la position du textBox si disponible, sinon position par défaut
+                const textY = textBox ? (textBox.top - offset) : template.textArea.y;
                 
+                console.log('Drawing text:', state.text, 'at', textX, textY, 'size:', state.textSize);
                 ctx.fillText(state.text, textX, textY);
                 ctx.restore();
             }
@@ -2712,7 +2714,7 @@
                 const formData = new FormData();
                 formData.append('video', state.videoFile);
                 formData.append('template', templateBlob, 'template.png');
-                formData.append('params', JSON.stringify({
+                const exportParams = {
                     templateWidth: params.templateWidth,
                     templateHeight: params.templateHeight,
                     frameX: params.frameX,
@@ -2724,7 +2726,9 @@
                     imageScale: params.imageScale,
                     imageOffsetX: params.imageOffsetX,
                     imageOffsetY: params.imageOffsetY
-                }));
+                };
+                console.log('Sending params to backend:', exportParams);
+                formData.append('params', JSON.stringify(exportParams));
                 
                 updateProgress(20, 'Upload de la vidéo et du template...');
                 
