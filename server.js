@@ -22,7 +22,7 @@ const OUTPUT_DIR = '/tmp/outputs';
 app.use(cors());
 app.use(express.json());
 
-// Multer config for video uploads
+// Multer config for video + template uploads
 const storage = multer.diskStorage({
     destination: UPLOAD_DIR,
     filename: (req, file, cb) => {
@@ -34,13 +34,6 @@ const storage = multer.diskStorage({
 const upload = multer({
     storage,
     limits: { fileSize: 100 * 1024 * 1024 }, // 100MB max
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype.startsWith('video/')) {
-            cb(null, true);
-        } else {
-            cb(new Error('Only video files are allowed'));
-        }
-    }
 });
 
 // Health check
@@ -49,12 +42,19 @@ app.get('/health', (req, res) => {
 });
 
 // Main video processing endpoint
-app.post('/api/process-video', upload.single('video'), async (req, res) => {
-    if (!req.file) {
+app.post('/api/process-video', upload.fields([
+    { name: 'video', maxCount: 1 },
+    { name: 'template', maxCount: 1 }
+]), async (req, res) => {
+    if (!req.files || !req.files.video) {
         return res.status(400).json({ error: 'No video file uploaded' });
     }
+    if (!req.files.template) {
+        return res.status(400).json({ error: 'No template file uploaded' });
+    }
 
-    const inputPath = req.file.path;
+    const videoPath = req.files.video[0].path;
+    const templatePath = req.files.template[0].path;
     const outputId = uuidv4();
     const outputPath = path.join(OUTPUT_DIR, `${outputId}.mp4`);
 
@@ -66,72 +66,41 @@ app.post('/api/process-video', upload.single('video'), async (req, res) => {
             // Template dimensions
             templateWidth = 1080,
             templateHeight = 1080,
-            // Frame position and size
+            // Frame position and size (where video goes)
             frameX = 54,
             frameY = 195,
             frameWidth = 972,
             frameHeight = 810,
-            frameRadius = 27,
             // Trim times
             trimStart = 0,
             trimEnd = 10,
-            // Media position/scale (relative to frame center)
+            // Video position/scale (relative to frame center)
             imageScale = 100,
             imageOffsetX = 0,
             imageOffsetY = 0,
-            // Text
-            text = '',
-            textSize = 42,
-            textX = 54,
-            textY = 40,
-            // Overlay text
-            overlayText = '',
-            // Watermark
-            watermarkX = 1010,
-            watermarkY = 1040,
-            // Watermark opacity (0-100)
-            watermarkOpacity = 100,
         } = params;
 
         console.log('Processing video with params:', params);
 
-        // Build FFmpeg filter complex
-        const filters = buildFilterComplex({
+        // Process video with FFmpeg
+        await processVideo(videoPath, templatePath, outputPath, {
             templateWidth,
             templateHeight,
             frameX,
             frameY,
             frameWidth,
             frameHeight,
-            frameRadius,
-            imageScale,
-            imageOffsetX,
-            imageOffsetY,
-            text,
-            textSize,
-            textX,
-            textY,
-            overlayText,
-            watermarkX,
-            watermarkY,
-            watermarkOpacity
-        });
-
-        console.log('FFmpeg filters:', filters);
-
-        // Process video with FFmpeg
-        await processVideo(inputPath, outputPath, {
             trimStart,
             trimEnd,
-            filters,
-            templateWidth,
-            templateHeight
+            imageScale,
+            imageOffsetX,
+            imageOffsetY
         });
 
         // Send file back
         res.download(outputPath, `samourais_meme_${outputId}.mp4`, (err) => {
             // Cleanup files after download
-            cleanupFiles([inputPath, outputPath]);
+            cleanupFiles([videoPath, templatePath, outputPath]);
             if (err) {
                 console.error('Download error:', err);
             }
@@ -139,13 +108,13 @@ app.post('/api/process-video', upload.single('video'), async (req, res) => {
 
     } catch (error) {
         console.error('Processing error:', error);
-        cleanupFiles([inputPath, outputPath]);
+        cleanupFiles([videoPath, templatePath, outputPath]);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Build FFmpeg filter complex string
-function buildFilterComplex(params) {
+// Process video with FFmpeg - overlay template on top of video
+function processVideo(videoPath, templatePath, outputPath, options) {
     const {
         templateWidth,
         templateHeight,
@@ -153,138 +122,62 @@ function buildFilterComplex(params) {
         frameY,
         frameWidth,
         frameHeight,
+        trimStart,
+        trimEnd,
         imageScale,
         imageOffsetX,
-        imageOffsetY,
-        text,
-        textSize,
-        textX,
-        textY,
-        overlayText,
-        watermarkX,
-        watermarkY,
-        watermarkOpacity
-    } = params;
+        imageOffsetY
+    } = options;
 
-    // Calculate video scaling and positioning
+    const duration = trimEnd - trimStart;
     const scaleFactor = imageScale / 100;
-    
-    // Frame center for positioning
+
+    // Calculate video positioning
     const frameCenterX = frameX + frameWidth / 2;
     const frameCenterY = frameY + frameHeight / 2;
-
-    const filters = [];
-    let currentLabel = '0:v'; // Start with input video
-
-    // Step 1: Scale input video to cover frame area
-    const scaleFilter = 
-        `[${currentLabel}]scale=w='max(${frameWidth}*${scaleFactor}\\,ih*${frameWidth}/${frameHeight}*${scaleFactor})':` +
-        `h='max(${frameHeight}*${scaleFactor}\\,iw*${frameHeight}/${frameWidth}*${scaleFactor})':` +
-        `force_original_aspect_ratio=increase[scaled]`;
-    filters.push(scaleFilter);
-    currentLabel = 'scaled';
-
-    // Step 2: Create white background and overlay scaled video
     const videoX = Math.round(frameCenterX + imageOffsetX);
     const videoY = Math.round(frameCenterY + imageOffsetY);
-    
-    filters.push(
-        `color=white:s=${templateWidth}x${templateHeight}:r=30[bg]`
-    );
-    filters.push(
-        `[bg][${currentLabel}]overlay=x='${videoX}-overlay_w/2':y='${videoY}-overlay_h/2':shortest=1[with_video]`
-    );
-    currentLabel = 'with_video';
 
-    // Step 3: Crop to frame area and re-overlay on clean background
-    filters.push(
-        `[${currentLabel}]crop=${frameWidth}:${frameHeight}:${frameX}:${frameY}[cropped]`
-    );
-    filters.push(
-        `color=white:s=${templateWidth}x${templateHeight}:r=30[bg2]`
-    );
-    filters.push(
-        `[bg2][cropped]overlay=${frameX}:${frameY}:shortest=1[composed]`
-    );
-    currentLabel = 'composed';
+    // Calculate scaled video size to cover frame
+    const scaledWidth = Math.round(frameWidth * scaleFactor * 1.2);
 
-    // Step 4: Add top text (meme text)
-    if (text && text.trim()) {
-        const escapedText = escapeFFmpegText(text);
-        
-        filters.push(
-            `[${currentLabel}]drawtext=text='${escapedText}':` +
-            `fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:` +
-            `fontsize=${textSize}:fontcolor=black:` +
-            `x=(w-text_w)/2:y=${textY}[with_text]`
-        );
-        currentLabel = 'with_text';
-    }
+    // FFmpeg filter:
+    // 1. Create white background
+    // 2. Scale video to cover frame area
+    // 3. Overlay video centered on frame position
+    // 4. Overlay template PNG on top (with alpha transparency)
+    const filterComplex = [
+        // Create white background at template size
+        `color=white:s=${templateWidth}x${templateHeight}:r=30[bg]`,
+        // Scale input video
+        `[0:v]scale=${scaledWidth}:-1[scaled]`,
+        // Overlay video on background, centered at frame position
+        `[bg][scaled]overlay=x=${videoX}-overlay_w/2:y=${videoY}-overlay_h/2:shortest=1[with_video]`,
+        // Overlay template PNG on top (template has transparent hole for video)
+        `[with_video][1:v]overlay=0:0:shortest=1[final]`
+    ].join(';');
 
-    // Step 5: Add overlay text (Impact style on video area)
-    if (overlayText && overlayText.trim()) {
-        const escapedOverlay = escapeFFmpegText(overlayText.toUpperCase());
-        const overlayY = frameY + frameHeight - 80;
-        
-        filters.push(
-            `[${currentLabel}]drawtext=text='${escapedOverlay}':` +
-            `fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:` +
-            `fontsize=${Math.round(templateWidth * 0.055)}:fontcolor=white:` +
-            `borderw=4:bordercolor=black:` +
-            `x=(w-text_w)/2:y=${overlayY}[with_overlay]`
-        );
-        currentLabel = 'with_overlay';
-    }
-
-    // Step 6: Add watermark text
-    const escapedWatermark = escapeFFmpegText('SAMOURAIS');
-    const wmOpacity = Math.max(0, Math.min(1, (watermarkOpacity || 100) / 100));
-    
-    filters.push(
-        `[${currentLabel}]drawtext=text='${escapedWatermark}':` +
-        `fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:` +
-        `fontsize=${Math.round(templateWidth * 0.04)}:fontcolor=white@${wmOpacity}:` +
-        `borderw=2:bordercolor=0x333333@${wmOpacity}:` +
-        `x=${watermarkX}-text_w:y=${watermarkY}-text_h[final]`
-    );
-
-    return filters.join(';');
-}
-
-// Escape text for FFmpeg drawtext filter
-function escapeFFmpegText(text) {
-    return text
-        .replace(/\\/g, '\\\\')       // Escape backslashes first
-        .replace(/'/g, "'\\''")       // Escape single quotes
-        .replace(/:/g, '\\:')         // Escape colons
-        .replace(/\[/g, '\\[')        // Escape brackets
-        .replace(/\]/g, '\\]')
-        .replace(/%/g, '\\%');        // Escape percent signs
-}
-
-// Process video with FFmpeg
-function processVideo(inputPath, outputPath, options) {
-    const { trimStart, trimEnd, filters, templateWidth, templateHeight } = options;
-    const duration = trimEnd - trimStart;
+    console.log('FFmpeg filter:', filterComplex);
 
     return new Promise((resolve, reject) => {
-        let command = ffmpeg(inputPath)
+        ffmpeg()
+            .input(videoPath)
             .setStartTime(trimStart)
             .setDuration(duration)
-            .complexFilter(filters, 'final')
+            .input(templatePath)
+            .complexFilter(filterComplex, 'final')
             .outputOptions([
-                // NE PAS ajouter '-map [final]' ici car .complexFilter() le fait déjà !
-                '-map', '0:a?', // Include audio if present
+                '-map', '0:a?',
                 '-c:v', 'libx264',
                 '-preset', 'fast',
                 '-crf', '23',
                 '-c:a', 'aac',
                 '-b:a', '128k',
-                '-ar', '44100', // Audio sample rate
+                '-ar', '44100',
                 '-movflags', '+faststart',
                 '-pix_fmt', 'yuv420p',
-                '-r', '30', // Frame rate
-                '-shortest' // End when shortest stream ends
+                '-r', '30',
+                '-shortest'
             ])
             .on('start', (cmd) => {
                 console.log('FFmpeg command:', cmd);

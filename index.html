@@ -2559,6 +2559,97 @@
             }, { crossOrigin: 'anonymous' });
         }
 
+        // Générer le template PNG avec trou transparent pour la vidéo
+        async function generateTemplatePNG() {
+            const template = TEMPLATES[state.currentTemplate];
+            const offset = CANVAS_PADDING;
+            
+            // Créer un canvas temporaire à la taille du template (sans padding)
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = template.width;
+            tempCanvas.height = template.height;
+            const ctx = tempCanvas.getContext('2d');
+            
+            // Fond blanc
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, template.width, template.height);
+            
+            // Découper le trou pour la vidéo (zone transparente avec coins arrondis)
+            ctx.save();
+            ctx.globalCompositeOperation = 'destination-out';
+            
+            const frame = template.frame;
+            const radius = frame.radius || 0;
+            
+            // Dessiner un rectangle arrondi transparent
+            ctx.beginPath();
+            ctx.moveTo(frame.x + radius, frame.y);
+            ctx.lineTo(frame.x + frame.width - radius, frame.y);
+            ctx.quadraticCurveTo(frame.x + frame.width, frame.y, frame.x + frame.width, frame.y + radius);
+            ctx.lineTo(frame.x + frame.width, frame.y + frame.height - radius);
+            ctx.quadraticCurveTo(frame.x + frame.width, frame.y + frame.height, frame.x + frame.width - radius, frame.y + frame.height);
+            ctx.lineTo(frame.x + radius, frame.y + frame.height);
+            ctx.quadraticCurveTo(frame.x, frame.y + frame.height, frame.x, frame.y + frame.height - radius);
+            ctx.lineTo(frame.x, frame.y + radius);
+            ctx.quadraticCurveTo(frame.x, frame.y, frame.x + radius, frame.y);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.restore();
+            
+            // Dessiner le texte principal (meme text)
+            if (textBox && state.text) {
+                ctx.save();
+                ctx.font = `bold ${state.textSize}px "Bricolage Grotesque", Helvetica, Arial, sans-serif`;
+                ctx.fillStyle = 'black';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                
+                // Position du texte (convertir depuis Fabric.js)
+                const textX = textBox.left - offset;
+                const textY = textBox.top - offset;
+                
+                ctx.fillText(state.text, textX, textY);
+                ctx.restore();
+            }
+            
+            // Dessiner l'overlay text (si activé) - dans la zone du trou, donc avant le mask
+            // Non, l'overlay doit être SUR la vidéo, donc on ne le met pas ici
+            
+            // Dessiner le logo watermark
+            if (watermark && logoImage) {
+                ctx.save();
+                
+                // Position du watermark (depuis Fabric.js - originX: right, originY: bottom)
+                const wmLeft = watermark.left - offset;
+                const wmTop = watermark.top - offset;
+                const wmWidth = watermark.width * watermark.scaleX;
+                const wmHeight = watermark.height * watermark.scaleY;
+                
+                // Opacité
+                ctx.globalAlpha = state.watermarkOpacity / 100;
+                
+                // Le watermark est aligné right/bottom dans Fabric, donc:
+                // left/top représentent le coin bottom-right
+                ctx.drawImage(
+                    logoImage.getElement(),
+                    wmLeft - wmWidth,
+                    wmTop - wmHeight,
+                    wmWidth,
+                    wmHeight
+                );
+                
+                ctx.restore();
+            }
+            
+            // Convertir en blob PNG
+            return new Promise((resolve) => {
+                tempCanvas.toBlob((blob) => {
+                    resolve(blob);
+                }, 'image/png');
+            });
+        }
+
         window.startVideoProcessing = async function() {
             const modal = document.getElementById('export-modal');
             const params = window._videoExportParams;
@@ -2594,23 +2685,13 @@
                 backendUrl = 'https://' + backendUrl;
             }
             
-            // Validate URL format
-            try {
-                new URL(backendUrl);
-            } catch (e) {
-                showError('URL du backend invalide: ' + backendUrl);
-                return;
-            }
-            
-            console.log('Using backend URL:', backendUrl);
-            
             // Show processing state
             modal.querySelector('div > div').innerHTML = `
                 <div style="font-size: 48px; margin-bottom: 16px; animation: spin 1s linear infinite;">⏳</div>
                 <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
                 <h2 style="margin-bottom: 16px; color: #fff;">Processing...</h2>
                 <p style="color: #888; margin-bottom: 24px;">
-                    Upload et traitement de la vidéo en cours...<br>
+                    Génération du template et upload en cours...<br>
                     Cela peut prendre quelques secondes.
                 </p>
                 <div id="progress-bar" style="background: #333; border-radius: 4px; height: 8px; overflow: hidden; margin-bottom: 16px;">
@@ -2620,19 +2701,39 @@
             `;
             
             try {
-                // Create form data with video file and params
+                updateProgress(5, 'Génération du template PNG...');
+                
+                // Générer le template PNG avec trou transparent
+                const templateBlob = await generateTemplatePNG();
+                
+                updateProgress(15, 'Préparation de l\'upload...');
+                
+                // Create form data with video file, template PNG, and params
                 const formData = new FormData();
                 formData.append('video', state.videoFile);
-                formData.append('params', JSON.stringify(params));
+                formData.append('template', templateBlob, 'template.png');
+                formData.append('params', JSON.stringify({
+                    templateWidth: params.templateWidth,
+                    templateHeight: params.templateHeight,
+                    frameX: params.frameX,
+                    frameY: params.frameY,
+                    frameWidth: params.frameWidth,
+                    frameHeight: params.frameHeight,
+                    trimStart: params.trimStart,
+                    trimEnd: params.trimEnd,
+                    imageScale: params.imageScale,
+                    imageOffsetX: params.imageOffsetX,
+                    imageOffsetY: params.imageOffsetY
+                }));
                 
-                updateProgress(10, 'Upload de la vidéo...');
+                updateProgress(20, 'Upload de la vidéo et du template...');
                 
                 const response = await fetch(`${backendUrl}/api/process-video`, {
                     method: 'POST',
                     body: formData
                 });
                 
-                updateProgress(50, 'Traitement FFmpeg...');
+                updateProgress(60, 'Traitement FFmpeg...');
                 
                 if (!response.ok) {
                     const error = await response.json();
