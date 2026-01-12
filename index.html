@@ -2560,9 +2560,16 @@
         }
 
         // Générer le template PNG avec trou transparent pour la vidéo
-        async function generateTemplatePNG() {
+        async function generateTemplatePNG(params) {
             const template = TEMPLATES[state.currentTemplate];
             const offset = CANVAS_PADDING;
+            
+            // Utiliser le texte depuis params (passé depuis exportVideo)
+            const textToRender = params.text || state.text || '';
+            const textSizeToUse = params.textSize || state.textSize || 60;
+            
+            console.log('generateTemplatePNG called with params:', params);
+            console.log('Text to render:', textToRender);
             
             // Créer un canvas temporaire à la taille du template (sans padding)
             const tempCanvas = document.createElement('canvas');
@@ -2573,6 +2580,28 @@
             // Fond blanc
             ctx.fillStyle = 'white';
             ctx.fillRect(0, 0, template.width, template.height);
+            
+            // Dessiner le texte principal AVANT de découper le trou
+            if (textToRender && textToRender.trim()) {
+                ctx.save();
+                
+                // Utiliser une police système
+                ctx.font = `bold ${textSizeToUse}px Helvetica, Arial, sans-serif`;
+                ctx.fillStyle = 'black';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                
+                // Position du texte - centré horizontalement, position Y depuis textArea
+                const textX = template.width / 2;
+                const textY = template.textArea ? template.textArea.y : 60;
+                
+                console.log('Drawing text:', textToRender, 'at', textX, textY, 'fontSize:', textSizeToUse);
+                
+                ctx.fillText(textToRender, textX, textY);
+                ctx.restore();
+            } else {
+                console.warn('No text to draw! textToRender is:', textToRender);
+            }
             
             // Découper le trou pour la vidéo (zone transparente avec coins arrondis)
             ctx.save();
@@ -2597,26 +2626,7 @@
             
             ctx.restore();
             
-            // Dessiner le texte principal (meme text)
-            if (state.text) {
-                ctx.save();
-                ctx.font = `bold ${state.textSize}px "Bricolage Grotesque", Helvetica, Arial, sans-serif`;
-                ctx.fillStyle = 'black';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'top';
-                
-                // Position du texte - centré horizontalement
-                const textX = template.width / 2;
-                // Utiliser la position du textBox si disponible, sinon position par défaut
-                const textY = textBox ? (textBox.top - offset) : template.textArea.y;
-                
-                console.log('Drawing text:', state.text, 'at', textX, textY, 'size:', state.textSize);
-                ctx.fillText(state.text, textX, textY);
-                ctx.restore();
-            }
-            
-            // Dessiner l'overlay text (si activé) - dans la zone du trou, donc avant le mask
-            // Non, l'overlay doit être SUR la vidéo, donc on ne le met pas ici
+            // Le texte est maintenant dessiné AVANT le trou (voir plus haut)
             
             // Dessiner le logo watermark
             if (watermark && logoImage) {
@@ -2706,7 +2716,8 @@
                 updateProgress(5, 'Génération du template PNG...');
                 
                 // Générer le template PNG avec trou transparent
-                const templateBlob = await generateTemplatePNG();
+                // Passer params pour avoir accès au texte
+                const templateBlob = await generateTemplatePNG(params);
                 
                 updateProgress(15, 'Préparation de l\'upload...');
                 
