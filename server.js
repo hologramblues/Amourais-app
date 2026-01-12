@@ -211,12 +211,9 @@ function buildFilterComplex(params) {
     // Step 4: Add top text (meme text)
     if (text && text.trim()) {
         const escapedText = escapeFFmpegText(text);
-        // Wrap text if too long
-        const maxCharsPerLine = Math.floor(templateWidth / (textSize * 0.6));
-        const wrappedText = wrapText(escapedText, maxCharsPerLine);
         
         filters.push(
-            `[${currentLabel}]drawtext=text='${wrappedText}':` +
+            `[${currentLabel}]drawtext=text='${escapedText}':` +
             `fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:` +
             `fontsize=${textSize}:fontcolor=black:` +
             `x=(w-text_w)/2:y=${textY}[with_text]`
@@ -241,10 +238,7 @@ function buildFilterComplex(params) {
 
     // Step 6: Add watermark text
     const escapedWatermark = escapeFFmpegText('SAMOURAIS');
-    const wmOpacity = Math.max(0, Math.min(1, watermarkOpacity / 100));
-    
-    // Convert opacity to hex alpha (0-255)
-    const alphaHex = Math.round(wmOpacity * 255).toString(16).padStart(2, '0');
+    const wmOpacity = Math.max(0, Math.min(1, (watermarkOpacity || 100) / 100));
     
     filters.push(
         `[${currentLabel}]drawtext=text='${escapedWatermark}':` +
@@ -257,32 +251,10 @@ function buildFilterComplex(params) {
     return filters.join(';');
 }
 
-// Wrap text for multi-line display
-function wrapText(text, maxChars) {
-    if (text.length <= maxChars) return text;
-    
-    const words = text.split(' ');
-    const lines = [];
-    let currentLine = '';
-    
-    for (const word of words) {
-        if ((currentLine + ' ' + word).trim().length <= maxChars) {
-            currentLine = (currentLine + ' ' + word).trim();
-        } else {
-            if (currentLine) lines.push(currentLine);
-            currentLine = word;
-        }
-    }
-    if (currentLine) lines.push(currentLine);
-    
-    // FFmpeg uses \n for newlines in drawtext, but we need to escape it
-    return lines.join('\\n');
-}
-
 // Escape text for FFmpeg drawtext filter
 function escapeFFmpegText(text) {
     return text
-        .replace(/\\/g, '\\\\\\\\')  // Escape backslashes
+        .replace(/\\/g, '\\\\')       // Escape backslashes first
         .replace(/'/g, "'\\''")       // Escape single quotes
         .replace(/:/g, '\\:')         // Escape colons
         .replace(/\[/g, '\\[')        // Escape brackets
@@ -301,7 +273,7 @@ function processVideo(inputPath, outputPath, options) {
             .setDuration(duration)
             .complexFilter(filters, 'final')
             .outputOptions([
-                '-map', '[final]',
+                // NE PAS ajouter '-map [final]' ici car .complexFilter() le fait déjà !
                 '-map', '0:a?', // Include audio if present
                 '-c:v', 'libx264',
                 '-preset', 'fast',
