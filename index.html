@@ -961,6 +961,15 @@
                 </div>
             </div>
 
+            <!-- Line Height -->
+            <div class="section">
+                <div class="section-title">Interlignage</div>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="line-height" min="80" max="200" value="120" step="5">
+                    <span class="slider-value" id="line-height-value">1.2</span>
+                </div>
+            </div>
+
             <!-- Image Scale -->
             <div class="section" id="image-scale-section" style="display: none;">
                 <div class="section-title">Zoom image</div>
@@ -1098,6 +1107,7 @@
             // Text state
             text: '',
             textSize: 42,
+            lineHeight: 1.2,
             overlayText: '',
             showOverlay: false,
             // Watermark state
@@ -1114,6 +1124,8 @@
         const memeTextInput = document.getElementById('meme-text');
         const textSizeSlider = document.getElementById('text-size');
         const textSizeValue = document.getElementById('text-size-value');
+        const lineHeightSlider = document.getElementById('line-height');
+        const lineHeightValue = document.getElementById('line-height-value');
         const imageScaleSection = document.getElementById('image-scale-section');
         const imageScaleSlider = document.getElementById('image-scale');
         const imageScaleValue = document.getElementById('image-scale-value');
@@ -1424,7 +1436,7 @@
                 fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
                 fontWeight: '300',
                 fill: '#000000',
-                lineHeight: 1.2,
+                lineHeight: state.lineHeight,
                 textAlign: 'left',
                 splitByGrapheme: false,
                 hasControls: true,
@@ -2040,6 +2052,17 @@
             }
         }
 
+        function updateLineHeight(value) {
+            // value est en pourcentage (80-200), on le convertit en ratio (0.8-2.0)
+            const ratio = value / 100;
+            state.lineHeight = ratio;
+            lineHeightValue.textContent = ratio.toFixed(1);
+            if (textBox) {
+                textBox.set({ lineHeight: ratio });
+                canvas.renderAll();
+            }
+        }
+
         // ============================================
         // OVERLAY TEXT
         // ============================================
@@ -2426,6 +2449,7 @@
                 // Text
                 text: state.text,
                 textSize: state.textSize,
+                lineHeight: state.lineHeight,
                 textX: textBox ? textBox.left - CANVAS_PADDING : template.textArea.x,
                 textY: textBox ? textBox.top - CANVAS_PADDING : template.textArea.y,
                 // Overlay
@@ -2603,27 +2627,26 @@
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'top';
                 
-                console.log('Drawing text:', textToRender, 'at', textXPos, textYPos, 'fontSize:', textSizeToUse);
+                const lineHeight = textSizeToUse * state.lineHeight;
                 
-                // Gérer le word wrap comme Fabric.js Textbox
-                const maxWidth = template.textArea ? template.textArea.width : 972;
-                const lineHeight = textSizeToUse * 1.2;
-                const words = textToRender.split(' ');
-                let line = '';
-                let y = textYPos;
-                
-                for (let i = 0; i < words.length; i++) {
-                    const testLine = line + words[i] + ' ';
-                    const metrics = ctx.measureText(testLine);
-                    if (metrics.width > maxWidth && i > 0) {
-                        ctx.fillText(line.trim(), textXPos, y);
-                        line = words[i] + ' ';
+                // Utiliser les lignes réelles du textBox Fabric.js (word wrap inclus)
+                if (textBox && textBox._textLines) {
+                    console.log('Using textBox._textLines:', textBox._textLines);
+                    let y = textYPos;
+                    for (let i = 0; i < textBox._textLines.length; i++) {
+                        const line = textBox._textLines[i].join(''); // _textLines est un array d'arrays de caractères
+                        ctx.fillText(line, textXPos, y);
                         y += lineHeight;
-                    } else {
-                        line = testLine;
+                    }
+                } else {
+                    // Fallback: split par \n
+                    const lines = textToRender.split('\n');
+                    let y = textYPos;
+                    for (const line of lines) {
+                        ctx.fillText(line, textXPos, y);
+                        y += lineHeight;
                     }
                 }
-                ctx.fillText(line.trim(), textXPos, y);
                 
                 ctx.restore();
             }
@@ -2937,6 +2960,11 @@
             // Text size slider
             textSizeSlider.addEventListener('input', (e) => {
                 updateTextSize(e.target.value);
+            });
+
+            // Line height slider
+            lineHeightSlider.addEventListener('input', (e) => {
+                updateLineHeight(e.target.value);
             });
 
             // Image scale slider
