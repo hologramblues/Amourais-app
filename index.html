@@ -2566,14 +2566,17 @@
             
             // Récupérer les infos du texte depuis params ET textBox
             const textToRender = params.text || state.text || '';
-            const textSizeToUse = params.textSize || state.textSize || 60;
+            
+            // Prendre en compte le scale du textBox (si redimensionné manuellement)
+            const textBoxScale = textBox ? (textBox.scaleX || 1) : 1;
+            const textSizeToUse = (params.textSize || state.textSize || 60) * textBoxScale;
             
             // Position du texte depuis textBox (Fabric.js) ou params
             const textXPos = params.textX !== undefined ? params.textX : (textBox ? textBox.left - offset : template.textArea.x);
             const textYPos = params.textY !== undefined ? params.textY : (textBox ? textBox.top - offset : template.textArea.y);
             
             console.log('generateTemplatePNG - text:', textToRender);
-            console.log('generateTemplatePNG - textSize:', textSizeToUse);
+            console.log('generateTemplatePNG - textSize:', params.textSize, 'scale:', textBoxScale, 'effective:', textSizeToUse);
             console.log('generateTemplatePNG - textPos:', textXPos, textYPos);
             
             // Attendre que les polices soient chargées
