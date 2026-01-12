@@ -2562,7 +2562,9 @@
             const modal = document.getElementById('export-modal');
             const params = window._videoExportParams;
             
-            if (!BACKEND_URL) {
+            // Validate backend URL
+            let backendUrl = BACKEND_URL;
+            if (!backendUrl) {
                 modal.querySelector('div > div').innerHTML = `
                     <div style="font-size: 48px; margin-bottom: 16px;">⚙️</div>
                     <h2 style="margin-bottom: 16px; color: #fff;">Configuration requise</h2>
@@ -2584,6 +2586,22 @@
                 `;
                 return;
             }
+            
+            // Clean URL - remove trailing slash and add https if missing
+            backendUrl = backendUrl.trim().replace(/\/+$/, '');
+            if (!backendUrl.startsWith('http://') && !backendUrl.startsWith('https://')) {
+                backendUrl = 'https://' + backendUrl;
+            }
+            
+            // Validate URL format
+            try {
+                new URL(backendUrl);
+            } catch (e) {
+                showError('URL du backend invalide: ' + backendUrl);
+                return;
+            }
+            
+            console.log('Using backend URL:', backendUrl);
             
             // Show processing state
             modal.querySelector('div > div').innerHTML = `
@@ -2608,7 +2626,7 @@
                 
                 updateProgress(10, 'Upload de la vidéo...');
                 
-                const response = await fetch(`${BACKEND_URL}/api/process-video`, {
+                const response = await fetch(`${backendUrl}/api/process-video`, {
                     method: 'POST',
                     body: formData
                 });
@@ -2677,9 +2695,34 @@
             if (textEl) textEl.textContent = text;
         }
 
+        function showError(message) {
+            const modal = document.getElementById('export-modal');
+            if (modal) {
+                modal.querySelector('div > div').innerHTML = `
+                    <div style="font-size: 48px; margin-bottom: 16px;">❌</div>
+                    <h2 style="margin-bottom: 16px; color: #fff;">Erreur</h2>
+                    <p style="color: #ef4444; margin-bottom: 24px;">
+                        ${message}
+                    </p>
+                    <button onclick="document.getElementById('export-modal').remove()" 
+                            style="padding: 12px 32px; background: #333; border: none; border-radius: 8px; color: #fff; cursor: pointer;">
+                        Fermer
+                    </button>
+                `;
+            } else {
+                alert(message);
+            }
+        }
+
         window.saveBackendUrl = function() {
             const input = document.getElementById('backend-url-input');
-            const url = input.value.trim().replace(/\/$/, ''); // Remove trailing slash
+            let url = input.value.trim().replace(/\/+$/, ''); // Remove trailing slash
+            
+            // Add https if missing
+            if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+                url = 'https://' + url;
+            }
+            
             if (url) {
                 localStorage.setItem('samourais_backend_url', url);
                 location.reload(); // Reload to apply
