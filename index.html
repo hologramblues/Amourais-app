@@ -2430,9 +2430,10 @@
                 textY: textBox ? textBox.top - CANVAS_PADDING : template.textArea.y,
                 // Overlay
                 overlayText: state.showOverlay ? state.overlayText : '',
-                // Watermark position
+                // Watermark position and opacity
                 watermarkX: watermark ? watermark.left - CANVAS_PADDING : template.watermark.x,
                 watermarkY: watermark ? watermark.top - CANVAS_PADDING : template.watermark.y,
+                watermarkOpacity: state.watermarkOpacity,
             };
 
             console.log('Video export params:', exportParams);

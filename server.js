@@ -89,6 +89,8 @@ app.post('/api/process-video', upload.single('video'), async (req, res) => {
             // Watermark
             watermarkX = 1010,
             watermarkY = 1040,
+            // Watermark opacity (0-100)
+            watermarkOpacity = 100,
         } = params;
 
         console.log('Processing video with params:', params);
@@ -111,7 +113,8 @@ app.post('/api/process-video', upload.single('video'), async (req, res) => {
             textY,
             overlayText,
             watermarkX,
-            watermarkY
+            watermarkY,
+            watermarkOpacity
         });
 
         console.log('FFmpeg filters:', filters);
@@ -150,7 +153,6 @@ function buildFilterComplex(params) {
         frameY,
         frameWidth,
         frameHeight,
-        frameRadius,
         imageScale,
         imageOffsetX,
         imageOffsetY,
@@ -160,106 +162,132 @@ function buildFilterComplex(params) {
         textY,
         overlayText,
         watermarkX,
-        watermarkY
+        watermarkY,
+        watermarkOpacity
     } = params;
 
     // Calculate video scaling and positioning
     const scaleFactor = imageScale / 100;
     
-    // The video needs to fill the frame area
-    // We'll scale it to cover the frame, then position it
+    // Frame center for positioning
     const frameCenterX = frameX + frameWidth / 2;
     const frameCenterY = frameY + frameHeight / 2;
 
     const filters = [];
+    let currentLabel = '0:v'; // Start with input video
 
-    // Step 1: Create white background
-    filters.push(`color=white:s=${templateWidth}x${templateHeight}:d=1[bg]`);
+    // Step 1: Scale input video to cover frame area
+    const scaleFilter = 
+        `[${currentLabel}]scale=w='max(${frameWidth}*${scaleFactor}\\,ih*${frameWidth}/${frameHeight}*${scaleFactor})':` +
+        `h='max(${frameHeight}*${scaleFactor}\\,iw*${frameHeight}/${frameWidth}*${scaleFactor})':` +
+        `force_original_aspect_ratio=increase[scaled]`;
+    filters.push(scaleFilter);
+    currentLabel = 'scaled';
 
-    // Step 2: Scale input video to cover frame area
-    // We need to calculate the scale to ensure the video covers the frame
-    filters.push(
-        `[0:v]scale=w='if(gt(a,${frameWidth}/${frameHeight}),${frameHeight}*${scaleFactor}*a,${frameWidth}*${scaleFactor})':` +
-        `h='if(gt(a,${frameWidth}/${frameHeight}),${frameHeight}*${scaleFactor},${frameWidth}*${scaleFactor}/a)'[scaled]`
-    );
-
-    // Step 3: Create rounded rectangle mask for the frame
-    // Using drawbox with rounded corners approximation
-    filters.push(
-        `color=black@0:s=${templateWidth}x${templateHeight}[mask_bg]`
-    );
-    filters.push(
-        `[mask_bg]drawbox=x=${frameX}:y=${frameY}:w=${frameWidth}:h=${frameHeight}:c=white:t=fill[mask]`
-    );
-
-    // Step 4: Position the scaled video
+    // Step 2: Create white background and overlay scaled video
     const videoX = Math.round(frameCenterX + imageOffsetX);
     const videoY = Math.round(frameCenterY + imageOffsetY);
     
     filters.push(
-        `[bg][scaled]overlay=x='${videoX}-overlay_w/2':y='${videoY}-overlay_h/2'[with_video]`
+        `color=white:s=${templateWidth}x${templateHeight}:r=30[bg]`
     );
+    filters.push(
+        `[bg][${currentLabel}]overlay=x='${videoX}-overlay_w/2':y='${videoY}-overlay_h/2':shortest=1[with_video]`
+    );
+    currentLabel = 'with_video';
 
-    // Step 5: Apply mask (crop to frame) - simplified approach using crop and overlay
+    // Step 3: Crop to frame area and re-overlay on clean background
     filters.push(
-        `[with_video]crop=${frameWidth}:${frameHeight}:${frameX}:${frameY}[cropped]`
+        `[${currentLabel}]crop=${frameWidth}:${frameHeight}:${frameX}:${frameY}[cropped]`
     );
     filters.push(
-        `color=white:s=${templateWidth}x${templateHeight}[bg2]`
+        `color=white:s=${templateWidth}x${templateHeight}:r=30[bg2]`
     );
     filters.push(
-        `[bg2][cropped]overlay=${frameX}:${frameY}[with_frame]`
+        `[bg2][cropped]overlay=${frameX}:${frameY}:shortest=1[composed]`
     );
+    currentLabel = 'composed';
 
-    // Step 6: Add top text
-    if (text) {
+    // Step 4: Add top text (meme text)
+    if (text && text.trim()) {
         const escapedText = escapeFFmpegText(text);
+        // Wrap text if too long
+        const maxCharsPerLine = Math.floor(templateWidth / (textSize * 0.6));
+        const wrappedText = wrapText(escapedText, maxCharsPerLine);
+        
         filters.push(
-            `[with_frame]drawtext=text='${escapedText}':` +
-            `fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:` +
+            `[${currentLabel}]drawtext=text='${wrappedText}':` +
+            `fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:` +
             `fontsize=${textSize}:fontcolor=black:` +
-            `x=${textX}:y=${textY}[with_text]`
+            `x=(w-text_w)/2:y=${textY}[with_text]`
         );
-    } else {
-        filters.push(`[with_frame]null[with_text]`);
+        currentLabel = 'with_text';
     }
 
-    // Step 7: Add overlay text (Impact style on video)
-    if (overlayText) {
+    // Step 5: Add overlay text (Impact style on video area)
+    if (overlayText && overlayText.trim()) {
         const escapedOverlay = escapeFFmpegText(overlayText.toUpperCase());
-        const overlayY = frameY + frameHeight - 60;
+        const overlayY = frameY + frameHeight - 80;
+        
         filters.push(
-            `[with_text]drawtext=text='${escapedOverlay}':` +
+            `[${currentLabel}]drawtext=text='${escapedOverlay}':` +
             `fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:` +
-            `fontsize=${templateWidth * 0.055}:fontcolor=white:` +
+            `fontsize=${Math.round(templateWidth * 0.055)}:fontcolor=white:` +
             `borderw=4:bordercolor=black:` +
             `x=(w-text_w)/2:y=${overlayY}[with_overlay]`
         );
-    } else {
-        filters.push(`[with_text]null[with_overlay]`);
+        currentLabel = 'with_overlay';
     }
 
-    // Step 8: Add watermark text
+    // Step 6: Add watermark text
     const escapedWatermark = escapeFFmpegText('SAMOURAIS');
+    const wmOpacity = Math.max(0, Math.min(1, watermarkOpacity / 100));
+    
+    // Convert opacity to hex alpha (0-255)
+    const alphaHex = Math.round(wmOpacity * 255).toString(16).padStart(2, '0');
+    
     filters.push(
-        `[with_overlay]drawtext=text='${escapedWatermark}':` +
+        `[${currentLabel}]drawtext=text='${escapedWatermark}':` +
         `fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:` +
-        `fontsize=${templateWidth * 0.04}:fontcolor=white:` +
-        `borderw=2:bordercolor=0x333333:` +
+        `fontsize=${Math.round(templateWidth * 0.04)}:fontcolor=white@${wmOpacity}:` +
+        `borderw=2:bordercolor=0x333333@${wmOpacity}:` +
         `x=${watermarkX}-text_w:y=${watermarkY}-text_h[final]`
     );
 
     return filters.join(';');
 }
 
+// Wrap text for multi-line display
+function wrapText(text, maxChars) {
+    if (text.length <= maxChars) return text;
+    
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+    
+    for (const word of words) {
+        if ((currentLine + ' ' + word).trim().length <= maxChars) {
+            currentLine = (currentLine + ' ' + word).trim();
+        } else {
+            if (currentLine) lines.push(currentLine);
+            currentLine = word;
+        }
+    }
+    if (currentLine) lines.push(currentLine);
+    
+    // FFmpeg uses \n for newlines in drawtext, but we need to escape it
+    return lines.join('\\n');
+}
+
 // Escape text for FFmpeg drawtext filter
 function escapeFFmpegText(text) {
     return text
-        .replace(/\\/g, '\\\\')
-        .replace(/'/g, "'\\''")
-        .replace(/:/g, '\\:')
-        .replace(/\[/g, '\\[')
-        .replace(/\]/g, '\\]');
+        .replace(/\\/g, '\\\\\\\\')  // Escape backslashes
+        .replace(/'/g, "'\\''")       // Escape single quotes
+        .replace(/:/g, '\\:')         // Escape colons
+        .replace(/\[/g, '\\[')        // Escape brackets
+        .replace(/\]/g, '\\]')
+        .replace(/%/g, '\\%');        // Escape percent signs
 }
 
 // Process video with FFmpeg
@@ -268,7 +296,7 @@ function processVideo(inputPath, outputPath, options) {
     const duration = trimEnd - trimStart;
 
     return new Promise((resolve, reject) => {
-        ffmpeg(inputPath)
+        let command = ffmpeg(inputPath)
             .setStartTime(trimStart)
             .setDuration(duration)
             .complexFilter(filters, 'final')
@@ -280,22 +308,27 @@ function processVideo(inputPath, outputPath, options) {
                 '-crf', '23',
                 '-c:a', 'aac',
                 '-b:a', '128k',
+                '-ar', '44100', // Audio sample rate
                 '-movflags', '+faststart',
                 '-pix_fmt', 'yuv420p',
-                '-s', `${templateWidth}x${templateHeight}`
+                '-r', '30', // Frame rate
+                '-shortest' // End when shortest stream ends
             ])
             .on('start', (cmd) => {
                 console.log('FFmpeg command:', cmd);
             })
             .on('progress', (progress) => {
-                console.log('Processing:', progress.percent?.toFixed(1) + '%');
+                if (progress.percent) {
+                    console.log('Processing:', progress.percent.toFixed(1) + '%');
+                }
             })
             .on('end', () => {
                 console.log('Processing complete');
                 resolve();
             })
-            .on('error', (err) => {
-                console.error('FFmpeg error:', err);
+            .on('error', (err, stdout, stderr) => {
+                console.error('FFmpeg error:', err.message);
+                console.error('FFmpeg stderr:', stderr);
                 reject(err);
             })
             .save(outputPath);
@@ -306,7 +339,7 @@ function processVideo(inputPath, outputPath, options) {
 function cleanupFiles(files) {
     files.forEach(file => {
         try {
-            if (fs.existsSync(file)) {
+            if (file && fs.existsSync(file)) {
                 fs.unlinkSync(file);
             }
         } catch (e) {
