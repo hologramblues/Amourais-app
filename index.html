@@ -1388,6 +1388,10 @@
 
             // Calculate effective frame height (for story template customization)
             const effectiveFrameHeight = Math.round(frame.height * (state.frameHeightPercent / 100));
+            
+            // Calculate Y position to keep frame centered
+            const originalCenterY = frame.y + frame.height / 2;
+            const effectiveFrameY = originalCenterY - effectiveFrameHeight / 2;
 
             // White template background
             templateBg = new fabric.Rect({
@@ -1404,7 +1408,7 @@
             // Create the clip path (absolute position - stays fixed)
             clipRect = new fabric.Rect({
                 left: frame.x + offset,
-                top: frame.y + offset,
+                top: effectiveFrameY + offset,
                 width: frame.width,
                 height: effectiveFrameHeight,
                 rx: frame.radius,
@@ -1415,7 +1419,7 @@
             // Frame placeholder (gray background when no image)
             frameRect = new fabric.Rect({
                 left: frame.x + offset,
-                top: frame.y + offset,
+                top: effectiveFrameY + offset,
                 width: frame.width,
                 height: effectiveFrameHeight,
                 rx: frame.radius,
@@ -1429,7 +1433,7 @@
             // Frame border - interactive indicator (shows where image area is)
             frameBorder = new fabric.Rect({
                 left: frame.x + offset,
-                top: frame.y + offset,
+                top: effectiveFrameY + offset,
                 width: frame.width,
                 height: effectiveFrameHeight,
                 rx: frame.radius,
@@ -1985,15 +1989,30 @@
             // Calculer la nouvelle hauteur effective
             const effectiveFrameHeight = Math.round(frame.height * (percentage / 100));
             
-            // Mettre à jour uniquement les dimensions du cadre (pas la vidéo/image)
+            // Calculer le centre original du cadre
+            const originalCenterY = frame.y + frame.height / 2;
+            
+            // Calculer la nouvelle position Y pour garder le cadre centré
+            const newFrameY = originalCenterY - effectiveFrameHeight / 2;
+            
+            // Mettre à jour les dimensions ET la position du cadre
             if (clipRect) {
-                clipRect.set({ height: effectiveFrameHeight });
+                clipRect.set({ 
+                    top: newFrameY + offset,
+                    height: effectiveFrameHeight 
+                });
             }
             if (frameRect) {
-                frameRect.set({ height: effectiveFrameHeight });
+                frameRect.set({ 
+                    top: newFrameY + offset,
+                    height: effectiveFrameHeight 
+                });
             }
             if (frameBorder) {
-                frameBorder.set({ height: effectiveFrameHeight });
+                frameBorder.set({ 
+                    top: newFrameY + offset,
+                    height: effectiveFrameHeight 
+                });
             }
             
             canvas.renderAll();
@@ -2470,17 +2489,19 @@
             // Collect all parameters needed for video processing
             const template = TEMPLATES[state.currentTemplate];
             
-            // Calculate effective frame height
+            // Calculate effective frame height and centered Y position
             const effectiveFrameHeight = Math.round(template.frame.height * (state.frameHeightPercent / 100));
+            const originalCenterY = template.frame.y + template.frame.height / 2;
+            const effectiveFrameY = originalCenterY - effectiveFrameHeight / 2;
             
             const exportParams = {
                 // Template info
                 template: state.currentTemplate,
                 templateWidth: template.width,
                 templateHeight: template.height,
-                // Frame info
+                // Frame info (with adjusted height and Y position)
                 frameX: template.frame.x,
-                frameY: template.frame.y,
+                frameY: effectiveFrameY,
                 frameWidth: template.frame.width,
                 frameHeight: effectiveFrameHeight,
                 frameRadius: template.frame.radius,
