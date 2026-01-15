@@ -979,6 +979,15 @@
                 </div>
             </div>
 
+            <!-- Frame Height (Story only) -->
+            <div class="section" id="frame-height-section" style="display: none;">
+                <div class="section-title">Hauteur du cadre</div>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="frame-height" min="30" max="100" value="100">
+                    <span class="slider-value" id="frame-height-value">100%</span>
+                </div>
+            </div>
+
             <!-- Overlay Text Toggle -->
             <div class="section">
                 <div class="toggle-row" id="overlay-toggle">
@@ -1112,6 +1121,8 @@
             showOverlay: false,
             // Watermark state
             watermarkOpacity: 100,
+            // Frame customization (for story template)
+            frameHeightPercent: 100,
             // Canvas state
             scale: 1
         };
@@ -1129,6 +1140,9 @@
         const imageScaleSection = document.getElementById('image-scale-section');
         const imageScaleSlider = document.getElementById('image-scale');
         const imageScaleValue = document.getElementById('image-scale-value');
+        const frameHeightSection = document.getElementById('frame-height-section');
+        const frameHeightSlider = document.getElementById('frame-height');
+        const frameHeightValue = document.getElementById('frame-height-value');
         const selectImageBtn = document.getElementById('select-image-btn');
         const overlayToggle = document.getElementById('overlay-toggle');
         const overlaySwitch = document.getElementById('overlay-switch');
@@ -1372,6 +1386,9 @@
             const frame = template.frame;
             const offset = CANVAS_PADDING; // Offset for all elements
 
+            // Calculate effective frame height (for story template customization)
+            const effectiveFrameHeight = Math.round(frame.height * (state.frameHeightPercent / 100));
+
             // White template background
             templateBg = new fabric.Rect({
                 left: offset,
@@ -1389,7 +1406,7 @@
                 left: frame.x + offset,
                 top: frame.y + offset,
                 width: frame.width,
-                height: frame.height,
+                height: effectiveFrameHeight,
                 rx: frame.radius,
                 ry: frame.radius,
                 absolutePositioned: true
@@ -1400,7 +1417,7 @@
                 left: frame.x + offset,
                 top: frame.y + offset,
                 width: frame.width,
-                height: frame.height,
+                height: effectiveFrameHeight,
                 rx: frame.radius,
                 ry: frame.radius,
                 fill: '#f0f0f0',
@@ -1414,7 +1431,7 @@
                 left: frame.x + offset,
                 top: frame.y + offset,
                 width: frame.width,
-                height: frame.height,
+                height: effectiveFrameHeight,
                 rx: frame.radius,
                 ry: frame.radius,
                 fill: 'transparent',
@@ -1957,6 +1974,22 @@
             }
         }
 
+        function updateFrameHeight(percentage) {
+            state.frameHeightPercent = percentage;
+            frameHeightValue.textContent = percentage + '%';
+            
+            // Recréer les éléments avec la nouvelle hauteur
+            createElements();
+            
+            // Réajouter l'image/vidéo si présente
+            if (state.imageSrc) {
+                addImageToCanvas(state.imageSrc);
+            }
+            if (state.showOverlay && state.overlayText) {
+                addOverlayText();
+            }
+        }
+
         function updateUploadZone() {
             if (state.imageSrc || state.videoFile) {
                 const sizeKB = Math.round(state.imageSize / 1024);
@@ -2428,6 +2461,9 @@
             // Collect all parameters needed for video processing
             const template = TEMPLATES[state.currentTemplate];
             
+            // Calculate effective frame height
+            const effectiveFrameHeight = Math.round(template.frame.height * (state.frameHeightPercent / 100));
+            
             const exportParams = {
                 // Template info
                 template: state.currentTemplate,
@@ -2437,7 +2473,7 @@
                 frameX: template.frame.x,
                 frameY: template.frame.y,
                 frameWidth: template.frame.width,
-                frameHeight: template.frame.height,
+                frameHeight: effectiveFrameHeight,
                 frameRadius: template.frame.radius,
                 // Video trim
                 trimStart: state.trimStart,
@@ -2655,20 +2691,24 @@
             ctx.save();
             ctx.globalCompositeOperation = 'destination-out';
             
-            const frame = template.frame;
-            const radius = frame.radius || 0;
+            // Utiliser les dimensions du frame depuis params (inclut la hauteur personnalisée)
+            const frameX = params.frameX;
+            const frameY = params.frameY;
+            const frameWidth = params.frameWidth;
+            const frameHeight = params.frameHeight;
+            const radius = params.frameRadius || 0;
             
             // Dessiner un rectangle arrondi transparent
             ctx.beginPath();
-            ctx.moveTo(frame.x + radius, frame.y);
-            ctx.lineTo(frame.x + frame.width - radius, frame.y);
-            ctx.quadraticCurveTo(frame.x + frame.width, frame.y, frame.x + frame.width, frame.y + radius);
-            ctx.lineTo(frame.x + frame.width, frame.y + frame.height - radius);
-            ctx.quadraticCurveTo(frame.x + frame.width, frame.y + frame.height, frame.x + frame.width - radius, frame.y + frame.height);
-            ctx.lineTo(frame.x + radius, frame.y + frame.height);
-            ctx.quadraticCurveTo(frame.x, frame.y + frame.height, frame.x, frame.y + frame.height - radius);
-            ctx.lineTo(frame.x, frame.y + radius);
-            ctx.quadraticCurveTo(frame.x, frame.y, frame.x + radius, frame.y);
+            ctx.moveTo(frameX + radius, frameY);
+            ctx.lineTo(frameX + frameWidth - radius, frameY);
+            ctx.quadraticCurveTo(frameX + frameWidth, frameY, frameX + frameWidth, frameY + radius);
+            ctx.lineTo(frameX + frameWidth, frameY + frameHeight - radius);
+            ctx.quadraticCurveTo(frameX + frameWidth, frameY + frameHeight, frameX + frameWidth - radius, frameY + frameHeight);
+            ctx.lineTo(frameX + radius, frameY + frameHeight);
+            ctx.quadraticCurveTo(frameX, frameY + frameHeight, frameX, frameY + frameHeight - radius);
+            ctx.lineTo(frameX, frameY + radius);
+            ctx.quadraticCurveTo(frameX, frameY, frameX + radius, frameY);
             ctx.closePath();
             ctx.fill();
             
@@ -2907,9 +2947,15 @@
                     state.imageOffsetX = 0;
                     state.imageOffsetY = 0;
                     state.imageScale = 100;
+                    state.frameHeightPercent = 100;
                     
                     imageScaleSlider.value = 100;
                     imageScaleValue.textContent = '100%';
+                    frameHeightSlider.value = 100;
+                    frameHeightValue.textContent = '100%';
+                    
+                    // Show frame height slider only for story format
+                    frameHeightSection.style.display = (state.currentTemplate === 'story') ? 'block' : 'none';
                     
                     updateCanvasSize();
                     createElements();
@@ -2970,6 +3016,11 @@
             // Image scale slider
             imageScaleSlider.addEventListener('input', (e) => {
                 updateImageScale(parseInt(e.target.value));
+            });
+
+            // Frame height slider (story only)
+            frameHeightSlider.addEventListener('input', (e) => {
+                updateFrameHeight(parseInt(e.target.value));
             });
 
             // Select image button
