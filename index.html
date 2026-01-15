@@ -1978,16 +1978,25 @@
             state.frameHeightPercent = percentage;
             frameHeightValue.textContent = percentage + '%';
             
-            // Recréer les éléments avec la nouvelle hauteur
-            createElements();
+            const template = TEMPLATES[state.currentTemplate];
+            const frame = template.frame;
+            const offset = CANVAS_PADDING;
             
-            // Réajouter l'image/vidéo si présente
-            if (state.imageSrc) {
-                addImageToCanvas(state.imageSrc);
+            // Calculer la nouvelle hauteur effective
+            const effectiveFrameHeight = Math.round(frame.height * (percentage / 100));
+            
+            // Mettre à jour uniquement les dimensions du cadre (pas la vidéo/image)
+            if (clipRect) {
+                clipRect.set({ height: effectiveFrameHeight });
             }
-            if (state.showOverlay && state.overlayText) {
-                addOverlayText();
+            if (frameRect) {
+                frameRect.set({ height: effectiveFrameHeight });
             }
+            if (frameBorder) {
+                frameBorder.set({ height: effectiveFrameHeight });
+            }
+            
+            canvas.renderAll();
         }
 
         function updateUploadZone() {
