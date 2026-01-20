@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Samouraïs Meme Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <script src="https://apis.google.com/js/api.js"></script>
     <style>
@@ -1454,7 +1457,7 @@
                 top: textArea.y + offset,
                 width: textArea.width,
                 fontSize: state.textSize,
-                fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+                fontFamily: 'Inter, Helvetica, Arial, sans-serif',
                 fontWeight: '300',
                 fill: '#000000',
                 lineHeight: state.lineHeight,
@@ -1466,6 +1469,13 @@
                 moveCursor: 'move'
             });
             canvas.add(textBox);
+            
+            // Sync textBox changes back to state and input
+            textBox.on('changed', function() {
+                const newText = textBox.text === 'Tape ton texte...' ? '' : textBox.text;
+                state.text = newText;
+                memeTextInput.value = newText;
+            });
 
             // Watermark (logo or text fallback)
             const wm = template.watermark;
@@ -2499,12 +2509,15 @@
                 template: state.currentTemplate,
                 templateWidth: template.width,
                 templateHeight: template.height,
-                // Frame info (with adjusted height and Y position)
+                // Frame info (with adjusted height and Y position for the template PNG)
                 frameX: template.frame.x,
                 frameY: effectiveFrameY,
                 frameWidth: template.frame.width,
                 frameHeight: effectiveFrameHeight,
                 frameRadius: template.frame.radius,
+                // Original frame dimensions for video scaling/positioning (before slider adjustment)
+                originalFrameY: template.frame.y,
+                originalFrameHeight: template.frame.height,
                 // Video trim
                 trimStart: state.trimStart,
                 trimEnd: state.trimEnd,
@@ -2654,8 +2667,16 @@
             const template = TEMPLATES[state.currentTemplate];
             const offset = CANVAS_PADDING;
             
-            // Récupérer les infos du texte depuis params ET textBox
-            const textToRender = params.text || state.text || '';
+            // Récupérer le texte directement depuis le textBox (priorité), puis params, puis state
+            // Car l'utilisateur peut taper directement dans le textBox sans passer par l'input
+            let textToRender = '';
+            if (textBox && textBox.text && textBox.text !== 'Tape ton texte...') {
+                textToRender = textBox.text;
+            } else if (params.text) {
+                textToRender = params.text;
+            } else if (state.text) {
+                textToRender = state.text;
+            }
             
             // Prendre en compte le scale du textBox (si redimensionné manuellement)
             const textBoxScale = textBox ? (textBox.scaleX || 1) : 1;
@@ -2665,7 +2686,10 @@
             const textXPos = params.textX !== undefined ? params.textX : (textBox ? textBox.left - offset : template.textArea.x);
             const textYPos = params.textY !== undefined ? params.textY : (textBox ? textBox.top - offset : template.textArea.y);
             
-            console.log('generateTemplatePNG - text:', textToRender);
+            console.log('generateTemplatePNG - textBox.text:', textBox ? textBox.text : 'no textBox');
+            console.log('generateTemplatePNG - params.text:', params.text);
+            console.log('generateTemplatePNG - state.text:', state.text);
+            console.log('generateTemplatePNG - textToRender:', textToRender);
             console.log('generateTemplatePNG - textSize:', params.textSize, 'scale:', textBoxScale, 'effective:', textSizeToUse);
             console.log('generateTemplatePNG - textPos:', textXPos, textYPos);
             
@@ -2688,7 +2712,7 @@
                 ctx.save();
                 
                 // Utiliser la même police que le textBox Fabric.js (fontWeight 300 = light)
-                ctx.font = `300 ${textSizeToUse}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+                ctx.font = `300 ${textSizeToUse}px "Inter", Helvetica, Arial, sans-serif`;
                 ctx.fillStyle = 'black';
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'top';
@@ -2850,6 +2874,9 @@
                     frameY: params.frameY,
                     frameWidth: params.frameWidth,
                     frameHeight: params.frameHeight,
+                    // Original frame dimensions for video positioning/scaling
+                    originalFrameY: params.originalFrameY,
+                    originalFrameHeight: params.originalFrameHeight,
                     trimStart: params.trimStart,
                     trimEnd: params.trimEnd,
                     imageScale: params.imageScale,

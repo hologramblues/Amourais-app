@@ -66,11 +66,14 @@ app.post('/api/process-video', upload.fields([
             // Template dimensions
             templateWidth = 1080,
             templateHeight = 1080,
-            // Frame position and size (where video goes)
+            // Frame position and size (where video goes - EFFECTIVE after slider)
             frameX = 54,
             frameY = 195,
             frameWidth = 972,
             frameHeight = 810,
+            // Original frame position/height for video scaling (before slider adjustment)
+            originalFrameY = frameY,
+            originalFrameHeight = frameHeight,
             // Trim times
             trimStart = 0,
             trimEnd = 10,
@@ -90,6 +93,8 @@ app.post('/api/process-video', upload.fields([
             frameY,
             frameWidth,
             frameHeight,
+            originalFrameY,
+            originalFrameHeight,
             trimStart,
             trimEnd,
             imageScale,
@@ -122,6 +127,8 @@ function processVideo(videoPath, templatePath, outputPath, options) {
         frameY,
         frameWidth,
         frameHeight,
+        originalFrameY,
+        originalFrameHeight,
         trimStart,
         trimEnd,
         imageScale,
@@ -132,25 +139,26 @@ function processVideo(videoPath, templatePath, outputPath, options) {
     const duration = trimEnd - trimStart;
     const scaleFactor = imageScale / 100;
 
-    // Calculate video positioning
+    // Use ORIGINAL frame dimensions for video positioning
+    // This matches how the frontend positions the video (at center of original frame)
+    const useFrameY = originalFrameY !== undefined ? originalFrameY : frameY;
+    const useFrameHeight = originalFrameHeight || frameHeight;
+    
+    // Calculate center of the ORIGINAL frame (where video is actually positioned in frontend)
     const frameCenterX = frameX + frameWidth / 2;
-    const frameCenterY = frameY + frameHeight / 2;
+    const originalFrameCenterY = useFrameY + useFrameHeight / 2;
     const videoX = Math.round(frameCenterX + imageOffsetX);
-    const videoY = Math.round(frameCenterY + imageOffsetY);
+    const videoY = Math.round(originalFrameCenterY + imageOffsetY);
 
-    // Calculate scaled video size to cover frame
-    const scaledWidth = Math.round(frameWidth * scaleFactor * 1.2);
-
-    // FFmpeg filter:
-    // 1. Create white background
-    // 2. Scale video to cover frame area
-    // 3. Overlay video centered on frame position
-    // 4. Overlay template PNG on top (with alpha transparency)
+    // Scale video to cover the ORIGINAL frame dimensions
+    const targetWidth = Math.round(frameWidth * scaleFactor);
+    const targetHeight = Math.round(useFrameHeight * scaleFactor);
+    
     const filterComplex = [
         // Create white background at template size
         `color=white:s=${templateWidth}x${templateHeight}:r=30[bg]`,
-        // Scale input video
-        `[0:v]scale=${scaledWidth}:-1[scaled]`,
+        // Scale input video to COVER the frame (will be larger than frame, maintaining aspect ratio)
+        `[0:v]scale=w=${targetWidth}:h=${targetHeight}:force_original_aspect_ratio=increase[scaled]`,
         // Overlay video on background, centered at frame position
         `[bg][scaled]overlay=x=${videoX}-overlay_w/2:y=${videoY}-overlay_h/2[with_video]`,
         // Overlay template PNG on top (template has transparent hole for video)
@@ -158,6 +166,7 @@ function processVideo(videoPath, templatePath, outputPath, options) {
     ].join(';');
 
     console.log('FFmpeg filter:', filterComplex);
+    console.log('Target video size:', targetWidth, 'x', targetHeight, 'scaleFactor:', scaleFactor);
 
     return new Promise((resolve, reject) => {
         ffmpeg()
