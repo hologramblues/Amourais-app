@@ -155,6 +155,25 @@ def update_profile(profile_id: int):
             profile.scrape_interval_minutes = int(data["scrapeIntervalMinutes"])
         if "scrapeMode" in data and data["scrapeMode"] in ("backfill", "daily"):
             profile.scrape_mode = data["scrapeMode"]
+        if "backfillFrom" in data:
+            val = data["backfillFrom"]
+            if val:
+                # Accept ISO date string (YYYY-MM-DD) or unix timestamp
+                try:
+                    profile.backfill_from = int(datetime.fromisoformat(val).timestamp()) if isinstance(val, str) and "-" in val else int(val)
+                except (ValueError, TypeError):
+                    pass
+            else:
+                profile.backfill_from = None
+        if "backfillTo" in data:
+            val = data["backfillTo"]
+            if val:
+                try:
+                    profile.backfill_to = int(datetime.fromisoformat(val).timestamp()) if isinstance(val, str) and "-" in val else int(val)
+                except (ValueError, TypeError):
+                    pass
+            else:
+                profile.backfill_to = None
 
         profile.updated_at = int(datetime.now().timestamp())
         db.commit()

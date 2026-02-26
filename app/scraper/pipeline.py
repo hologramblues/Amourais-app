@@ -126,7 +126,12 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
     max_scrolls = (
         BACKFILL_MAX_SCROLLS if scrape_mode == "backfill" else DAILY_MAX_SCROLLS
     )
-    options = ExtractOptions(scrape_mode=scrape_mode, max_scrolls=max_scrolls)
+    options = ExtractOptions(
+        scrape_mode=scrape_mode,
+        max_scrolls=max_scrolls,
+        backfill_from=float(profile.backfill_from) if profile.backfill_from else None,
+        backfill_to=float(profile.backfill_to) if profile.backfill_to else None,
+    )
 
     # ------------------------------------------------------------------
     # 3. Mark job as running

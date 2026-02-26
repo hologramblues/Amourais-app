@@ -27,6 +27,8 @@ class ProfileInfo:
 class ExtractOptions:
     scrape_mode: str = "daily"  # "backfill" | "daily"
     max_scrolls: int = 30
+    backfill_from: Optional[float] = None  # unix timestamp — oldest date
+    backfill_to: Optional[float] = None  # unix timestamp — newest date
 
 
 @dataclass

@@ -19,11 +19,15 @@
       <td>{{ p.platform|platformicon|safe }} {{ p.platform }}</td>
       <td><a href="{{ p.profile_url }}" target="_blank" rel="noopener">@{{ p.username }}</a></td>
       <td>
-        {% if p.scrape_mode == "backfill" %}
-          <span style="color: #f59e0b;">Backfill</span>
-        {% else %}
-          <span style="color: #22c55e;">Quotidien</span>
-        {% endif %}
+        <select style="padding:2px 4px; font-size:0.85rem; margin:0; min-width:100px"
+          hx-patch="/api/profiles/{{ p.id }}"
+          hx-target="#profile-list"
+          hx-swap="innerHTML"
+          hx-include="this"
+          name="scrapeMode">
+          <option value="backfill" {{ 'selected' if p.scrape_mode == 'backfill' }}>Backfill</option>
+          <option value="daily" {{ 'selected' if p.scrape_mode == 'daily' }}>Quotidien</option>
+        </select>
       </td>
       <td>{{ p.scrape_interval_minutes }} min</td>
       <td>{{ p.last_scraped_at|formatdate }}</td>
@@ -57,6 +61,25 @@
           hx-confirm="Supprimer ce profil ?"
           hx-target="#profile-list"
           hx-swap="innerHTML">Suppr</button>
+        <details style="margin-top:4px">
+          <summary style="font-size:0.8rem; cursor:pointer">Dates backfill</summary>
+          <form style="display:flex; gap:6px; align-items:end; margin-top:4px"
+            hx-patch="/api/profiles/{{ p.id }}"
+            hx-target="#profile-list"
+            hx-swap="innerHTML">
+            <label style="font-size:0.75rem; margin:0">
+              Du
+              <input type="date" name="backfillFrom" style="padding:2px 4px; font-size:0.8rem; margin:0"
+                value="{{ p.backfill_from|timestamptodate if p.backfill_from }}">
+            </label>
+            <label style="font-size:0.75rem; margin:0">
+              Au
+              <input type="date" name="backfillTo" style="padding:2px 4px; font-size:0.8rem; margin:0"
+                value="{{ p.backfill_to|timestamptodate if p.backfill_to }}">
+            </label>
+            <button type="submit" class="outline small" style="padding:2px 8px; font-size:0.8rem; margin:0">OK</button>
+          </form>
+        </details>
       </td>
     </tr>
     {% endfor %}

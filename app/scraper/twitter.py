@@ -247,7 +247,9 @@ class TwitterExtractor(PlatformExtractor):
         pw_cookies = _to_playwright_cookies(raw_cookies)
 
         now_ts = time.time()
-        cutoff_ts = now_ts - _BACKFILL_MAX_AGE_SECONDS
+        # Use user-defined backfill dates if set, otherwise default to 2-year window
+        cutoff_ts = opts.backfill_from if opts.backfill_from else (now_ts - _BACKFILL_MAX_AGE_SECONDS)
+        cutoff_to = opts.backfill_to if opts.backfill_to else now_ts
 
         # Ensure we navigate to the /media tab
         media_url = self._build_media_tab_url(profile_url)
@@ -256,14 +258,7 @@ class TwitterExtractor(PlatformExtractor):
         def page_action(page):
             nonlocal intercepted_responses
 
-            # 1. Inject cookies
-            if pw_cookies:
-                logger.info("Adding {} Twitter cookies", len(pw_cookies))
-                page.context.add_cookies(pw_cookies)
-                page.reload(wait_until="networkidle")
-                page.wait_for_timeout(2000)
-
-            # 2. Set up response interception
+            # 1. Set up response interception FIRST (before any navigation)
             def on_response(response):
                 url = response.url
                 if any(frag in url for frag in (
@@ -280,12 +275,15 @@ class TwitterExtractor(PlatformExtractor):
 
             page.on("response", on_response)
 
-            # 3. Navigate to /media tab if not already there
-            current = page.url
-            if "/media" not in current:
-                logger.info("Navigating to /media tab")
-                page.goto(media_url, wait_until="networkidle")
-                page.wait_for_timeout(3000)
+            # 2. Inject cookies
+            if pw_cookies:
+                logger.info("Adding {} Twitter cookies", len(pw_cookies))
+                page.context.add_cookies(pw_cookies)
+
+            # 3. Navigate to /media tab (always reload to trigger API with listener active)
+            logger.info("Navigating to /media tab")
+            page.goto(media_url, wait_until="networkidle")
+            page.wait_for_timeout(3000)
 
             # 4. Scroll the page
             scroll_count = opts.max_scrolls
@@ -354,9 +352,14 @@ class TwitterExtractor(PlatformExtractor):
 
                 if opts.scrape_mode == "backfill":
                     if item["posted_at"]:
-                        if item["posted_at"].timestamp() < cutoff_ts:
+                        post_ts = item["posted_at"].timestamp()
+                        # Skip posts newer than backfill_to
+                        if post_ts > cutoff_to:
+                            continue
+                        # Stop at posts older than backfill_from
+                        if post_ts < cutoff_ts:
                             logger.info(
-                                "Backfill mode: post {} older than 2 years, stopping", pid
+                                "Backfill mode: post {} older than cutoff date, stopping", pid
                             )
                             stop_early = True
                             break

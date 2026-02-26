@@ -22,6 +22,8 @@ class Profile(Base):
     scrape_mode = Column(Text, nullable=False, default="backfill")  # backfill | daily
     scrape_interval_minutes = Column(Integer, nullable=False, default=360)
     last_scraped_at = Column(Integer)  # unix timestamp
+    backfill_from = Column(Integer)  # unix timestamp — oldest date to scrape (optional)
+    backfill_to = Column(Integer)  # unix timestamp — newest date to scrape (optional, default=now)
     gdrive_folder_id = Column(Text)
     created_at = Column(Integer, nullable=False, default=lambda: int(datetime.now().timestamp()))
     updated_at = Column(Integer, nullable=False, default=lambda: int(datetime.now().timestamp()))

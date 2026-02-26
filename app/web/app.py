@@ -22,6 +22,16 @@ def _filter_formatdate(value, fmt: str = "%d/%m/%Y %H:%M") -> str:
     return str(value)
 
 
+def _filter_timestamptodate(value) -> str:
+    """Jinja2 filter: convert a unix timestamp to YYYY-MM-DD for date inputs."""
+    if value is None:
+        return ""
+    try:
+        return datetime.fromtimestamp(int(value)).strftime("%Y-%m-%d")
+    except (OSError, ValueError, TypeError):
+        return ""
+
+
 def _filter_platformicon(platform: str) -> str:
     """Jinja2 filter: return a small emoji/icon for the given platform name."""
     icons = {
@@ -46,6 +56,7 @@ def create_app() -> Flask:
     # Jinja2 custom filters
     # ------------------------------------------------------------------
     app.jinja_env.filters["formatdate"] = _filter_formatdate
+    app.jinja_env.filters["timestamptodate"] = _filter_timestamptodate
     app.jinja_env.filters["platformicon"] = _filter_platformicon
 
     # ------------------------------------------------------------------
