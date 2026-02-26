@@ -440,10 +440,147 @@ def _extract_tiktok(url: str, post_id: str) -> list[MediaItemData]:
 
 
 # ---------------------------------------------------------------------------
+# Twitter/X — syndication API (no auth needed)
+# ---------------------------------------------------------------------------
+_TWITTER_DEFAULT_IMAGES = (
+    "abs.twimg.com/rweb/ssr/default",
+    "abs.twimg.com/responsive-web",
+    "abs.twimg.com/icons",
+)
+
+
+def _try_twitter_syndication(post_id: str, post_url: str) -> list[MediaItemData]:
+    """
+    Try the Twitter syndication API to fetch tweet media.
+    Works without authentication — returns structured JSON with media URLs.
+    """
+    import httpx
+
+    syndication_url = f"https://cdn.syndication.twimg.com/tweet-result?id={post_id}&lang=en&token=0"
+    try:
+        resp = httpx.get(
+            syndication_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/json",
+                "Referer": "https://platform.twitter.com/",
+            },
+            timeout=15,
+            follow_redirects=True,
+        )
+        if resp.status_code != 200:
+            logger.debug("Twitter syndication API returned {}", resp.status_code)
+            return []
+
+        data = resp.json()
+    except Exception as exc:
+        logger.debug("Twitter syndication API failed: {}", exc)
+        return []
+
+    caption = data.get("text", "")
+    posted_at = None
+    created_at = data.get("created_at")
+    if created_at:
+        try:
+            posted_at = datetime.strptime(created_at, "%a %b %d %H:%M:%S %z %Y")
+        except (ValueError, TypeError):
+            pass
+
+    items = []
+
+    # Check for media_details (photos, videos, animated_gif)
+    media_details = data.get("mediaDetails", [])
+    for media in media_details:
+        media_type_raw = media.get("type", "photo")
+
+        if media_type_raw in ("video", "animated_gif"):
+            variants = media.get("video_info", {}).get("variants", [])
+            mp4_variants = [v for v in variants if v.get("content_type") == "video/mp4"]
+            if mp4_variants:
+                best = max(mp4_variants, key=lambda v: v.get("bitrate", 0))
+                media_url = best.get("url", "")
+            else:
+                media_url = variants[0]["url"] if variants else ""
+            m_type = "video"
+            duration = media.get("video_info", {}).get("duration_millis")
+            duration = duration / 1000 if duration else None
+        else:
+            media_url = media.get("media_url_https", media.get("media_url", ""))
+            if media_url and ":orig" not in media_url:
+                media_url += ":orig"
+            m_type = "image"
+            duration = None
+
+        if media_url:
+            size = media.get("original_info", {})
+            items.append(MediaItemData(
+                post_id=post_id,
+                post_url=post_url,
+                media_type=m_type,
+                media_url=media_url,
+                caption=caption,
+                posted_at=posted_at,
+                width=size.get("width"),
+                height=size.get("height"),
+                duration=duration,
+            ))
+
+    # Fallback: check photos array
+    if not items:
+        for photo in data.get("photos", []):
+            photo_url = photo.get("url", "")
+            if photo_url:
+                if ":orig" not in photo_url:
+                    photo_url += ":orig"
+                items.append(MediaItemData(
+                    post_id=post_id,
+                    post_url=post_url,
+                    media_type="image",
+                    media_url=photo_url,
+                    caption=caption,
+                    posted_at=posted_at,
+                    width=photo.get("width"),
+                    height=photo.get("height"),
+                ))
+
+    # Fallback: check video object
+    if not items and data.get("video"):
+        video = data["video"]
+        variants = video.get("variants", [])
+        mp4s = [v for v in variants if v.get("type") == "video/mp4" or v.get("content_type") == "video/mp4"]
+        if mp4s:
+            best = max(mp4s, key=lambda v: v.get("bitrate", 0))
+            src = best.get("src") or best.get("url", "")
+            if src:
+                items.append(MediaItemData(
+                    post_id=post_id,
+                    post_url=post_url,
+                    media_type="video",
+                    media_url=src,
+                    caption=caption,
+                    posted_at=posted_at,
+                ))
+
+    if items:
+        logger.info("Twitter syndication API found {} media items for tweet {}", len(items), post_id)
+
+    return items
+
+
+# ---------------------------------------------------------------------------
 # Twitter/X single post
 # ---------------------------------------------------------------------------
 def _extract_twitter(url: str, post_id: str) -> list[MediaItemData]:
     """Extract media from a single tweet."""
+
+    # 1) Try syndication API first — fast, no browser, no auth needed
+    items = _try_twitter_syndication(post_id, url)
+    if items:
+        return items
+
+    logger.debug("Syndication API returned nothing, falling back to browser for tweet {}", post_id)
+
+    # 2) Fall back to browser-based extraction
     intercepted: list[dict] = []
     pw_cookies = _load_cookies("twitter")
 
@@ -484,43 +621,36 @@ def _extract_twitter(url: str, post_id: str) -> list[MediaItemData]:
         if tweet_data:
             break
 
-    # Fallback: try og:image / og:video meta tags
-    if not tweet_data:
-        logger.debug("No GraphQL data intercepted for tweet {}, trying meta tags", post_id)
-        items = []
-        try:
-            og_video = adaptor.css('meta[property="og:video"]')
-            og_image = adaptor.css('meta[property="og:image"]')
-            caption_tag = adaptor.css('meta[property="og:description"]')
-            caption = caption_tag[0].attrib.get("content", "") if caption_tag else ""
+    if tweet_data:
+        return _twitter_media_from_tweet(tweet_data, post_id, url)
 
-            if og_video:
-                media_url = og_video[0].attrib.get("content", "")
-                if media_url:
-                    items.append(MediaItemData(
-                        post_id=post_id,
-                        post_url=url,
-                        media_type="video",
-                        media_url=media_url,
-                        caption=caption,
-                    ))
-            elif og_image:
-                media_url = og_image[0].attrib.get("content", "")
-                if media_url and "profile_images" not in media_url:
-                    items.append(MediaItemData(
-                        post_id=post_id,
-                        post_url=url,
-                        media_type="image",
-                        media_url=media_url,
-                        caption=caption,
-                    ))
-        except Exception as exc:
-            logger.debug("Twitter meta tag fallback failed: {}", exc)
-        if items:
-            return items
-        return []
+    # 3) Fallback: try og:image / og:video meta tags (filter out default X images)
+    logger.debug("No GraphQL data intercepted for tweet {}, trying meta tags", post_id)
+    try:
+        og_video = adaptor.css('meta[property="og:video"]')
+        og_image = adaptor.css('meta[property="og:image"]')
+        caption_tag = adaptor.css('meta[property="og:description"]')
+        caption = caption_tag[0].attrib.get("content", "") if caption_tag else ""
 
-    return _twitter_media_from_tweet(tweet_data, post_id, url)
+        if og_video:
+            media_url = og_video[0].attrib.get("content", "")
+            if media_url and not any(d in media_url for d in _TWITTER_DEFAULT_IMAGES):
+                return [MediaItemData(
+                    post_id=post_id, post_url=url, media_type="video",
+                    media_url=media_url, caption=caption,
+                )]
+        if og_image:
+            media_url = og_image[0].attrib.get("content", "")
+            if media_url and not any(d in media_url for d in _TWITTER_DEFAULT_IMAGES) \
+                    and "profile_images" not in media_url:
+                return [MediaItemData(
+                    post_id=post_id, post_url=url, media_type="image",
+                    media_url=media_url, caption=caption,
+                )]
+    except Exception as exc:
+        logger.debug("Twitter meta tag fallback failed: {}", exc)
+
+    return []
 
 
 def _find_tweet_in_response(data: Any, target_id: str) -> dict | None:
