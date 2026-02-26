@@ -1,101 +1,65 @@
-# Samouraïs Meme Backend
+# SAMOURAIS SCRAPPER
 
-Backend FFmpeg pour le traitement des vidéos meme.
+Plateforme unifiee de scraping, edition et publication de medias sociaux.
 
-## Déploiement sur Railway
+## Modules
 
-### 1. Créer le projet
+| Module | Description |
+|--------|-------------|
+| **Scrapper** | Scraping automatique Instagram, TikTok, Twitter/X, Reddit |
+| **Quick Download** | Coller un lien unique pour telecharger un media |
+| **Viewer** | Galerie avec lightbox, ratings, commentaires |
+| **Meme Editor** | Editeur Fabric.js + export video FFmpeg |
+| **Calendar** | Planification multiplateforme avec FullCalendar.js |
+| **Analytics** | Dashboard Chart.js avec metriques reelles |
 
-```bash
-# Connecte-toi à Railway CLI (si pas déjà fait)
-npm install -g @railway/cli
-railway login
+## Stack
 
-# Créer un nouveau projet
-railway init
-```
+- **Backend** : Python / Flask / SQLAlchemy / APScheduler
+- **Scraping** : Scrapling (patchright headless browser)
+- **Frontend** : Jinja2 + PicoCSS + HTMX + Fabric.js + FullCalendar.js + Chart.js
+- **Storage** : Local (disk) ou Google Drive
 
-### 2. Déployer
-
-```bash
-# Depuis le dossier samourais-backend
-railway up
-```
-
-### 3. Récupérer l'URL
-
-Après déploiement, Railway te donnera une URL du type :
-```
-https://samourais-backend-production-xxxx.up.railway.app
-```
-
-### 4. Configurer le frontend
-
-Dans le frontend, quand tu cliques sur "Exporter la vidéo", entre cette URL.
-Elle sera sauvegardée dans le localStorage.
-
----
-
-## API
-
-### Health Check
-```
-GET /health
-```
-
-### Process Video
-```
-POST /api/process-video
-Content-Type: multipart/form-data
-
-- video: [fichier vidéo]
-- params: JSON string avec les paramètres
-```
-
-**Paramètres disponibles :**
-```json
-{
-  "templateWidth": 1080,
-  "templateHeight": 1080,
-  "frameX": 54,
-  "frameY": 195,
-  "frameWidth": 972,
-  "frameHeight": 810,
-  "frameRadius": 27,
-  "trimStart": 0,
-  "trimEnd": 10,
-  "imageScale": 100,
-  "imageOffsetX": 0,
-  "imageOffsetY": 0,
-  "text": "Ton texte de meme",
-  "textSize": 42,
-  "textX": 54,
-  "textY": 40,
-  "overlayText": "",
-  "watermarkX": 1010,
-  "watermarkY": 1040
-}
-```
-
----
-
-## Développement local
+## Installation locale
 
 ```bash
-# Install dependencies
-npm install
+# Cloner
+git clone https://github.com/hologramblues/Amourais-app.git
+cd Amourais-app
 
-# Run server (requires FFmpeg installed locally)
-npm run dev
+# Environnement Python
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python -m patchright install chromium
+
+# Configuration
+cp .env.example .env
+# Editer .env si besoin
+
+# Lancer
+python run.py
+# -> http://localhost:8080
 ```
 
-Le serveur tourne sur `http://localhost:3000`.
+## Deploiement Railway
 
----
+Le projet inclut un `Dockerfile` et un `railway.toml` prets pour Railway.
+Railway injecte automatiquement la variable `PORT`.
 
-## Notes
+## Structure
 
-- Max file size: 100MB
-- FFmpeg est inclus dans le Docker container
-- Les fichiers temporaires sont nettoyés après chaque requête
-# Amourais-app
+```
+app/
+  analytics/     # API analytics (Chart.js)
+  calendar/      # API calendrier (FullCalendar.js)
+  editor/        # API editeur (FFmpeg video processing)
+  scraper/       # Extracteurs par plateforme + quick download
+  web/           # Routes Flask, templates, static assets
+  config.py      # Configuration (.env)
+  db.py          # Modeles SQLAlchemy
+  scheduler.py   # APScheduler (4 jobs recurrents)
+  storage.py     # Local / Google Drive upload
+data/            # DB, downloads, cookies (gitignored)
+run.py           # Point d'entree
+```

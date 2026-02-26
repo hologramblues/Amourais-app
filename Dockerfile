@@ -1,34 +1,33 @@
-# Node.js avec FFmpeg pour Railway
-FROM node:18-slim
+# SAMOURAIS SCRAPPER — Python/Flask
+FROM python:3.12-slim
 
-# Install FFmpeg and fonts
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    fonts-dejavu-core \
-    fonts-liberation \
+# FFmpeg + Chromium deps for scrapling/patchright headless browser
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg fonts-dejavu-core fonts-liberation curl \
+    libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
+    libcups2 libdrm2 libdbus-1-3 libxkbcommon0 \
+    libatspi2.0-0 libxcomposite1 libxdamage1 libxfixes3 \
+    libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create app directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies
-RUN npm install --omit=dev
+# Install Python deps
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && python -m patchright install chromium
 
 # Copy app source
 COPY . .
 
-# Create temp directories
-RUN mkdir -p /tmp/uploads /tmp/outputs
+# Create data directories
+RUN mkdir -p data/downloads data/cookies data/editor data/calendar data/sessions
 
-# Expose port
-EXPOSE 3000
+# Railway injects PORT env var; fallback 8080
+EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8080}/ || exit 1
 
-# Start server
-CMD ["npm", "start"]
+CMD ["python", "run.py"]

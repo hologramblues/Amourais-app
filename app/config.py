@@ -7,13 +7,13 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Server
-PORT = int(os.getenv("PORT", "3000"))
+PORT = int(os.getenv("PORT", "8080"))
 DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
 
 # Google Drive OAuth2
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:3000/auth/google/callback")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8080/auth/google/callback")
 GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN", "")
 GDRIVE_ROOT_FOLDER_NAME = os.getenv("GDRIVE_ROOT_FOLDER_NAME", "SAMOURAIS SCRAPPER")
 
