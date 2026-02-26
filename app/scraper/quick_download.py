@@ -118,11 +118,8 @@ def _extract_instagram(url: str, post_id: str) -> list[MediaItemData]:
 
     def page_action(page):
         nonlocal intercepted
-        if pw_cookies:
-            page.context.add_cookies(pw_cookies)
-            page.reload(wait_until="networkidle")
-            page.wait_for_timeout(2000)
 
+        # Register response listener BEFORE any reload
         def on_response(response):
             resp_url = response.url
             if any(f in resp_url for f in ("/graphql", "/api/v1/media/", "/api/v1/feed/")):
@@ -132,7 +129,12 @@ def _extract_instagram(url: str, post_id: str) -> list[MediaItemData]:
                     pass
 
         page.on("response", on_response)
-        # Wait for content to load
+
+        if pw_cookies:
+            page.context.add_cookies(pw_cookies)
+
+        # Always reload to trigger API requests while listener is active
+        page.reload(wait_until="networkidle")
         page.wait_for_timeout(3000)
 
     try:
@@ -306,11 +308,8 @@ def _extract_tiktok(url: str, post_id: str) -> list[MediaItemData]:
 
     def page_action(page):
         nonlocal intercepted
-        if pw_cookies:
-            page.context.add_cookies(pw_cookies)
-            page.reload(wait_until="networkidle")
-            page.wait_for_timeout(2000)
 
+        # Register response listener BEFORE any reload
         def on_response(response):
             resp_url = response.url
             if "/api/post/item_list" in resp_url or "/api/item/detail" in resp_url:
@@ -320,6 +319,12 @@ def _extract_tiktok(url: str, post_id: str) -> list[MediaItemData]:
                     pass
 
         page.on("response", on_response)
+
+        if pw_cookies:
+            page.context.add_cookies(pw_cookies)
+
+        # Always reload to trigger API requests while listener is active
+        page.reload(wait_until="networkidle")
         page.wait_for_timeout(3000)
 
     try:
@@ -444,11 +449,8 @@ def _extract_twitter(url: str, post_id: str) -> list[MediaItemData]:
 
     def page_action(page):
         nonlocal intercepted
-        if pw_cookies:
-            page.context.add_cookies(pw_cookies)
-            page.reload(wait_until="networkidle")
-            page.wait_for_timeout(2000)
 
+        # Register response listener BEFORE any reload/navigation
         def on_response(response):
             resp_url = response.url
             if "/i/api/graphql/" in resp_url:
@@ -458,6 +460,13 @@ def _extract_twitter(url: str, post_id: str) -> list[MediaItemData]:
                     pass
 
         page.on("response", on_response)
+
+        # Add cookies if available
+        if pw_cookies:
+            page.context.add_cookies(pw_cookies)
+
+        # Always reload to trigger fresh GraphQL requests while listener is active
+        page.reload(wait_until="networkidle")
         page.wait_for_timeout(3000)
 
     # Normalize URL to x.com
@@ -475,7 +484,40 @@ def _extract_twitter(url: str, post_id: str) -> list[MediaItemData]:
         if tweet_data:
             break
 
+    # Fallback: try og:image / og:video meta tags
     if not tweet_data:
+        logger.debug("No GraphQL data intercepted for tweet {}, trying meta tags", post_id)
+        items = []
+        try:
+            og_video = adaptor.css('meta[property="og:video"]')
+            og_image = adaptor.css('meta[property="og:image"]')
+            caption_tag = adaptor.css('meta[property="og:description"]')
+            caption = caption_tag[0].attrib.get("content", "") if caption_tag else ""
+
+            if og_video:
+                media_url = og_video[0].attrib.get("content", "")
+                if media_url:
+                    items.append(MediaItemData(
+                        post_id=post_id,
+                        post_url=url,
+                        media_type="video",
+                        media_url=media_url,
+                        caption=caption,
+                    ))
+            elif og_image:
+                media_url = og_image[0].attrib.get("content", "")
+                if media_url and "profile_images" not in media_url:
+                    items.append(MediaItemData(
+                        post_id=post_id,
+                        post_url=url,
+                        media_type="image",
+                        media_url=media_url,
+                        caption=caption,
+                    ))
+        except Exception as exc:
+            logger.debug("Twitter meta tag fallback failed: {}", exc)
+        if items:
+            return items
         return []
 
     return _twitter_media_from_tweet(tweet_data, post_id, url)
@@ -567,11 +609,8 @@ def _extract_reddit(url: str, post_id: str) -> list[MediaItemData]:
 
     def page_action(page):
         nonlocal intercepted
-        if pw_cookies:
-            page.context.add_cookies(pw_cookies)
-            page.reload(wait_until="networkidle")
-            page.wait_for_timeout(2000)
 
+        # Register response listener BEFORE any reload
         def on_response(response):
             resp_url = response.url
             if any(f in resp_url for f in ("/svc/shreddit/", ".json", "gateway.reddit.com", "oauth.reddit.com")):
@@ -581,6 +620,12 @@ def _extract_reddit(url: str, post_id: str) -> list[MediaItemData]:
                     pass
 
         page.on("response", on_response)
+
+        if pw_cookies:
+            page.context.add_cookies(pw_cookies)
+
+        # Always reload to trigger API requests while listener is active
+        page.reload(wait_until="networkidle")
         page.wait_for_timeout(3000)
 
     try:
