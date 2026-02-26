@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SAMOURAIS SCRAPPER{% if title %} - {{ title }}{% endif %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <style>
+    /* SAMOURAIS SCRAPPER custom styles */
+    nav strong {
+      font-size: 1.2rem;
+    }
+
+    .small {
+      padding: 0.3rem 0.6rem;
+      font-size: 0.8rem;
+    }
+
+    article header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: bold;
+    }
+
+    article header strong {
+      font-size: 1.1rem;
+    }
+
+    article h2 {
+      margin: 0.5rem 0;
+      font-size: 2rem;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 2rem;
+      padding: 1rem 0;
+      border-top: 1px solid var(--pico-muted-border-color);
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: bold;
+    }
+
+    .status-green { color: #22c55e; }
+    .status-blue { color: #3b82f6; }
+    .status-orange { color: #f59e0b; }
+    .status-red { color: #ef4444; }
+    .status-gray { color: #6b7280; }
+
+    mark.secondary {
+      background-color: var(--pico-del-color);
+    }
+
+    /* Settings page */
+    .save-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 999;
+      background: #22c55e;
+      color: white;
+      text-align: center;
+      padding: 0.75rem;
+      font-weight: bold;
+      font-size: 0.9rem;
+      animation: slideDown 0.3s ease;
+    }
+
+    @keyframes slideDown {
+      from { transform: translateY(-100%); }
+      to { transform: translateY(0); }
+    }
+
+    .password-wrapper {
+      display: flex;
+      gap: 0.5rem;
+      align-items: stretch;
+    }
+
+    .password-wrapper input {
+      flex: 1;
+      margin-bottom: 0;
+    }
+
+    .password-wrapper .toggle-secret {
+      flex-shrink: 0;
+      margin-bottom: 0;
+      white-space: nowrap;
+    }
+
+    /* Action buttons row */
+    td .outline {
+      margin-right: 0.25rem;
+    }
+  </style>
+</head>
+<body>
+  <nav class="container-fluid">
+    <ul>
+      <li><strong>&#x2694; SAMOURAIS</strong></li>
+    </ul>
+    <ul>
+      <li><a href="/"{% if page == "dashboard" %} aria-current="page"{% endif %}>Dashboard</a></li>
+      <li><a href="/profiles"{% if page == "profiles" %} aria-current="page"{% endif %}>Profiles</a></li>
+      <li><a href="/jobs"{% if page == "jobs" %} aria-current="page"{% endif %}>Jobs</a></li>
+      <li><a href="/viewer"{% if page == "viewer" %} aria-current="page"{% endif %}>&#x1F3AC; Viewer</a></li>
+      <li><a href="/editor"{% if page == "editor" %} aria-current="page"{% endif %}>&#x1F3A8; Editor</a></li>
+      <li><a href="/calendar"{% if page == "calendar" %} aria-current="page"{% endif %}>&#x1F4C5; Calendrier</a></li>
+      <li><a href="/analytics"{% if page == "analytics" %} aria-current="page"{% endif %}>&#x1F4CA; Analytics</a></li>
+      <li><a href="/settings"{% if page == "settings" %} aria-current="page"{% endif %}>Settings</a></li>
+    </ul>
+  </nav>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="container">
+    <small>SAMOURAIS SCRAPPER v2.0</small>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SAMOURAIS SCRAPPER{{#if title}} - {{title}}{{/if}}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <nav class="container-fluid">
+    <ul>
+      <li><strong>⚔️ SAMOURAIS SCRAPPER</strong></li>
+    </ul>
+    <ul>
+      <li><a href="/" {{#if (eq page "dashboard")}}aria-current="page"{{/if}}>Dashboard</a></li>
+      <li><a href="/profiles" {{#if (eq page "profiles")}}aria-current="page"{{/if}}>Profiles</a></li>
+      <li><a href="/jobs" {{#if (eq page "jobs")}}aria-current="page"{{/if}}>Jobs</a></li>
+      <li><a href="/settings" {{#if (eq page "settings")}}aria-current="page"{{/if}}>Settings</a></li>
+    </ul>
+  </nav>
+
+  <main class="container">
+    {{{body}}}
+  </main>
+
+  <footer class="container">
+    <small>SAMOURAIS SCRAPPER v1.0</small>
+  </footer>
+</body>
+</html>

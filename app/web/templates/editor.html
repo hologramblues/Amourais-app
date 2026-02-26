@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAMOURAIS - Meme Editor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="https://apis.google.com/js/api.js"></script>
+    <link rel="stylesheet" href="/static/editor.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+        <a href="/" class="nav-tab">
+            <span class="icon">&#x2694;</span>Dashboard
+        </a>
+        <a href="/viewer" class="nav-tab">
+            <span class="icon">&#x1F3AC;</span>Viewer
+        </a>
+        <a href="/editor" class="nav-tab active">
+            <span class="icon">&#x1F3A8;</span>Editor
+        </a>
+        <a href="/calendar" class="nav-tab">
+            <span class="icon">&#x1F4C5;</span>Calendrier
+        </a>
+        <a href="/analytics" class="nav-tab">
+            <span class="icon">&#x1F4CA;</span>Analytics
+        </a>
+    </nav>
+
+    <div class="app">
+        <div class="sidebar">
+            <div class="logo">
+                <span>&#x2694;</span> SAMOURAIS Studio
+            </div>
+
+            <!-- Format Selection -->
+            <div class="section">
+                <div class="section-title">Format</div>
+                <div class="format-selector">
+                    <button class="format-btn active" data-format="square" data-width="1080" data-height="1080">
+                        Feed
+                        <span class="ratio">1:1</span>
+                    </button>
+                    <button class="format-btn" data-format="portrait" data-width="1080" data-height="1350">
+                        Portrait
+                        <span class="ratio">4:5</span>
+                    </button>
+                    <button class="format-btn" data-format="story" data-width="1080" data-height="1920">
+                        Reel
+                        <span class="ratio">9:16</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Media Upload (Image or Video) -->
+            <div class="section">
+                <div class="section-title">
+                    M&eacute;dia
+                    <span class="media-type-badge image" id="media-type-badge" style="display: none;">Image</span>
+                </div>
+
+                <!-- Import Source Tabs -->
+                <div class="import-tabs">
+                    <button class="import-tab active" data-source="local">
+                        <span class="import-tab-icon">&#x1F4BB;</span>
+                        <span>Ordi</span>
+                    </button>
+                    <button class="import-tab" data-source="drive">
+                        <span class="import-tab-icon">&#x2601;</span>
+                        <span>Drive</span>
+                    </button>
+                    <button class="import-tab" data-source="library">
+                        <span class="import-tab-icon">&#x1F4DA;</span>
+                        <span>Biblioth&egrave;que</span>
+                    </button>
+                </div>
+
+                <!-- Local Upload Zone -->
+                <div class="upload-zone" id="upload-zone">
+                    <div class="upload-icon">&#x1F5BC;</div>
+                    <div class="upload-text"><strong>Clique</strong> ou glisse une image/vid&eacute;o</div>
+                </div>
+
+                <!-- Google Drive Zone (hidden by default) -->
+                <div class="drive-zone" id="drive-zone" style="display: none;">
+                    <div class="drive-browser" id="drive-browser">
+                        <div class="drive-loading" id="drive-loading" style="display: none;">
+                            <div class="loading-spinner"></div>
+                            <span>Connexion &agrave; Google Drive...</span>
+                        </div>
+                        <div class="drive-connect" id="drive-connect">
+                            <div class="drive-icon">
+                                <svg width="40" height="40" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+                                    <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
+                                    <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+                                    <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+                                    <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+                                    <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+                                </svg>
+                            </div>
+                            <div class="drive-connect-text">Connecte-toi &agrave; Google Drive</div>
+                            <button class="btn btn-drive" id="connect-drive-btn">
+                                &#x2601; Ouvrir Google Drive
+                            </button>
+                            <div class="drive-hint">S&eacute;lectionne des images ou vid&eacute;os depuis ton Drive</div>
+                        </div>
+                        <div class="drive-files" id="drive-files" style="display: none;">
+                            <!-- Files will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Library Zone (hidden by default) -->
+                <div class="drive-zone" id="library-zone" style="display: none;">
+                    <div class="drive-folder-select">
+                        <span class="drive-folder-name">&#x1F4DA; M&eacute;dias scrapp&eacute;s</span>
+                        <button class="drive-refresh-btn" onclick="loadLibraryMedia()">&#x1F504; Actualiser</button>
+                    </div>
+                    <div class="drive-files" id="library-grid">
+                        <!-- Filled dynamically -->
+                    </div>
+                </div>
+
+                <input type="file" id="file-input" accept="image/*,video/*">
+                <div class="image-hint">
+                    <strong>Astuce :</strong> Clique sur le m&eacute;dia dans le canvas pour le d&eacute;placer et le redimensionner. La frame reste fixe.
+                </div>
+                <button class="btn btn-secondary" id="select-image-btn" style="display: none; margin-top: 8px;">&#x1F3AF; S&eacute;lectionner le m&eacute;dia</button>
+
+                <!-- Video Timeline (hidden by default) -->
+                <div class="timeline-container" id="timeline-container" style="display: none;">
+                    <div class="timeline-header">
+                        <span>&#x2702; Trim vid&eacute;o</span>
+                        <span class="timeline-duration" id="trim-duration">0:00</span>
+                    </div>
+                    <div class="timeline-wrapper" id="timeline-wrapper">
+                        <div class="timeline-thumbnails" id="timeline-thumbnails"></div>
+                        <div class="timeline-selection" id="timeline-selection">
+                            <div class="timeline-handle start" id="handle-start"></div>
+                            <div class="timeline-handle end" id="handle-end"></div>
+                        </div>
+                        <div class="timeline-playhead" id="timeline-playhead"></div>
+                    </div>
+                    <div class="timeline-times">
+                        <span id="time-start">0:00</span>
+                        <span id="time-end">0:00</span>
+                    </div>
+                    <div class="video-controls">
+                        <button id="btn-play">&#x25B6; Play</button>
+                        <button id="btn-preview">&#x1F441; Preview</button>
+                    </div>
+                </div>
+
+                <!-- Hidden video element for processing -->
+                <video id="video-source" muted playsinline></video>
+            </div>
+
+            <!-- Top Text -->
+            <div class="section">
+                <div class="section-title">Texte du meme</div>
+                <textarea class="text-input" id="meme-text" placeholder="Quand tu r&eacute;alises que..."></textarea>
+            </div>
+
+            <!-- Text Size -->
+            <div class="section">
+                <div class="section-title">Taille du texte</div>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="text-size" min="24" max="72" value="42">
+                    <span class="slider-value" id="text-size-value">42px</span>
+                </div>
+            </div>
+
+            <!-- Line Height -->
+            <div class="section">
+                <div class="section-title">Interlignage</div>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="line-height" min="80" max="200" value="120" step="5">
+                    <span class="slider-value" id="line-height-value">1.2</span>
+                </div>
+            </div>
+
+            <!-- Image Scale -->
+            <div class="section" id="image-scale-section" style="display: none;">
+                <div class="section-title">Zoom image</div>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="image-scale" min="50" max="200" value="100">
+                    <span class="slider-value" id="image-scale-value">100%</span>
+                </div>
+            </div>
+
+            <!-- Frame Height (Story only) -->
+            <div class="section" id="frame-height-section" style="display: none;">
+                <div class="section-title">Hauteur du cadre</div>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="frame-height" min="30" max="100" value="100">
+                    <span class="slider-value" id="frame-height-value">100%</span>
+                </div>
+            </div>
+
+            <!-- Overlay Text Toggle -->
+            <div class="section">
+                <div class="toggle-row" id="overlay-toggle">
+                    <span>Texte sur l'image</span>
+                    <div class="toggle-switch" id="overlay-switch"></div>
+                </div>
+                <input type="text" class="text-input" id="overlay-text" placeholder="Texte overlay..." style="display: none; min-height: auto; padding: 12px;">
+            </div>
+
+            <!-- Watermark Opacity -->
+            <div class="section">
+                <div class="section-title">Opacit&eacute; du logo</div>
+                <div class="slider-container">
+                    <input type="range" class="slider" id="watermark-opacity" min="0" max="100" value="100">
+                    <span class="slider-value" id="watermark-opacity-value">100%</span>
+                </div>
+            </div>
+
+            <div class="spacer"></div>
+
+            <!-- Actions -->
+            <button class="btn btn-secondary" id="reset-btn">&#x1F504; R&eacute;initialiser</button>
+            <button class="btn btn-primary" id="export-btn" disabled>&#x1F4E5; T&eacute;l&eacute;charger le meme</button>
+            <button class="btn btn-schedule" id="schedule-btn" disabled>&#x1F4C5; Planifier</button>
+        </div>
+
+        <div class="preview-area">
+            <div class="canvas-container">
+                <canvas id="meme-canvas"></canvas>
+            </div>
+            <div class="help-text">
+                Frame fixe &#x2022; Glisse l'image pour la repositionner &#x2022; Zoom avec le slider ou les poign&eacute;es
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/editor.js"></script>
+</body>
+</html>

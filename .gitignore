@@ -1,0 +1,47 @@
+# === Data (media, DB, sessions — user-specific) ===
+data/samourais.db
+data/samourais.db-journal
+data/samourais.db-wal
+data/downloads/*
+data/sessions/*
+data/cookies/*
+data/editor/*
+data/calendar/*
+!data/**/.gitkeep
+
+# === Environment & Secrets ===
+.env
+.env.local
+.env.production
+*.log
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+.eggs/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# === Node (legacy) ===
+node_modules/
+dist/
+
+# === OS ===
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# === IDE ===
+.vscode/
+.idea/
+*.code-workspace

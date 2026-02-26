@@ -1,0 +1,26 @@
+# Web
+flask==3.1.*
+jinja2>=3.1
+
+# Database
+sqlalchemy==2.0.*
+
+# Scraping (scrapling[all] pulls patchright, browserforge, curl_cffi, etc.)
+scrapling[all]>=0.2
+
+# Downloads
+httpx>=0.27
+ffmpeg-python>=0.2
+
+# Google Drive
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.2
+google-auth-httplib2>=0.2
+
+# Scheduler
+apscheduler==3.10.*
+
+# Utils
+python-dotenv>=1.0
+loguru>=0.7
+nanoid>=2.0

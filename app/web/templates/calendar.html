@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SAMOURAIS - Calendrier</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+    <link rel="stylesheet" href="/static/calendar.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+        <a href="/" class="nav-tab">
+            <span class="icon">&#x2694;</span>Dashboard
+        </a>
+        <a href="/viewer" class="nav-tab">
+            <span class="icon">&#x1F3AC;</span>Viewer
+        </a>
+        <a href="/editor" class="nav-tab">
+            <span class="icon">&#x1F3A8;</span>Editor
+        </a>
+        <a href="/calendar" class="nav-tab active">
+            <span class="icon">&#x1F4C5;</span>Calendrier
+        </a>
+        <a href="/analytics" class="nav-tab">
+            <span class="icon">&#x1F4CA;</span>Analytics
+        </a>
+    </nav>
+
+    <!-- Stats row -->
+    <div style="padding: 24px 24px 0;">
+        <div class="stats-row">
+            <div class="stat-card draft">
+                <div class="stat-value" id="stat-drafts">0</div>
+                <div class="stat-label">Brouillons</div>
+            </div>
+            <div class="stat-card scheduled">
+                <div class="stat-value" id="stat-scheduled">0</div>
+                <div class="stat-label">Planifi&eacute;s</div>
+            </div>
+            <div class="stat-card published">
+                <div class="stat-value" id="stat-published">0</div>
+                <div class="stat-label">Publi&eacute;s</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main app layout -->
+    <div class="calendar-app">
+        <!-- Calendar -->
+        <div class="calendar-main">
+            <div class="calendar-header">
+                <h1>&#x1F4C5; Calendrier de publication</h1>
+                <div class="header-actions">
+                    <div class="view-toggle">
+                        <button class="active" data-view="dayGridMonth">Mois</button>
+                        <button data-view="timeGridWeek">Semaine</button>
+                        <button data-view="listWeek">Liste</button>
+                    </div>
+                    <a href="/editor" class="btn btn-primary">&#x1F3A8; Cr&eacute;er un meme</a>
+                </div>
+            </div>
+            <div id="calendar"></div>
+        </div>
+
+        <!-- Sidebar (post details) -->
+        <div class="calendar-sidebar" id="calendar-sidebar">
+            <div class="sidebar-header">
+                <h2>D&eacute;tails du post</h2>
+                <button class="sidebar-close" onclick="closeSidebar()">&times;</button>
+            </div>
+            <div class="sidebar-content" id="sidebar-body">
+                <div class="empty-sidebar">
+                    <div class="icon">&#x1F4C5;</div>
+                    <p>Clique sur un &eacute;v&eacute;nement dans le calendrier pour voir ses d&eacute;tails, ou clique sur une date vide pour cr&eacute;er un nouveau post.</p>
+                </div>
+            </div>
+            <div class="sidebar-actions" id="sidebar-actions"></div>
+        </div>
+    </div>
+
+    <!-- Modal overlay -->
+    <div class="modal-overlay" id="modal-overlay"></div>
+
+    <script src="/static/calendar.js"></script>
+</body>
+</html>

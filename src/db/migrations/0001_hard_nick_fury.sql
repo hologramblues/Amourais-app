@@ -1,0 +1,1 @@
+ALTER TABLE `profiles` ADD `scrape_mode` text DEFAULT 'backfill' NOT NULL;

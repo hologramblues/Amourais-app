@@ -1,0 +1,92 @@
+<h1>Profiles</h1>
+
+<section>
+  <h2>Ajouter un profil</h2>
+  <form hx-post="/api/profiles" hx-target="#profile-list" hx-swap="innerHTML" hx-on::after-request="this.reset()">
+    <div class="grid">
+      <select name="platform" required>
+        <option value="">Plateforme...</option>
+        <option value="instagram">Instagram</option>
+        <option value="tiktok">TikTok</option>
+        <option value="twitter">Twitter / X</option>
+      </select>
+      <input type="text" name="username" placeholder="@username (sans le @)" required>
+      <button type="submit">Ajouter</button>
+    </div>
+  </form>
+</section>
+
+<section>
+  <h2>Profiles suivis</h2>
+  <div id="profile-list">
+    {{#if profiles.length}}
+    <table>
+      <thead>
+        <tr>
+          <th>Plateforme</th>
+          <th>Username</th>
+          <th>Mode</th>
+          <th>Intervalle</th>
+          <th>Dernier scrape</th>
+          <th>Media</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each profiles}}
+        <tr>
+          <td>{{platformIcon this.platform}} {{this.platform}}</td>
+          <td><a href="{{this.profileUrl}}" target="_blank" rel="noopener">@{{this.username}}</a></td>
+          <td>
+            {{#if (eq this.scrapeMode "backfill")}}
+              <span style="color: orange;">Backfill</span>
+            {{else}}
+              <span style="color: green;">Quotidien</span>
+            {{/if}}
+          </td>
+          <td>{{this.scrapeIntervalMinutes}} min</td>
+          <td>{{formatDate this.lastScrapedAt}}</td>
+          <td>{{this.mediaCount}}</td>
+          <td>
+            {{#if this.isActive}}
+              <span style="color: green;">Actif</span>
+            {{else}}
+              <span style="color: gray;">Pause</span>
+            {{/if}}
+          </td>
+          <td>
+            <button class="outline small" hx-post="/api/profiles/{{this.id}}/scrape" hx-swap="none">Scrape</button>
+            {{#if this.isActive}}
+            <button class="outline small secondary"
+              hx-patch="/api/profiles/{{this.id}}"
+              hx-vals='{"isActive": false}'
+              hx-target="#profile-list"
+              hx-swap="innerHTML"
+            >Pause</button>
+            {{else}}
+            <button class="outline small secondary"
+              hx-patch="/api/profiles/{{this.id}}"
+              hx-vals='{"isActive": true}'
+              hx-target="#profile-list"
+              hx-swap="innerHTML"
+            >Resume</button>
+            {{/if}}
+            <button class="outline small contrast"
+              hx-delete="/api/profiles/{{this.id}}"
+              hx-confirm="Supprimer ce profil ?"
+              hx-target="#profile-list"
+              hx-swap="innerHTML"
+            >
+              Suppr
+            </button>
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    {{else}}
+    <p>Aucun profil pour l'instant. Ajoutez-en un ci-dessus.</p>
+    {{/if}}
+  </div>
+</section>

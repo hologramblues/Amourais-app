@@ -1,0 +1,271 @@
+<h1>Settings</h1>
+
+<div id="save-banner" style="display:none;" class="save-banner">
+  Sauvegarde effectuee. Relancez l'app pour appliquer les changements.
+</div>
+
+{{!-- ===== SECTION 1: GOOGLE DRIVE ===== --}}
+<article>
+  <header>
+    <strong>Google Drive</strong>
+    {{#if gdriveConnected}}
+      <mark style="float:right;">Connecte</mark>
+    {{else}}
+      <mark class="secondary" style="float:right;">Non connecte</mark>
+    {{/if}}
+  </header>
+
+  <form hx-post="/api/settings/env" hx-target="#gdrive-status" hx-swap="innerHTML">
+    <div class="grid">
+      <label>
+        Client ID
+        <input type="text" name="GOOGLE_CLIENT_ID" value="{{env.GOOGLE_CLIENT_ID}}" placeholder="xxxx.apps.googleusercontent.com">
+      </label>
+      <label>
+        Client Secret
+        <div class="password-wrapper">
+          <input type="password" name="GOOGLE_CLIENT_SECRET" value="{{env.GOOGLE_CLIENT_SECRET}}" placeholder="GOCSPx-xxxx" class="secret-field">
+          <button type="button" class="toggle-secret outline small" onclick="toggleSecret(this)">Voir</button>
+        </div>
+      </label>
+    </div>
+
+    <div class="grid">
+      <label>
+        Redirect URI
+        <input type="text" name="GOOGLE_REDIRECT_URI" value="{{env.GOOGLE_REDIRECT_URI}}" placeholder="http://localhost:3000/auth/google/callback">
+      </label>
+      <label>
+        Refresh Token
+        <div class="password-wrapper">
+          <input type="password" name="GOOGLE_REFRESH_TOKEN" value="{{env.GOOGLE_REFRESH_TOKEN}}" placeholder="Obtenu apres connexion OAuth" class="secret-field">
+          <button type="button" class="toggle-secret outline small" onclick="toggleSecret(this)">Voir</button>
+        </div>
+      </label>
+    </div>
+
+    <div class="grid">
+      <label>
+        Nom du dossier racine Google Drive
+        <input type="text" name="GDRIVE_ROOT_FOLDER_NAME" value="{{env.GDRIVE_ROOT_FOLDER_NAME}}" placeholder="SAMOURAIS SCRAPPER">
+      </label>
+      <div></div>
+    </div>
+
+    <div style="display:flex; gap:1rem; align-items:center;">
+      <button type="submit">Sauvegarder Google Drive</button>
+      {{#if env.GOOGLE_CLIENT_ID}}
+        <a href="/auth/google" role="button" class="outline">Connecter / Reconnecter OAuth</a>
+      {{/if}}
+    </div>
+  </form>
+  <div id="gdrive-status"></div>
+</article>
+
+{{!-- ===== SECTION 2: SCRAPER CONFIG ===== --}}
+<article>
+  <header><strong>Configuration du Scraper</strong></header>
+
+  <form hx-post="/api/settings/env" hx-target="#scraper-status" hx-swap="innerHTML">
+    <div class="grid">
+      <label>
+        Intervalle de scrape (minutes)
+        <input type="number" name="DEFAULT_SCRAPE_INTERVAL_MINUTES" value="{{env.DEFAULT_SCRAPE_INTERVAL_MINUTES}}" min="30" max="1440" placeholder="360">
+        <small>Defaut: 360 (6 heures)</small>
+      </label>
+      <label>
+        Taille du browser pool
+        <input type="number" name="BROWSER_POOL_SIZE" value="{{env.BROWSER_POOL_SIZE}}" min="1" max="5" placeholder="2">
+        <small>Defaut: 2 (plus = plus rapide mais plus de RAM)</small>
+      </label>
+    </div>
+
+    <div class="grid">
+      <label>
+        Pause entre scrolls (ms)
+        <input type="number" name="SCROLL_PAUSE_MS" value="{{env.SCROLL_PAUSE_MS}}" min="1000" max="10000" placeholder="3000">
+        <small>Defaut: 3000ms. Plus long = moins de detection</small>
+      </label>
+      <label>
+        Nombre max de scrolls
+        <input type="number" name="MAX_SCROLLS" value="{{env.MAX_SCROLLS}}" min="5" max="100" placeholder="30">
+        <small>Defaut: 30. Plus = plus de contenu recupere</small>
+      </label>
+    </div>
+
+    <div class="grid">
+      <label>
+        Delai entre profils (ms)
+        <input type="number" name="DELAY_BETWEEN_PROFILES_MS" value="{{env.DELAY_BETWEEN_PROFILES_MS}}" min="5000" max="60000" placeholder="10000">
+        <small>Defaut: 10 000ms (10 sec). Evite les bans</small>
+      </label>
+      <div></div>
+    </div>
+
+    <h5 style="margin-top: 1.5rem;">Mode Backfill / Quotidien</h5>
+    <div class="grid">
+      <label>
+        Max scrolls en backfill
+        <input type="number" name="BACKFILL_MAX_SCROLLS" value="{{env.BACKFILL_MAX_SCROLLS}}" min="50" max="1000" placeholder="200">
+        <small>Defaut: 200. Scroll profond pour recuperer l'historique</small>
+      </label>
+      <label>
+        Max scrolls en quotidien
+        <input type="number" name="DAILY_MAX_SCROLLS" value="{{env.DAILY_MAX_SCROLLS}}" min="5" max="50" placeholder="15">
+        <small>Defaut: 15. Juste les nouveaux posts</small>
+      </label>
+    </div>
+    <div class="grid">
+      <label>
+        Intervalle quotidien (minutes)
+        <input type="number" name="DAILY_SCRAPE_INTERVAL_MINUTES" value="{{env.DAILY_SCRAPE_INTERVAL_MINUTES}}" min="60" max="2880" placeholder="1440">
+        <small>Defaut: 1440 (24h). Applique apres la fin du backfill</small>
+      </label>
+      <div></div>
+    </div>
+
+    <button type="submit">Sauvegarder Scraper</button>
+  </form>
+  <div id="scraper-status"></div>
+</article>
+
+{{!-- ===== SECTION 3: SESSIONS / COOKIES ===== --}}
+<article>
+  <header><strong>Sessions de plateforme (Cookies)</strong></header>
+
+  <details style="margin-bottom: 1.5rem;">
+    <summary style="cursor: pointer; font-weight: 600;">Comment recuperer ses cookies ? (guide)</summary>
+    <div style="padding: 1rem; margin-top: 0.5rem; border-left: 3px solid #546e7a; background: rgba(255,255,255,0.03); border-radius: 4px;">
+      <p style="margin-bottom: 0.5rem;"><strong>Les cookies permettent au scraper de se connecter comme toi sur Instagram, TikTok et Twitter.</strong> Sans eux, les plateformes bloquent l'acces aux profils.</p>
+      <ol style="padding-left: 1.2rem;">
+        <li style="margin-bottom: 0.5rem;">
+          <strong>Installe l'extension Chrome</strong> <a href="https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm" target="_blank" rel="noopener">Cookie Editor</a>
+        </li>
+        <li style="margin-bottom: 0.5rem;">
+          <strong>Connecte-toi</strong> sur la plateforme (ex: va sur <code>instagram.com</code> et connecte-toi a ton compte)
+        </li>
+        <li style="margin-bottom: 0.5rem;">
+          <strong>Clique sur l'icone Cookie Editor</strong> dans la barre d'extensions Chrome
+        </li>
+        <li style="margin-bottom: 0.5rem;">
+          <strong>Clique sur "Export"</strong> (icone en bas a droite) &rarr; choisir <strong>"JSON"</strong>. Les cookies sont copies dans ton presse-papier.
+        </li>
+        <li style="margin-bottom: 0.5rem;">
+          <strong>Colle le contenu</strong> dans un fichier texte et sauvegarde-le en <code>.json</code> (ex: <code>instagram_cookies.json</code>)
+        </li>
+        <li>
+          <strong>Upload le fichier</strong> ci-dessous pour la plateforme correspondante
+        </li>
+      </ol>
+      <p style="margin-top: 0.75rem; margin-bottom: 0;"><small style="color: #90a4ae;">Les cookies expirent au bout de quelques semaines/mois. Si le scraper arrete de fonctionner, refais la procedure.</small></p>
+    </div>
+  </details>
+
+  <div class="grid">
+    <div>
+      <h4>Instagram</h4>
+      <form hx-post="/api/settings/session" hx-encoding="multipart/form-data" hx-target="#session-ig-status" hx-swap="innerHTML">
+        <input type="hidden" name="platform" value="instagram">
+        <input type="file" name="cookies" accept=".json,.txt" required>
+        <button type="submit" class="small">Upload</button>
+      </form>
+      <div id="session-ig-status">
+        {{#if sessions.instagram}}
+          <small style="color: green;">Cookies OK ({{formatDate sessions.instagram}})</small>
+        {{else}}
+          <small style="color: gray;">Pas de cookies</small>
+        {{/if}}
+      </div>
+    </div>
+
+    <div>
+      <h4>TikTok</h4>
+      <form hx-post="/api/settings/session" hx-encoding="multipart/form-data" hx-target="#session-tt-status" hx-swap="innerHTML">
+        <input type="hidden" name="platform" value="tiktok">
+        <input type="file" name="cookies" accept=".json,.txt" required>
+        <button type="submit" class="small">Upload</button>
+      </form>
+      <div id="session-tt-status">
+        {{#if sessions.tiktok}}
+          <small style="color: green;">Cookies OK ({{formatDate sessions.tiktok}})</small>
+        {{else}}
+          <small style="color: gray;">Pas de cookies</small>
+        {{/if}}
+      </div>
+    </div>
+
+    <div>
+      <h4>Twitter / X</h4>
+      <form hx-post="/api/settings/session" hx-encoding="multipart/form-data" hx-target="#session-tw-status" hx-swap="innerHTML">
+        <input type="hidden" name="platform" value="twitter">
+        <input type="file" name="cookies" accept=".json,.txt" required>
+        <button type="submit" class="small">Upload</button>
+      </form>
+      <div id="session-tw-status">
+        {{#if sessions.twitter}}
+          <small style="color: green;">Cookies OK ({{formatDate sessions.twitter}})</small>
+        {{else}}
+          <small style="color: gray;">Pas de cookies</small>
+        {{/if}}
+      </div>
+    </div>
+  </div>
+</article>
+
+{{!-- ===== SECTION 4: AVANCE ===== --}}
+<article>
+  <header><strong>Configuration avancee</strong></header>
+
+  <form hx-post="/api/settings/env" hx-target="#advanced-status" hx-swap="innerHTML">
+    <div class="grid">
+      <label>
+        Port du serveur
+        <input type="number" name="PORT" value="{{env.PORT}}" min="1000" max="65535" placeholder="3000">
+      </label>
+      <label>
+        Niveau de log
+        <select name="LOG_LEVEL">
+          <option value="debug" {{#if (eq env.LOG_LEVEL "debug")}}selected{{/if}}>debug</option>
+          <option value="info" {{#if (eq env.LOG_LEVEL "info")}}selected{{/if}}>info</option>
+          <option value="warn" {{#if (eq env.LOG_LEVEL "warn")}}selected{{/if}}>warn</option>
+          <option value="error" {{#if (eq env.LOG_LEVEL "error")}}selected{{/if}}>error</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="grid">
+      <label>
+        Dossier de telechargement
+        <input type="text" name="DOWNLOAD_DIR" value="{{env.DOWNLOAD_DIR}}" placeholder="./data/downloads">
+      </label>
+      <label>
+        Chemin base de donnees
+        <input type="text" name="DB_PATH" value="{{env.DB_PATH}}" placeholder="./data/samourais.db">
+      </label>
+    </div>
+
+    <button type="submit">Sauvegarder</button>
+  </form>
+  <div id="advanced-status"></div>
+</article>
+
+<script>
+function toggleSecret(btn) {
+  var input = btn.parentElement.querySelector('.secret-field');
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = 'Cacher';
+  } else {
+    input.type = 'password';
+    btn.textContent = 'Voir';
+  }
+}
+
+document.body.addEventListener('htmx:afterRequest', function(evt) {
+  if (evt.detail.pathInfo.requestPath === '/api/settings/env') {
+    var banner = document.getElementById('save-banner');
+    banner.style.display = 'block';
+    setTimeout(function() { banner.style.display = 'none'; }, 8000);
+  }
+});
+</script>

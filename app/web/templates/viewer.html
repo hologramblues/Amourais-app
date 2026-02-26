@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SAMOURAIS SCRAPPER — Viewer</title>
+  <link rel="stylesheet" href="/static/viewer.css">
+</head>
+<body>
+
+<!-- ═══ TOP BAR ═══ -->
+<div class="topbar">
+  <a href="/" class="topbar-brand">&#x2694; SAMOURAIS</a>
+
+  <div class="topbar-filters">
+    <select id="filter-platform">
+      <option value="">Toutes les plateformes</option>
+      <option value="instagram">&#x1F4F7; Instagram</option>
+      <option value="reddit">&#x1F47D; Reddit</option>
+      <option value="tiktok">&#x1F3B5; TikTok</option>
+      <option value="twitter">&#x1F426; Twitter</option>
+    </select>
+
+    <select id="filter-profile">
+      <option value="">Tous les profils</option>
+      <!-- Filled dynamically -->
+    </select>
+
+    <select id="filter-rating">
+      <option value="">Toutes les notes</option>
+      <option value="5">&#x2605;&#x2605;&#x2605;&#x2605;&#x2605; (5)</option>
+      <option value="4">&#x2605;&#x2605;&#x2605;&#x2605; (4+)</option>
+      <option value="3">&#x2605;&#x2605;&#x2605; (3+)</option>
+      <option value="2">&#x2605;&#x2605; (2+)</option>
+      <option value="1">&#x2605; (1+)</option>
+    </select>
+
+    <select id="filter-sort">
+      <option value="date_desc">Plus recents</option>
+      <option value="date_asc">Plus anciens</option>
+      <option value="rating_desc">Mieux notes</option>
+    </select>
+
+    <input type="search" id="filter-search" placeholder="Rechercher..." style="max-width:200px;">
+  </div>
+
+  <span id="topbar-stats" class="topbar-stats"></span>
+
+  <div class="topbar-user">
+    <span class="user-label">&#x1F464;</span>
+    <span class="user-name" id="user-name-display" onclick="window.__changeUser()" title="Cliquer pour changer"></span>
+  </div>
+</div>
+
+<!-- ═══ GRID ═══ -->
+<div id="media-grid" class="media-grid">
+  <div class="loader"><div class="loader-spinner"></div><p>Chargement...</p></div>
+</div>
+
+<!-- ═══ LIGHTBOX ═══ -->
+<div id="lightbox" class="lightbox">
+  <div class="lightbox-main">
+    <button class="lightbox-close" onclick="window.__closeLightbox()" title="Fermer (Echap)">&#x2715;</button>
+    <button class="lightbox-nav prev" onclick="window.__navLightbox(-1)" title="Precedent (←)">&#x2039;</button>
+    <div id="lb-media"></div>
+    <button class="lightbox-nav next" onclick="window.__navLightbox(1)" title="Suivant (→)">&#x203A;</button>
+  </div>
+
+  <div class="lightbox-sidebar">
+    <div class="sidebar-header">
+      <div class="media-info" id="lb-info"></div>
+      <div class="media-caption" id="lb-caption"></div>
+      <a class="post-link" id="lb-post-link" href="#" target="_blank" rel="noopener"></a>
+    </div>
+
+    <div class="rating-section">
+      <div class="star-rating" id="lb-stars"></div>
+      <div class="rating-info" id="lb-rating-info"></div>
+    </div>
+
+    <div class="comments-section">
+      <div class="comments-list" id="lb-comments">
+        <div class="comment-empty">Aucun commentaire</div>
+      </div>
+      <div class="comment-form">
+        <input type="text" id="lb-comment-input" placeholder="Ajouter un commentaire..." maxlength="500">
+        <button id="lb-comment-btn">Envoyer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/viewer.js"></script>
+</body>
+</html>

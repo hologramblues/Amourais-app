@@ -1,0 +1,67 @@
+{% if profiles %}
+<table>
+  <thead>
+    <tr>
+      <th>Plateforme</th>
+      <th>Username</th>
+      <th>Mode</th>
+      <th>Intervalle</th>
+      <th>Dernier scrape</th>
+      <th>Media</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in profiles %}
+    {% set p = item.profile %}
+    <tr>
+      <td>{{ p.platform|platformicon|safe }} {{ p.platform }}</td>
+      <td><a href="{{ p.profile_url }}" target="_blank" rel="noopener">@{{ p.username }}</a></td>
+      <td>
+        {% if p.scrape_mode == "backfill" %}
+          <span style="color: #f59e0b;">Backfill</span>
+        {% else %}
+          <span style="color: #22c55e;">Quotidien</span>
+        {% endif %}
+      </td>
+      <td>{{ p.scrape_interval_minutes }} min</td>
+      <td>{{ p.last_scraped_at|formatdate }}</td>
+      <td>{{ item.media_count }}</td>
+      <td>
+        {% if p.is_active %}
+          <span style="color: #22c55e;">Actif</span>
+        {% else %}
+          <span style="color: #6b7280;">Pause</span>
+        {% endif %}
+      </td>
+      <td>
+        <button class="outline small"
+          hx-post="/api/profiles/{{ p.id }}/scrape"
+          hx-swap="none">Scrape</button>
+        {% if p.is_active %}
+        <button class="outline small secondary"
+          hx-patch="/api/profiles/{{ p.id }}"
+          hx-vals='{"isActive": false}'
+          hx-target="#profile-list"
+          hx-swap="innerHTML">Pause</button>
+        {% else %}
+        <button class="outline small secondary"
+          hx-patch="/api/profiles/{{ p.id }}"
+          hx-vals='{"isActive": true}'
+          hx-target="#profile-list"
+          hx-swap="innerHTML">Resume</button>
+        {% endif %}
+        <button class="outline small contrast"
+          hx-delete="/api/profiles/{{ p.id }}"
+          hx-confirm="Supprimer ce profil ?"
+          hx-target="#profile-list"
+          hx-swap="innerHTML">Suppr</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Aucun profil pour l'instant. Ajoutez-en un ci-dessus.</p>
+{% endif %}
