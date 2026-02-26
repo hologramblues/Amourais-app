@@ -1,7 +1,7 @@
 {
   "name": "samourais-scrapper",
-  "version": "1.0.0",
-  "description": "Personal media scraper for Instagram, TikTok and Twitter/X with Google Drive upload",
+  "version": "2.0.0",
+  "description": "SAMOURAIS — Unified social media scraper, meme editor, calendar & analytics platform",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",

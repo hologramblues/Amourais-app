@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Samouraïs - Analytics Instagram</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        /* Navigation Tabs */
+        .nav-tabs {
+            display: flex;
+            background: #111;
+            border-bottom: 1px solid #222;
+            padding: 0 20px;
+        }
+
+        .nav-tab {
+            padding: 16px 24px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #888;
+            text-decoration: none;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .nav-tab:hover {
+            color: #fff;
+        }
+
+        .nav-tab.active {
+            color: #ef4444;
+            border-bottom-color: #ef4444;
+        }
+
+        .nav-tab .icon {
+            margin-right: 8px;
+        }
+
+        /* Main container */
+        .app {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .logo span {
+            color: #ef4444;
+        }
+
+        .account-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            background: #1a1a1a;
+            border-radius: 50px;
+        }
+
+        .account-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .account-name {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .account-status {
+            width: 8px;
+            height: 8px;
+            background: #22c55e;
+            border-radius: 50%;
+        }
+
+        /* Period Selector */
+        .period-selector {
+            display: flex;
+            gap: 8px;
+        }
+
+        .period-btn {
+            padding: 8px 16px;
+            background: #1a1a1a;
+            border: 2px solid #333;
+            border-radius: 8px;
+            color: #888;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .period-btn:hover {
+            border-color: #555;
+            color: #fff;
+        }
+
+        .period-btn.active {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+            color: #fff;
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: #111;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #222;
+        }
+
+        .stat-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .stat-icon.followers { background: rgba(99, 102, 241, 0.2); }
+        .stat-icon.reach { background: rgba(34, 197, 94, 0.2); }
+        .stat-icon.engagement { background: rgba(239, 68, 68, 0.2); }
+        .stat-icon.impressions { background: rgba(245, 158, 11, 0.2); }
+
+        .stat-change {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .stat-change.positive {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .stat-change.negative {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #888;
+        }
+
+        /* Charts Section */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .chart-card {
+            background: #111;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #222;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .chart-legend {
+            display: flex;
+            gap: 16px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #888;
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .chart-container {
+            height: 250px;
+            position: relative;
+        }
+
+        /* Best Performing */
+        .best-posts-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .best-post-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: #1a1a1a;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .best-post-item:hover {
+            background: #222;
+        }
+
+        .best-post-rank {
+            width: 24px;
+            height: 24px;
+            background: #333;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .best-post-rank.gold { background: #f59e0b; color: #000; }
+        .best-post-rank.silver { background: #9ca3af; color: #000; }
+        .best-post-rank.bronze { background: #b45309; color: #fff; }
+
+        .best-post-thumb {
+            width: 48px;
+            height: 48px;
+            border-radius: 6px;
+            background: #333;
+            object-fit: cover;
+        }
+
+        .best-post-info {
+            flex: 1;
+        }
+
+        .best-post-caption {
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 150px;
+        }
+
+        .best-post-date {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .best-post-stat {
+            text-align: right;
+        }
+
+        .best-post-stat-value {
+            font-size: 16px;
+            font-weight: 700;
+            color: #ef4444;
+        }
+
+        .best-post-stat-label {
+            font-size: 10px;
+            color: #666;
+        }
+
+        /* Posts Table */
+        .posts-section {
+            background: #111;
+            border-radius: 12px;
+            border: 1px solid #222;
+            overflow: hidden;
+        }
+
+        .posts-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid #222;
+        }
+
+        .posts-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .posts-filters {
+            display: flex;
+            gap: 8px;
+        }
+
+        .filter-select {
+            padding: 8px 12px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .posts-table {
+            width: 100%;
+        }
+
+        .posts-table thead {
+            background: #1a1a1a;
+        }
+
+        .posts-table th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .posts-table th.sortable {
+            cursor: pointer;
+        }
+
+        .posts-table th.sortable:hover {
+            color: #fff;
+        }
+
+        .posts-table td {
+            padding: 12px 16px;
+            border-top: 1px solid #222;
+            font-size: 13px;
+        }
+
+        .posts-table tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .post-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .post-thumb {
+            width: 48px;
+            height: 48px;
+            border-radius: 6px;
+            background: #333;
+            object-fit: cover;
+        }
+
+        .post-thumb-video {
+            position: relative;
+        }
+
+        .post-thumb-video::after {
+            content: '▶';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+            color: #fff;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+
+        .post-caption {
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .post-type-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .post-type-badge.image { background: rgba(99, 102, 241, 0.2); color: #818cf8; }
+        .post-type-badge.video { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .post-type-badge.reel { background: rgba(236, 72, 153, 0.2); color: #ec4899; }
+        .post-type-badge.carousel { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+
+        .metric-cell {
+            font-weight: 500;
+        }
+
+        .metric-cell.highlight {
+            color: #ef4444;
+        }
+
+        .engagement-bar {
+            width: 60px;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .engagement-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ef4444, #f59e0b);
+            border-radius: 3px;
+        }
+
+        /* Connect Modal */
+        .connect-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .connect-modal {
+            background: #1a1a1a;
+            border-radius: 16px;
+            padding: 40px;
+            text-align: center;
+            max-width: 450px;
+        }
+
+        .connect-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 24px;
+            background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .connect-icon svg {
+            width: 40px;
+            height: 40px;
+            fill: #fff;
+        }
+
+        .connect-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .connect-desc {
+            color: #888;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .connect-btn {
+            width: 100%;
+            padding: 14px 24px;
+            background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 12px;
+        }
+
+        .connect-btn:hover {
+            transform: scale(1.02);
+        }
+
+        .connect-skip {
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .connect-skip:hover {
+            color: #888;
+        }
+
+        /* Loading State */
+        .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px;
+            color: #888;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #333;
+            border-top-color: #ef4444;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 16px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .posts-table {
+                font-size: 12px;
+            }
+            .posts-table th, .posts-table td {
+                padding: 8px 12px;
+            }
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #888;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .empty-state-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+
+        .empty-state-desc {
+            font-size: 14px;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+        <a href="index.html" class="nav-tab">
+            <span class="icon">🎨</span>Créer
+        </a>
+        <a href="calendar.html" class="nav-tab">
+            <span class="icon">📅</span>Calendrier
+        </a>
+        <a href="analytics.html" class="nav-tab active">
+            <span class="icon">📊</span>Analytics
+        </a>
+    </nav>
+
+    <!-- Connect Modal (shown if not connected) -->
+    <div class="connect-overlay" id="connect-overlay" style="display: none;">
+        <div class="connect-modal">
+            <div class="connect-icon">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                </svg>
+            </div>
+            <h2 class="connect-title">Connecte ton compte Instagram</h2>
+            <p class="connect-desc">
+                Pour voir tes analytics, connecte ton compte Instagram Business ou Creator via Meta.
+            </p>
+            <button class="connect-btn" id="connect-instagram-btn">
+                Connecter Instagram
+            </button>
+            <button class="connect-skip" id="skip-connect-btn">
+                Voir une démo avec des données fictives
+            </button>
+        </div>
+    </div>
+
+    <div class="app" id="main-app">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <div class="logo">SAMOURAÏS <span>Analytics</span></div>
+                <div class="account-info" id="account-info">
+                    <div class="account-avatar">⚔️</div>
+                    <span class="account-name">@samourais_</span>
+                    <div class="account-status"></div>
+                </div>
+            </div>
+            <div class="period-selector">
+                <button class="period-btn" data-period="7">7 jours</button>
+                <button class="period-btn active" data-period="30">30 jours</button>
+                <button class="period-btn" data-period="90">90 jours</button>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <div class="stat-icon followers">👥</div>
+                    <span class="stat-change positive" id="followers-change">+2.4%</span>
+                </div>
+                <div class="stat-value" id="followers-count">179,234</div>
+                <div class="stat-label">Followers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <div class="stat-icon reach">👁️</div>
+                    <span class="stat-change positive" id="reach-change">+12.8%</span>
+                </div>
+                <div class="stat-value" id="reach-count">842K</div>
+                <div class="stat-label">Comptes touchés</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <div class="stat-icon engagement">❤️</div>
+                    <span class="stat-change positive" id="engagement-change">+0.3%</span>
+                </div>
+                <div class="stat-value" id="engagement-rate">4.2%</div>
+                <div class="stat-label">Taux d'engagement</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <div class="stat-icon impressions">📈</div>
+                    <span class="stat-change negative" id="impressions-change">-3.1%</span>
+                </div>
+                <div class="stat-value" id="impressions-count">1.2M</div>
+                <div class="stat-label">Impressions</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3 class="chart-title">Évolution des performances</h3>
+                    <div class="chart-legend">
+                        <div class="legend-item">
+                            <div class="legend-dot" style="background: #ef4444;"></div>
+                            <span>Reach</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-dot" style="background: #3b82f6;"></div>
+                            <span>Impressions</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-dot" style="background: #22c55e;"></div>
+                            <span>Engagement</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="performance-chart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3 class="chart-title">🏆 Top posts</h3>
+                </div>
+                <div class="best-posts-list" id="best-posts-list">
+                    <!-- Best posts will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Audience Insights -->
+        <div class="charts-grid" style="margin-bottom: 24px;">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3 class="chart-title">Évolution des followers</h3>
+                </div>
+                <div class="chart-container">
+                    <canvas id="followers-chart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3 class="chart-title">Meilleurs moments pour poster</h3>
+                </div>
+                <div class="chart-container">
+                    <canvas id="best-time-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Posts Table -->
+        <div class="posts-section">
+            <div class="posts-header">
+                <h3 class="posts-title">Tous les posts</h3>
+                <div class="posts-filters">
+                    <select class="filter-select" id="type-filter">
+                        <option value="all">Tous types</option>
+                        <option value="image">Images</option>
+                        <option value="video">Vidéos</option>
+                        <option value="reel">Reels</option>
+                        <option value="carousel">Carrousels</option>
+                    </select>
+                    <select class="filter-select" id="sort-filter">
+                        <option value="date">Plus récents</option>
+                        <option value="likes">Plus likés</option>
+                        <option value="comments">Plus commentés</option>
+                        <option value="engagement">Meilleur engagement</option>
+                    </select>
+                </div>
+            </div>
+            <table class="posts-table">
+                <thead>
+                    <tr>
+                        <th>Post</th>
+                        <th>Type</th>
+                        <th>Date</th>
+                        <th class="sortable">❤️ Likes</th>
+                        <th class="sortable">💬 Commentaires</th>
+                        <th class="sortable">💾 Saves</th>
+                        <th class="sortable">🔄 Partages</th>
+                        <th class="sortable">👁️ Reach</th>
+                        <th>Engagement</th>
+                    </tr>
+                </thead>
+                <tbody id="posts-table-body">
+                    <!-- Posts will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION
+        // ============================================
+        const INSTAGRAM_APP_ID = localStorage.getItem('samourais_instagram_app_id') || '';
+        const INSTAGRAM_APP_SECRET = localStorage.getItem('samourais_instagram_app_secret') || '';
+        let accessToken = localStorage.getItem('samourais_instagram_token') || '';
+        let instagramUserId = localStorage.getItem('samourais_instagram_user_id') || '';
+
+        // ============================================
+        // STATE
+        // ============================================
+        let currentPeriod = 30;
+        let analyticsData = null;
+        let postsData = [];
+
+        // ============================================
+        // DEMO DATA
+        // ============================================
+        function generateDemoData() {
+            const now = new Date();
+            
+            // Generate demo posts
+            const demoPosts = [];
+            const captions = [
+                "Quand tu réalises que c'est déjà lundi 😭",
+                "POV: Tu découvres ce compte",
+                "Les français be like...",
+                "On est tous passés par là 💀",
+                "C'est un signe si tu vois ce post",
+                "Personne: / Absolument personne: / Moi:",
+                "La vie c'est comme un meme...",
+                "Dis moi que tu es français sans me dire que tu es français",
+                "Quand ton pote dit qu'il arrive dans 5 min",
+                "Le mood du dimanche soir"
+            ];
+
+            for (let i = 0; i < 30; i++) {
+                const date = new Date(now);
+                date.setDate(date.getDate() - i);
+                
+                const likes = Math.floor(Math.random() * 15000) + 2000;
+                const comments = Math.floor(likes * (Math.random() * 0.05 + 0.01));
+                const saves = Math.floor(likes * (Math.random() * 0.1 + 0.02));
+                const shares = Math.floor(likes * (Math.random() * 0.03 + 0.005));
+                const reach = Math.floor(likes * (Math.random() * 8 + 4));
+                
+                demoPosts.push({
+                    id: 'post_' + i,
+                    caption: captions[i % captions.length],
+                    type: ['image', 'video', 'reel', 'carousel'][Math.floor(Math.random() * 4)],
+                    thumbnail: `https://picsum.photos/seed/${i}/200/200`,
+                    date: date.toISOString(),
+                    likes,
+                    comments,
+                    saves,
+                    shares,
+                    reach,
+                    impressions: Math.floor(reach * 1.4),
+                    engagement: ((likes + comments + saves + shares) / reach * 100).toFixed(2)
+                });
+            }
+
+            postsData = demoPosts;
+
+            // Generate chart data
+            const chartLabels = [];
+            const reachData = [];
+            const impressionsData = [];
+            const engagementData = [];
+            const followersData = [];
+
+            let baseFollowers = 178500;
+
+            for (let i = currentPeriod - 1; i >= 0; i--) {
+                const date = new Date(now);
+                date.setDate(date.getDate() - i);
+                chartLabels.push(date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }));
+                
+                reachData.push(Math.floor(Math.random() * 30000) + 20000);
+                impressionsData.push(Math.floor(Math.random() * 50000) + 30000);
+                engagementData.push((Math.random() * 2 + 3).toFixed(1));
+                
+                baseFollowers += Math.floor(Math.random() * 100) - 20;
+                followersData.push(baseFollowers);
+            }
+
+            analyticsData = {
+                followers: 179234,
+                followersChange: 2.4,
+                reach: 842000,
+                reachChange: 12.8,
+                engagement: 4.2,
+                engagementChange: 0.3,
+                impressions: 1200000,
+                impressionsChange: -3.1,
+                chartLabels,
+                reachData,
+                impressionsData,
+                engagementData,
+                followersData
+            };
+
+            return analyticsData;
+        }
+
+        // ============================================
+        // UI FUNCTIONS
+        // ============================================
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(0) + 'K';
+            return num.toString();
+        }
+
+        function updateStats() {
+            document.getElementById('followers-count').textContent = formatNumber(analyticsData.followers);
+            document.getElementById('reach-count').textContent = formatNumber(analyticsData.reach);
+            document.getElementById('engagement-rate').textContent = analyticsData.engagement + '%';
+            document.getElementById('impressions-count').textContent = formatNumber(analyticsData.impressions);
+
+            // Update changes
+            updateChange('followers-change', analyticsData.followersChange);
+            updateChange('reach-change', analyticsData.reachChange);
+            updateChange('engagement-change', analyticsData.engagementChange);
+            updateChange('impressions-change', analyticsData.impressionsChange);
+        }
+
+        function updateChange(elementId, value) {
+            const el = document.getElementById(elementId);
+            el.textContent = (value >= 0 ? '+' : '') + value + '%';
+            el.className = 'stat-change ' + (value >= 0 ? 'positive' : 'negative');
+        }
+
+        function renderBestPosts() {
+            const sorted = [...postsData].sort((a, b) => b.engagement - a.engagement);
+            const top5 = sorted.slice(0, 5);
+            
+            const container = document.getElementById('best-posts-list');
+            container.innerHTML = top5.map((post, index) => `
+                <div class="best-post-item">
+                    <div class="best-post-rank ${index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : ''}">${index + 1}</div>
+                    <img src="${post.thumbnail}" class="best-post-thumb" alt="">
+                    <div class="best-post-info">
+                        <div class="best-post-caption">${post.caption}</div>
+                        <div class="best-post-date">${new Date(post.date).toLocaleDateString('fr-FR')}</div>
+                    </div>
+                    <div class="best-post-stat">
+                        <div class="best-post-stat-value">${post.engagement}%</div>
+                        <div class="best-post-stat-label">engagement</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderPostsTable() {
+            const tbody = document.getElementById('posts-table-body');
+            tbody.innerHTML = postsData.map(post => `
+                <tr>
+                    <td>
+                        <div class="post-cell">
+                            <img src="${post.thumbnail}" class="post-thumb ${post.type === 'video' || post.type === 'reel' ? 'post-thumb-video' : ''}" alt="">
+                            <span class="post-caption">${post.caption}</span>
+                        </div>
+                    </td>
+                    <td><span class="post-type-badge ${post.type}">${post.type}</span></td>
+                    <td>${new Date(post.date).toLocaleDateString('fr-FR')}</td>
+                    <td class="metric-cell">${formatNumber(post.likes)}</td>
+                    <td class="metric-cell">${formatNumber(post.comments)}</td>
+                    <td class="metric-cell">${formatNumber(post.saves)}</td>
+                    <td class="metric-cell">${formatNumber(post.shares)}</td>
+                    <td class="metric-cell">${formatNumber(post.reach)}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="engagement-bar">
+                                <div class="engagement-bar-fill" style="width: ${Math.min(post.engagement * 10, 100)}%;"></div>
+                            </div>
+                            <span class="metric-cell highlight">${post.engagement}%</span>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // ============================================
+        // CHARTS
+        // ============================================
+        let performanceChart, followersChart, bestTimeChart;
+
+        function initCharts() {
+            // Performance Chart
+            const perfCtx = document.getElementById('performance-chart').getContext('2d');
+            performanceChart = new Chart(perfCtx, {
+                type: 'line',
+                data: {
+                    labels: analyticsData.chartLabels,
+                    datasets: [
+                        {
+                            label: 'Reach',
+                            data: analyticsData.reachData,
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Impressions',
+                            data: analyticsData.impressionsData,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'transparent',
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: '#222' },
+                            ticks: { color: '#888' }
+                        },
+                        y: {
+                            grid: { color: '#222' },
+                            ticks: { 
+                                color: '#888',
+                                callback: value => formatNumber(value)
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Followers Chart
+            const followCtx = document.getElementById('followers-chart').getContext('2d');
+            followersChart = new Chart(followCtx, {
+                type: 'line',
+                data: {
+                    labels: analyticsData.chartLabels,
+                    datasets: [{
+                        label: 'Followers',
+                        data: analyticsData.followersData,
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: '#222' },
+                            ticks: { color: '#888' }
+                        },
+                        y: {
+                            grid: { color: '#222' },
+                            ticks: { 
+                                color: '#888',
+                                callback: value => formatNumber(value)
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Best Time Chart (Heatmap-like bar chart)
+            const timeCtx = document.getElementById('best-time-chart').getContext('2d');
+            const hours = ['6h', '9h', '12h', '15h', '18h', '21h', '0h'];
+            const engagementByHour = hours.map(() => Math.floor(Math.random() * 100) + 20);
+            
+            bestTimeChart = new Chart(timeCtx, {
+                type: 'bar',
+                data: {
+                    labels: hours,
+                    datasets: [{
+                        label: 'Engagement moyen',
+                        data: engagementByHour,
+                        backgroundColor: engagementByHour.map(v => {
+                            const max = Math.max(...engagementByHour);
+                            const intensity = v / max;
+                            return `rgba(239, 68, 68, ${intensity * 0.8 + 0.2})`;
+                        }),
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#888' }
+                        },
+                        y: {
+                            grid: { color: '#222' },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ============================================
+        // INSTAGRAM API
+        // ============================================
+        async function connectInstagram() {
+            // Check if app is configured
+            if (!INSTAGRAM_APP_ID) {
+                showConfigModal();
+                return;
+            }
+
+            // Open Meta OAuth
+            const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
+            const scope = 'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement';
+            
+            const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${INSTAGRAM_APP_ID}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
+            
+            window.location.href = authUrl;
+        }
+
+        function showConfigModal() {
+            const modal = document.createElement('div');
+            modal.id = 'config-modal';
+            modal.innerHTML = `
+                <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 10000;">
+                    <div style="background: #1a1a1a; border-radius: 16px; padding: 32px; max-width: 450px; width: 90%;">
+                        <h3 style="margin-bottom: 16px; font-size: 20px;">⚙️ Configuration Instagram API</h3>
+                        <p style="color: #888; font-size: 13px; margin-bottom: 20px; line-height: 1.6;">
+                            Pour connecter ton compte Instagram, tu dois d'abord créer une app Meta sur
+                            <a href="https://developers.facebook.com/" target="_blank" style="color: #ef4444;">developers.facebook.com</a>
+                        </p>
+                        <div style="margin-bottom: 16px;">
+                            <label style="display: block; font-size: 12px; color: #888; margin-bottom: 6px;">App ID</label>
+                            <input type="text" id="ig-app-id" placeholder="123456789..." 
+                                   style="width: 100%; padding: 12px; background: #111; border: 2px solid #333; border-radius: 8px; color: #fff; font-size: 14px;">
+                        </div>
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; font-size: 12px; color: #888; margin-bottom: 6px;">App Secret</label>
+                            <input type="password" id="ig-app-secret" placeholder="•••••••••" 
+                                   style="width: 100%; padding: 12px; background: #111; border: 2px solid #333; border-radius: 8px; color: #fff; font-size: 14px;">
+                        </div>
+                        <div style="display: flex; gap: 12px;">
+                            <button onclick="document.getElementById('config-modal').remove()" 
+                                    style="flex: 1; padding: 12px; background: #333; border: none; border-radius: 8px; color: #fff; cursor: pointer;">
+                                Annuler
+                            </button>
+                            <button onclick="saveInstagramConfig()" 
+                                    style="flex: 1; padding: 12px; background: linear-gradient(45deg, #f09433, #dc2743); border: none; border-radius: 8px; color: #fff; cursor: pointer; font-weight: 600;">
+                                Sauvegarder
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        window.saveInstagramConfig = function() {
+            const appId = document.getElementById('ig-app-id').value.trim();
+            const appSecret = document.getElementById('ig-app-secret').value.trim();
+            
+            if (appId && appSecret) {
+                localStorage.setItem('samourais_instagram_app_id', appId);
+                localStorage.setItem('samourais_instagram_app_secret', appSecret);
+                document.getElementById('config-modal').remove();
+                connectInstagram();
+            }
+        };
+
+        async function fetchInstagramData() {
+            if (!accessToken || !instagramUserId) return null;
+
+            try {
+                // Fetch account info
+                const accountRes = await fetch(
+                    `https://graph.facebook.com/v18.0/${instagramUserId}?fields=followers_count,media_count,username,profile_picture_url&access_token=${accessToken}`
+                );
+                const account = await accountRes.json();
+
+                // Fetch insights
+                const insightsRes = await fetch(
+                    `https://graph.facebook.com/v18.0/${instagramUserId}/insights?metric=reach,impressions,accounts_engaged&period=day&since=${Math.floor(Date.now()/1000) - currentPeriod * 86400}&until=${Math.floor(Date.now()/1000)}&access_token=${accessToken}`
+                );
+                const insights = await insightsRes.json();
+
+                // Fetch media
+                const mediaRes = await fetch(
+                    `https://graph.facebook.com/v18.0/${instagramUserId}/media?fields=id,caption,media_type,media_url,thumbnail_url,timestamp,like_count,comments_count,insights.metric(reach,impressions,saved,shares)&access_token=${accessToken}`
+                );
+                const media = await mediaRes.json();
+
+                return { account, insights, media };
+            } catch (error) {
+                console.error('Error fetching Instagram data:', error);
+                return null;
+            }
+        }
+
+        // ============================================
+        // EVENT LISTENERS
+        // ============================================
+        document.querySelectorAll('.period-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentPeriod = parseInt(btn.dataset.period);
+                
+                // Regenerate data for new period
+                generateDemoData();
+                updateStats();
+                renderBestPosts();
+                renderPostsTable();
+                
+                // Update charts
+                if (performanceChart) {
+                    performanceChart.data.labels = analyticsData.chartLabels;
+                    performanceChart.data.datasets[0].data = analyticsData.reachData;
+                    performanceChart.data.datasets[1].data = analyticsData.impressionsData;
+                    performanceChart.update();
+                }
+                if (followersChart) {
+                    followersChart.data.labels = analyticsData.chartLabels;
+                    followersChart.data.datasets[0].data = analyticsData.followersData;
+                    followersChart.update();
+                }
+            });
+        });
+
+        document.getElementById('type-filter').addEventListener('change', (e) => {
+            const type = e.target.value;
+            const filtered = type === 'all' 
+                ? postsData 
+                : postsData.filter(p => p.type === type);
+            renderFilteredPosts(filtered);
+        });
+
+        document.getElementById('sort-filter').addEventListener('change', (e) => {
+            const sort = e.target.value;
+            let sorted = [...postsData];
+            
+            switch(sort) {
+                case 'likes': sorted.sort((a, b) => b.likes - a.likes); break;
+                case 'comments': sorted.sort((a, b) => b.comments - a.comments); break;
+                case 'engagement': sorted.sort((a, b) => b.engagement - a.engagement); break;
+                default: sorted.sort((a, b) => new Date(b.date) - new Date(a.date));
+            }
+            
+            postsData = sorted;
+            renderPostsTable();
+        });
+
+        function renderFilteredPosts(filtered) {
+            const tbody = document.getElementById('posts-table-body');
+            tbody.innerHTML = filtered.map(post => `
+                <tr>
+                    <td>
+                        <div class="post-cell">
+                            <img src="${post.thumbnail}" class="post-thumb" alt="">
+                            <span class="post-caption">${post.caption}</span>
+                        </div>
+                    </td>
+                    <td><span class="post-type-badge ${post.type}">${post.type}</span></td>
+                    <td>${new Date(post.date).toLocaleDateString('fr-FR')}</td>
+                    <td class="metric-cell">${formatNumber(post.likes)}</td>
+                    <td class="metric-cell">${formatNumber(post.comments)}</td>
+                    <td class="metric-cell">${formatNumber(post.saves)}</td>
+                    <td class="metric-cell">${formatNumber(post.shares)}</td>
+                    <td class="metric-cell">${formatNumber(post.reach)}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="engagement-bar">
+                                <div class="engagement-bar-fill" style="width: ${Math.min(post.engagement * 10, 100)}%;"></div>
+                            </div>
+                            <span class="metric-cell highlight">${post.engagement}%</span>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        document.getElementById('connect-instagram-btn').addEventListener('click', connectInstagram);
+        document.getElementById('skip-connect-btn').addEventListener('click', () => {
+            document.getElementById('connect-overlay').style.display = 'none';
+            initWithDemoData();
+        });
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        function initWithDemoData() {
+            generateDemoData();
+            updateStats();
+            renderBestPosts();
+            renderPostsTable();
+            initCharts();
+        }
+
+        async function init() {
+            // Check if we have a valid token
+            if (accessToken && instagramUserId) {
+                const data = await fetchInstagramData();
+                if (data) {
+                    // Process real data
+                    // TODO: Transform API response to our format
+                    initWithDemoData(); // For now, use demo
+                } else {
+                    document.getElementById('connect-overlay').style.display = 'flex';
+                }
+            } else {
+                // Check for OAuth callback
+                const urlParams = new URLSearchParams(window.location.search);
+                const code = urlParams.get('code');
+                
+                if (code) {
+                    // Exchange code for token
+                    // This should be done server-side for security
+                    console.log('OAuth code received:', code);
+                    // For now, show demo
+                    initWithDemoData();
+                } else {
+                    // Show connect modal or demo
+                    document.getElementById('connect-overlay').style.display = 'flex';
+                }
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
