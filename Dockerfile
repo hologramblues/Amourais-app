@@ -20,8 +20,10 @@ RUN pip install --no-cache-dir -r requirements.txt \
 # Copy app source
 COPY . .
 
-# Create data directories
-RUN mkdir -p data/downloads data/cookies data/editor data/calendar data/sessions
+# Default data directory — overridden by DATA_DIR env var when a Railway
+# volume is mounted (e.g. DATA_DIR=/data with volume at /data).
+# The app creates subdirs at startup via ensure_data_dirs().
+ENV DATA_DIR=/data
 
 # Railway injects PORT env var; fallback 8080
 EXPOSE 8080

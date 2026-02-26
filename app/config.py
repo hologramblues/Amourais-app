@@ -30,14 +30,22 @@ DAILY_MAX_SCROLLS = int(os.getenv("DAILY_MAX_SCROLLS", "15"))
 DAILY_SCRAPE_INTERVAL_MINUTES = int(os.getenv("DAILY_SCRAPE_INTERVAL_MINUTES", "1440"))
 DELAY_BETWEEN_PROFILES_MS = int(os.getenv("DELAY_BETWEEN_PROFILES_MS", "10000"))
 
-# Paths
-DOWNLOAD_DIR = BASE_DIR / os.getenv("DOWNLOAD_DIR", "data/downloads")
-DB_PATH = BASE_DIR / os.getenv("DB_PATH", "data/samourais.db")
-SESSIONS_DIR = BASE_DIR / "data" / "sessions"
+# ---------------------------------------------------------------------------
+# Data directory — on Railway, set DATA_DIR to the volume mount path
+# (e.g. DATA_DIR=/data). Locally, defaults to <project>/data.
+# ---------------------------------------------------------------------------
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
+
+# Paths (all derived from DATA_DIR)
+DOWNLOAD_DIR = DATA_DIR / "downloads"
+DB_PATH = DATA_DIR / "samourais.db"
+SESSIONS_DIR = DATA_DIR / "sessions"
+COOKIES_DIR = DATA_DIR / "cookies"
+CALENDAR_DIR = DATA_DIR / "calendar"
 
 # Editor
-EDITOR_UPLOAD_DIR = BASE_DIR / "data" / "editor" / "uploads"
-EDITOR_OUTPUT_DIR = BASE_DIR / "data" / "editor" / "outputs"
+EDITOR_UPLOAD_DIR = DATA_DIR / "editor" / "uploads"
+EDITOR_OUTPUT_DIR = DATA_DIR / "editor" / "outputs"
 EDITOR_MAX_FILE_SIZE_MB = int(os.getenv("EDITOR_MAX_FILE_SIZE_MB", "100"))
 
 # Logging

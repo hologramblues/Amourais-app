@@ -5,7 +5,7 @@
 
 {% if storage_mode == "local" %}
 <p style="background: rgba(59,130,246,0.15); border-left: 3px solid #3b82f6; padding: 0.6rem 1rem; border-radius: 4px; font-size: 0.9rem;">
-  <strong>Mode local</strong> — Les medias sont sauvegardes dans <code>data/downloads/</code>. Pour activer Google Drive, configurez vos credentials dans <a href="/settings">Settings</a> et passez <code>STORAGE_MODE=gdrive</code> dans le <code>.env</code>.
+  <strong>Mode local</strong> — Les medias sont sauvegardes dans <code>{{ data_dir }}/downloads/</code>. Pour activer Google Drive, configurez vos credentials dans <a href="/settings">Settings</a> et passez <code>STORAGE_MODE=gdrive</code> dans le <code>.env</code>.
 </p>
 {% endif %}
 

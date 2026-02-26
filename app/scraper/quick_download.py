@@ -16,7 +16,6 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from html import unescape
-from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -25,7 +24,7 @@ from scrapling.fetchers import StealthyFetcher
 from app.scraper.base import MediaItemData
 from app.scraper.downloaders import download_media, DownloadResult
 
-_SESSIONS_DIR = Path("data/sessions")
+from app.config import SESSIONS_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +75,7 @@ def detect_platform(url: str) -> tuple[str, str] | None:
 # ---------------------------------------------------------------------------
 def _load_cookies(platform: str) -> list[dict]:
     """Load cookies for a platform, converted to Playwright format."""
-    cookie_file = _SESSIONS_DIR / f"{platform}.json"
+    cookie_file = SESSIONS_DIR / f"{platform}.json"
     if not cookie_file.exists():
         return []
     try:

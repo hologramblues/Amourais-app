@@ -13,7 +13,6 @@ import json
 import re
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -31,8 +30,9 @@ from app.scraper.base import (
 # Constants
 # ---------------------------------------------------------------------------
 
-_SESSIONS_DIR = Path("data/sessions")
-_COOKIE_FILE = _SESSIONS_DIR / "tiktok.json"
+from app.config import SESSIONS_DIR
+
+_COOKIE_FILE = SESSIONS_DIR / "tiktok.json"
 _POST_URL_TEMPLATE = "https://www.tiktok.com/@{author}/video/{video_id}"
 _BACKFILL_MAX_AGE_SECONDS = 2 * 365 * 24 * 3600  # ~2 years
 

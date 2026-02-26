@@ -254,12 +254,9 @@
 
     <div class="grid">
       <label>
-        Dossier de telechargement
-        <input type="text" name="DOWNLOAD_DIR" value="{{ env.get('DOWNLOAD_DIR', 'data/downloads') }}" placeholder="data/downloads">
-      </label>
-      <label>
-        Chemin base de donnees
-        <input type="text" name="DB_PATH" value="{{ env.get('DB_PATH', 'data/samourais.db') }}" placeholder="data/samourais.db">
+        Dossier de donnees (volume)
+        <input type="text" name="DATA_DIR" value="{{ env.get('DATA_DIR', 'data') }}" placeholder="/data">
+        <small>Sur Railway: /data (monte sur le volume). En local: data</small>
       </label>
     </div>
 

@@ -12,6 +12,7 @@ from loguru import logger
 from sqlalchemy import func
 
 from app.config import (
+    DATA_DIR,
     DOWNLOAD_DIR,
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
@@ -96,6 +97,7 @@ def dashboard():
             page="dashboard",
             profiles=profiles_list,
             storage_mode=STORAGE_MODE,
+            data_dir=str(DATA_DIR),
             stats={
                 "totalProfiles": total_profiles,
                 "activeProfiles": active_profiles,

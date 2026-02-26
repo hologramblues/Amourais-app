@@ -7,3 +7,9 @@ healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
+
+# Persistent volume for scraped media, DB, sessions, etc.
+# Create the volume in Railway dashboard and mount at /data
+[[mounts]]
+source = "samourais_data"
+destination = "/data"
