@@ -5,16 +5,22 @@
 
   // ─── State ───────────────────────────────────────────────────
   let mediaItems = [];
+  let memeItems = [];
   let currentIndex = -1;
   let currentPage = 1;
   let totalPages = 1;
+  let memePage = 1;
+  let memeTotalPages = 1;
   let loading = false;
+  let memeLoading = false;
+  let activeTab = "media"; // "media" or "memes"
   let userName = localStorage.getItem("viewer_user") || "";
 
   const API = "/api/viewer";
 
   // ─── DOM refs ────────────────────────────────────────────────
   const grid = document.getElementById("media-grid");
+  const memesGrid = document.getElementById("memes-grid");
   const lightbox = document.getElementById("lightbox");
   const lbMedia = document.getElementById("lb-media");
   const lbCaption = document.getElementById("lb-caption");
@@ -32,6 +38,9 @@
   const filterSearch = document.getElementById("filter-search");
   const statsEl = document.getElementById("topbar-stats");
   const userNameEl = document.getElementById("user-name-display");
+  const mediaFilters = document.getElementById("media-filters");
+  const mediaCountEl = document.getElementById("media-count");
+  const memesCountEl = document.getElementById("memes-count");
 
   // ─── Init ────────────────────────────────────────────────────
   function init() {
@@ -43,6 +52,7 @@
 
     loadProfiles();
     loadMedia();
+    loadMemes();
     setupInfiniteScroll();
     setupKeyboard();
     setupFilters();
@@ -57,6 +67,27 @@
     } else {
       userName = "Anonyme";
       userNameEl.textContent = userName;
+    }
+  }
+
+  // ─── Tab switching ─────────────────────────────────────────
+  function switchTab(tab) {
+    activeTab = tab;
+
+    // Update tab buttons
+    document.querySelectorAll(".viewer-tab").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === tab);
+    });
+
+    // Show/hide grids
+    if (tab === "media") {
+      grid.style.display = "";
+      memesGrid.style.display = "none";
+      mediaFilters.style.display = "";
+    } else {
+      grid.style.display = "none";
+      memesGrid.style.display = "";
+      mediaFilters.style.display = "none";
     }
   }
 
@@ -121,6 +152,7 @@
 
       // Stats
       statsEl.textContent = `${data.total} medias`;
+      mediaCountEl.textContent = data.total;
 
       if (data.items.length === 0 && !append) {
         grid.innerHTML = '<div class="loader"><p>Aucun media trouve</p></div>';
@@ -135,6 +167,53 @@
     loading = false;
   }
 
+  // ─── Load memes ──────────────────────────────────────────────
+  async function loadMemes(append = false) {
+    if (memeLoading) return;
+    memeLoading = true;
+
+    if (!append) {
+      memePage = 1;
+      memeItems = [];
+      memesGrid.innerHTML = '<div class="loader"><div class="loader-spinner"></div><p>Chargement des memes...</p></div>';
+    }
+
+    try {
+      const res = await fetch(`${API}/memes?page=${memePage}&per_page=60`);
+      const data = await res.json();
+
+      memeTotalPages = data.total_pages;
+
+      if (!append) {
+        memesGrid.innerHTML = "";
+        memeItems = [];
+      }
+
+      const startIdx = memeItems.length;
+      memeItems.push(...data.items);
+
+      data.items.forEach((item, i) => {
+        memesGrid.appendChild(createMemeCard(item, startIdx + i));
+      });
+
+      // Lazy load meme images
+      observeMemeImages();
+
+      memesCountEl.textContent = data.total;
+
+      if (data.items.length === 0 && !append) {
+        memesGrid.innerHTML = '<div class="loader"><p>Aucun meme sauvegarde. Cree-en dans l\'editeur !</p></div>';
+      }
+    } catch (e) {
+      console.error("Failed to load memes", e);
+      if (!append) {
+        memesGrid.innerHTML = '<div class="loader"><p>Erreur de chargement des memes</p></div>';
+      }
+    }
+
+    memeLoading = false;
+  }
+
   // ─── Card creation ──────────────────────────────────────────
   function createCard(item, index) {
     const card = document.createElement("div");
@@ -146,7 +225,6 @@
     const src = item.file_url || item.media_url || "";
 
     if (item.media_type === "video") {
-      // For videos, show a poster placeholder or use file_url
       const img = document.createElement("img");
       img.dataset.src = src;
       img.alt = item.caption || "Video";
@@ -191,6 +269,80 @@
     return card;
   }
 
+  function createMemeCard(item, index) {
+    const card = document.createElement("div");
+    card.className = "media-card loading";
+    card.dataset.index = index;
+    card.onclick = (e) => {
+      // Don't open lightbox if clicking download
+      if (e.target.classList.contains("meme-download-btn")) return;
+      openMemeLightbox(index);
+    };
+
+    const img = document.createElement("img");
+    img.dataset.src = item.thumbnail_url || item.file_url;
+    img.alt = item.title || "Meme";
+    card.appendChild(img);
+
+    // Download button
+    const dlBtn = document.createElement("button");
+    dlBtn.className = "meme-download-btn";
+    dlBtn.textContent = "\u2B07 Download";
+    dlBtn.onclick = (e) => {
+      e.stopPropagation();
+      downloadMeme(item);
+    };
+    card.appendChild(dlBtn);
+
+    // Meme badge
+    const badge = document.createElement("div");
+    badge.className = "meme-badge";
+    badge.textContent = item.template_format || "MEME";
+    card.appendChild(badge);
+
+    return card;
+  }
+
+  function downloadMeme(item) {
+    const link = document.createElement("a");
+    link.href = item.file_url;
+    link.download = `samourais_meme_${item.id}.${item.media_type === "video" ? "mp4" : "png"}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  function openMemeLightbox(index) {
+    const item = memeItems[index];
+    if (!item) return;
+
+    lightbox.classList.add("active");
+    document.body.style.overflow = "hidden";
+
+    // Show meme in lightbox
+    lbMedia.innerHTML = `<img src="${escHtml(item.file_url)}" alt="${escHtml(item.title || "Meme")}" style="max-width:100%;max-height:100vh;">`;
+
+    lbInfo.textContent = `🎨 Meme • ${item.template_format || ""}`;
+    lbCaption.textContent = item.caption || item.title || "";
+
+    // Show download link instead of post link
+    lbPostLink.href = item.file_url;
+    lbPostLink.textContent = "\u2B07 Telecharger le meme";
+    lbPostLink.setAttribute("download", `meme_${item.id}.png`);
+    lbPostLink.style.display = "";
+
+    // Remove edit button if exists
+    const editBtn = document.getElementById("lb-edit-btn");
+    if (editBtn) editBtn.style.display = "none";
+
+    // Hide rating and comments for memes
+    document.querySelector(".rating-section").style.display = "none";
+    document.querySelector(".comments-section").style.display = "none";
+
+    // Store context for nav
+    currentIndex = index;
+  }
+
   function platformEmoji(p) {
     const map = { instagram: "\uD83D\uDCF7", tiktok: "\uD83C\uDFB5", twitter: "\uD83D\uDC26", reddit: "\uD83D\uDC7D" };
     return map[p] || "\uD83C\uDF10";
@@ -222,20 +374,53 @@
       { rootMargin: "200px" }
     );
 
-    document.querySelectorAll(".media-card.loading").forEach((card) => {
+    document.querySelectorAll("#media-grid .media-card.loading").forEach((card) => {
       observer.observe(card);
+    });
+  }
+
+  let memeObserver;
+  function observeMemeImages() {
+    if (memeObserver) memeObserver.disconnect();
+    memeObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const card = entry.target;
+            const img = card.querySelector("img[data-src]");
+            if (img) {
+              img.src = img.dataset.src;
+              img.removeAttribute("data-src");
+              img.onload = () => card.classList.remove("loading");
+              img.onerror = () => {
+                card.classList.remove("loading");
+                img.style.opacity = "0.3";
+              };
+            }
+            memeObserver.unobserve(card);
+          }
+        });
+      },
+      { rootMargin: "200px" }
+    );
+
+    document.querySelectorAll("#memes-grid .media-card.loading").forEach((card) => {
+      memeObserver.observe(card);
     });
   }
 
   // ─── Infinite scroll ───────────────────────────────────────
   function setupInfiniteScroll() {
     window.addEventListener("scroll", () => {
-      if (loading) return;
-      if (currentPage >= totalPages) return;
       const bottom = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
       if (bottom < 500) {
-        currentPage++;
-        loadMedia(true);
+        if (activeTab === "media" && !loading && currentPage < totalPages) {
+          currentPage++;
+          loadMedia(true);
+        } else if (activeTab === "memes" && !memeLoading && memePage < memeTotalPages) {
+          memePage++;
+          loadMemes(true);
+        }
       }
     });
   }
@@ -258,6 +443,11 @@
     currentIndex = index;
     lightbox.classList.add("active");
     document.body.style.overflow = "hidden";
+
+    // Restore rating/comments visibility
+    document.querySelector(".rating-section").style.display = "";
+    document.querySelector(".comments-section").style.display = "";
+
     renderLightbox();
   }
 
@@ -268,16 +458,25 @@
     // Stop any playing video
     const vid = lbMedia.querySelector("video");
     if (vid) vid.pause();
+
+    // Reset post link
+    lbPostLink.removeAttribute("download");
   }
 
   function navigateLightbox(dir) {
+    const items = activeTab === "media" ? mediaItems : memeItems;
     const newIdx = currentIndex + dir;
-    if (newIdx < 0 || newIdx >= mediaItems.length) return;
+    if (newIdx < 0 || newIdx >= items.length) return;
     // Stop current video
     const vid = lbMedia.querySelector("video");
     if (vid) vid.pause();
     currentIndex = newIdx;
-    renderLightbox();
+
+    if (activeTab === "memes") {
+      openMemeLightbox(currentIndex);
+    } else {
+      renderLightbox();
+    }
   }
 
   async function renderLightbox() {
@@ -303,6 +502,7 @@
     if (item.post_url) {
       lbPostLink.href = item.post_url;
       lbPostLink.textContent = "Voir le post original \u2197";
+      lbPostLink.removeAttribute("download");
       lbPostLink.style.display = "";
     } else {
       lbPostLink.style.display = "none";
@@ -314,11 +514,12 @@
       editBtn = document.createElement("a");
       editBtn.id = "lb-edit-btn";
       editBtn.className = "post-link";
-      editBtn.style.cssText = "display: inline-block; margin-top: 6px; background: #ef4444; color: #fff; padding: 6px 14px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;";
+      editBtn.style.cssText = "display: inline-block; margin-top: 6px; background: #E21B3C; color: #fff; padding: 6px 14px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;";
       lbPostLink.parentNode.insertBefore(editBtn, lbPostLink.nextSibling);
     }
     editBtn.href = `/editor?media_id=${item.id}`;
     editBtn.textContent = "\uD83C\uDFA8 Editer dans le Meme Editor";
+    editBtn.style.display = "";
 
     // Load full details (comments + ratings)
     await loadMediaDetail(item.id);
@@ -484,7 +685,7 @@
         case "3":
         case "4":
         case "5":
-          if (mediaItems[currentIndex]) {
+          if (activeTab === "media" && mediaItems[currentIndex]) {
             rateMedia(mediaItems[currentIndex].id, parseInt(e.key));
           }
           break;
@@ -513,6 +714,7 @@
   // ─── Global handlers ───────────────────────────────────────
   window.__closeLightbox = closeLightbox;
   window.__navLightbox = navigateLightbox;
+  window.__switchTab = switchTab;
   window.__changeUser = function () {
     promptUserName();
     if (currentIndex >= 0 && mediaItems[currentIndex]) {

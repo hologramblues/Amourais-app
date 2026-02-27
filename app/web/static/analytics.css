@@ -1,19 +1,19 @@
 /* ============================================
-   SAMOURAIS Analytics — Dark theme dashboard
+   SAMOURAIS Analytics — Light theme dashboard
    ============================================ */
 
 :root {
-    --ana-bg: #0a0a0a;
-    --ana-surface: #111111;
-    --ana-surface2: #1a1a1a;
-    --ana-border: #222222;
-    --ana-text: #e0e0e0;
-    --ana-muted: #888888;
-    --ana-accent: #ef4444;
-    --ana-blue: #3b82f6;
-    --ana-green: #22c55e;
-    --ana-yellow: #eab308;
-    --ana-purple: #8b5cf6;
+    --ana-bg: #ffffff;
+    --ana-surface: #ffffff;
+    --ana-surface2: #f7f7f7;
+    --ana-border: #e0e0e0;
+    --ana-text: #222222;
+    --ana-muted: #717171;
+    --ana-accent: #E21B3C;
+    --ana-blue: #1a73e8;
+    --ana-green: #008a05;
+    --ana-yellow: #f59e0b;
+    --ana-purple: #7c3aed;
 }
 
 * {
@@ -23,8 +23,8 @@
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: var(--ana-bg);
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f7f7f7;
     color: var(--ana-text);
     min-height: 100vh;
 }
@@ -73,13 +73,13 @@ body {
 }
 
 .period-btn:hover {
-    border-color: #555;
+    border-color: #bbb;
     color: var(--ana-text);
 }
 
 .period-btn.active {
     border-color: var(--ana-accent);
-    background: rgba(239, 68, 68, 0.1);
+    background: rgba(226, 27, 60, 0.06);
     color: var(--ana-text);
 }
 
@@ -115,10 +115,10 @@ body {
     font-size: 20px;
 }
 
-.stat-icon.media { background: rgba(99, 102, 241, 0.2); }
-.stat-icon.period { background: rgba(34, 197, 94, 0.2); }
-.stat-icon.rating { background: rgba(239, 68, 68, 0.2); }
-.stat-icon.profiles { background: rgba(245, 158, 11, 0.2); }
+.stat-icon.media { background: rgba(99, 102, 241, 0.1); }
+.stat-icon.period { background: rgba(0, 138, 5, 0.1); }
+.stat-icon.rating { background: rgba(226, 27, 60, 0.1); }
+.stat-icon.profiles { background: rgba(245, 158, 11, 0.1); }
 
 .stat-value {
     font-size: 32px;
@@ -187,13 +187,13 @@ body {
 }
 
 .best-post-item:hover {
-    background: #222;
+    background: #eee;
 }
 
 .best-post-rank {
     width: 28px;
     height: 28px;
-    background: #333;
+    background: #e0e0e0;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -278,8 +278,8 @@ body {
     transition: all 0.2s;
 }
 
-.filter-btn:hover { color: var(--ana-text); border-color: #555; }
-.filter-btn.active { color: var(--ana-accent); border-color: var(--ana-accent); background: rgba(239,68,68,0.1); }
+.filter-btn:hover { color: var(--ana-text); border-color: #bbb; }
+.filter-btn.active { color: var(--ana-accent); border-color: var(--ana-accent); background: rgba(226,27,60,0.06); }
 
 table {
     width: 100%;
@@ -311,11 +311,11 @@ th .sort-icon {
 td {
     padding: 12px 16px;
     font-size: 13px;
-    border-bottom: 1px solid rgba(255,255,255,0.03);
+    border-bottom: 1px solid #f0f0f0;
 }
 
 tr:hover td {
-    background: rgba(255, 255, 255, 0.02);
+    background: #fafafa;
 }
 
 .platform-badge {
@@ -326,10 +326,10 @@ tr:hover td {
     text-transform: uppercase;
 }
 
-.platform-badge.instagram { background: rgba(225, 48, 108, 0.2); color: #e1306c; }
-.platform-badge.tiktok { background: rgba(0, 242, 234, 0.2); color: #00f2ea; }
-.platform-badge.twitter { background: rgba(29, 161, 242, 0.2); color: #1da1f2; }
-.platform-badge.reddit { background: rgba(255, 69, 0, 0.2); color: #ff4500; }
+.platform-badge.instagram { background: rgba(225, 48, 108, 0.1); color: #e1306c; }
+.platform-badge.tiktok { background: rgba(0, 0, 0, 0.06); color: #000; }
+.platform-badge.twitter { background: rgba(29, 161, 242, 0.1); color: #1da1f2; }
+.platform-badge.reddit { background: rgba(255, 69, 0, 0.1); color: #ff4500; }
 
 .rating-stars {
     color: var(--ana-yellow);
@@ -366,7 +366,7 @@ tr:hover td {
     transition: all 0.2s;
 }
 
-.page-btn:hover { color: var(--ana-text); border-color: #555; }
+.page-btn:hover { color: var(--ana-text); border-color: #bbb; }
 .page-btn.active { color: var(--ana-accent); border-color: var(--ana-accent); }
 .page-btn:disabled { opacity: 0.3; cursor: default; }
 

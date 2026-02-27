@@ -123,6 +123,7 @@
         const resetBtn = document.getElementById('reset-btn');
         const exportBtn = document.getElementById('export-btn');
         const scheduleBtn = document.getElementById('schedule-btn');
+        const saveMemeBtn = document.getElementById('save-meme-btn');
         const formatBtns = document.querySelectorAll('.format-btn');
         
         // Import source elements
@@ -541,6 +542,7 @@
                 exportBtn.disabled = false;
                 exportBtn.textContent = '📥 Télécharger le meme';
                 scheduleBtn.disabled = false;
+                if (saveMemeBtn) saveMemeBtn.disabled = false;
             };
             reader.readAsDataURL(file);
         }
@@ -592,8 +594,9 @@
                 exportBtn.disabled = false;
                 exportBtn.textContent = '🎬 Exporter la vidéo';
                 scheduleBtn.disabled = false;
+                if (saveMemeBtn) saveMemeBtn.disabled = false;
             };
-            
+
             videoSource.load();
         }
 
@@ -1067,6 +1070,7 @@
             exportBtn.disabled = true;
             exportBtn.textContent = '📥 Télécharger le meme';
             scheduleBtn.disabled = true;
+            if (saveMemeBtn) saveMemeBtn.disabled = true;
             canvas.renderAll();
         };
 
@@ -1441,6 +1445,82 @@
                     timestamp: Date.now()
                 }));
                 window.location.href = '/calendar';
+            });
+        }
+
+        function saveMemeToViewer() {
+            if (state.mediaType === 'video') {
+                alert('La sauvegarde de memes video n\'est pas encore supportee. Utilisez "Telecharger" pour les videos.');
+                return;
+            }
+
+            // Capture canvas as image
+            frameBorder.set({ visible: false });
+            frameRect.set({ visible: false });
+            canvas.discardActiveObject();
+            canvas.renderAll();
+
+            const template = TEMPLATES[state.currentTemplate];
+
+            const originalZoom = canvas.getZoom();
+            canvas.setZoom(1);
+            canvas.setWidth(template.width + (CANVAS_PADDING * 2));
+            canvas.setHeight(template.height + (CANVAS_PADDING * 2));
+            canvas.renderAll();
+
+            const dataURL = canvas.toDataURL({
+                format: 'png',
+                quality: 1,
+                left: CANVAS_PADDING,
+                top: CANVAS_PADDING,
+                width: template.width,
+                height: template.height
+            });
+
+            // Restore
+            canvas.setZoom(originalZoom);
+            updateCanvasSize();
+            frameBorder.set({ visible: true });
+            frameRect.set({ visible: true });
+            canvas.renderAll();
+
+            // Save to backend
+            if (saveMemeBtn) {
+                saveMemeBtn.disabled = true;
+                saveMemeBtn.textContent = '⏳ Sauvegarde...';
+            }
+
+            fetch('/api/viewer/memes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    image_data: dataURL,
+                    title: 'Meme — ' + state.currentTemplate,
+                    caption: state.text || '',
+                    template_format: state.currentTemplate,
+                    media_type: 'image',
+                })
+            })
+            .then(r => {
+                if (!r.ok) throw new Error('Failed to save meme');
+                return r.json();
+            })
+            .then(result => {
+                if (saveMemeBtn) {
+                    saveMemeBtn.disabled = false;
+                    saveMemeBtn.textContent = '✅ Sauvegarde !';
+                    setTimeout(() => {
+                        saveMemeBtn.textContent = '💾 Sauvegarder dans Viewer';
+                    }, 2000);
+                }
+            })
+            .catch(err => {
+                console.error('Save meme error:', err);
+                alert('Erreur lors de la sauvegarde du meme.');
+                if (saveMemeBtn) {
+                    saveMemeBtn.disabled = false;
+                    saveMemeBtn.textContent = '💾 Sauvegarder dans Viewer';
+                }
             });
         }
 
@@ -2041,6 +2121,9 @@
 
             // Schedule - send to calendar
             scheduleBtn.addEventListener('click', schedulePost);
+
+            // Save meme to viewer gallery
+            if (saveMemeBtn) saveMemeBtn.addEventListener('click', saveMemeToViewer);
 
             // Import source tabs
             const libraryZone = document.getElementById('library-zone');

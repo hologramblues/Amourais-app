@@ -14,7 +14,17 @@
 <!-- ═══ TOP BAR ═══ -->
 <div class="topbar">
 
-  <div class="topbar-filters">
+  <!-- Tabs -->
+  <div class="viewer-tabs">
+    <button class="viewer-tab active" data-tab="media" onclick="window.__switchTab('media')">
+      📷 Media <span class="tab-count" id="media-count">0</span>
+    </button>
+    <button class="viewer-tab" data-tab="memes" onclick="window.__switchTab('memes')">
+      🎨 Memes <span class="tab-count" id="memes-count">0</span>
+    </button>
+  </div>
+
+  <div class="topbar-filters" id="media-filters">
     <select id="filter-platform">
       <option value="">Toutes les plateformes</option>
       <option value="instagram">&#x1F4F7; Instagram</option>
@@ -54,9 +64,14 @@
   </div>
 </div>
 
-<!-- ═══ GRID ═══ -->
+<!-- ═══ MEDIA GRID ═══ -->
 <div id="media-grid" class="media-grid">
   <div class="loader"><div class="loader-spinner"></div><p>Chargement...</p></div>
+</div>
+
+<!-- ═══ MEMES GRID (hidden by default) ═══ -->
+<div id="memes-grid" class="media-grid" style="display:none;">
+  <div class="loader"><div class="loader-spinner"></div><p>Chargement des memes...</p></div>
 </div>
 
 <!-- ═══ LIGHTBOX ═══ -->

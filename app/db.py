@@ -161,6 +161,26 @@ class ScheduledPost(Base):
     )
 
 
+class SavedMeme(Base):
+    """Memes created in the editor and saved to the viewer gallery."""
+    __tablename__ = "saved_memes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(Text)
+    caption = Column(Text)
+    media_type = Column(Text, nullable=False, default="image")  # image | video
+    template_format = Column(Text)  # square | portrait | story
+    file_path = Column(Text, nullable=False)  # path to the saved meme file
+    thumbnail_path = Column(Text)  # path to thumbnail (for videos)
+    file_size = Column(Integer)
+    source_media_id = Column(Integer, ForeignKey("media_items.id"), nullable=True)
+    created_at = Column(Integer, nullable=False, default=lambda: int(datetime.now().timestamp()))
+
+    __table_args__ = (
+        Index("idx_saved_memes_created", "created_at"),
+    )
+
+
 # ---- Engine & Session ----
 
 engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)

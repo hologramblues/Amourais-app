@@ -1,14 +1,17 @@
-"""Viewer API endpoints for media browsing, comments, and ratings."""
+"""Viewer API endpoints for media browsing, comments, ratings, and saved memes."""
 
 from __future__ import annotations
 
+import base64
+import os
 from datetime import datetime
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from loguru import logger
 from sqlalchemy import func
 
-from app.db import MediaComment, MediaItem, MediaRating, Profile, SessionLocal
+from app.config import EDITOR_OUTPUT_DIR
+from app.db import MediaComment, MediaItem, MediaRating, Profile, SavedMeme, SessionLocal
 
 viewer_api_bp = Blueprint("viewer_api", __name__)
 
@@ -382,6 +385,170 @@ def list_profiles():
         ])
     except Exception as exc:
         logger.error("Error listing profiles: {}", exc)
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Saved Memes
+# ---------------------------------------------------------------------------
+
+@viewer_api_bp.route("/viewer/memes")
+def list_memes():
+    """List saved memes for the viewer memes tab."""
+    db = SessionLocal()
+    try:
+        page = int(request.args.get("page", 1))
+        per_page = int(request.args.get("per_page", 60))
+
+        query = db.query(SavedMeme).order_by(SavedMeme.created_at.desc())
+        total = query.count()
+        items = query.offset((page - 1) * per_page).limit(per_page).all()
+
+        return jsonify({
+            "items": [
+                {
+                    "id": m.id,
+                    "title": m.title or "",
+                    "caption": m.caption or "",
+                    "media_type": m.media_type,
+                    "template_format": m.template_format or "",
+                    "file_url": f"/api/viewer/memes/{m.id}/file",
+                    "thumbnail_url": f"/api/viewer/memes/{m.id}/file",
+                    "file_size": m.file_size,
+                    "created_at": m.created_at,
+                }
+                for m in items
+            ],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": max(1, (total + per_page - 1) // per_page),
+        })
+    except Exception as exc:
+        logger.error("Error listing memes: {}", exc)
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@viewer_api_bp.route("/viewer/memes/<int:meme_id>/file")
+def serve_meme_file(meme_id: int):
+    """Serve a saved meme file."""
+    db = SessionLocal()
+    try:
+        meme = db.query(SavedMeme).filter_by(id=meme_id).first()
+        if not meme:
+            return jsonify({"error": "Meme not found"}), 404
+
+        if not meme.file_path or not os.path.exists(meme.file_path):
+            return jsonify({"error": "Meme file not found on disk"}), 404
+
+        mime = "video/mp4" if meme.media_type == "video" else "image/png"
+        return send_file(meme.file_path, mimetype=mime)
+    except Exception as exc:
+        logger.error("Error serving meme file: {}", exc)
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@viewer_api_bp.route("/viewer/memes", methods=["POST"])
+def save_meme():
+    """Save a meme from the editor to the viewer gallery.
+
+    Accepts JSON with:
+        - image_data: base64 encoded image data (for images)
+        - title: optional title
+        - caption: optional caption
+        - template_format: square | portrait | story
+        - media_type: image | video (default: image)
+        - source_media_id: optional source media ID
+    """
+    from nanoid import generate as nanoid
+
+    db = SessionLocal()
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data"}), 400
+
+        media_type = data.get("media_type", "image")
+        image_data = data.get("image_data", "")
+
+        if not image_data and media_type == "image":
+            return jsonify({"error": "No image data provided"}), 400
+
+        # Ensure output dir
+        EDITOR_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        meme_dir = EDITOR_OUTPUT_DIR / "memes"
+        meme_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save file
+        file_id = nanoid()
+        if media_type == "image":
+            # Decode base64
+            if "," in image_data:
+                image_data = image_data.split(",", 1)[1]
+            file_bytes = base64.b64decode(image_data)
+            file_path = str(meme_dir / f"{file_id}.png")
+            with open(file_path, "wb") as f:
+                f.write(file_bytes)
+            file_size = len(file_bytes)
+        else:
+            return jsonify({"error": "Video meme saving not yet supported"}), 400
+
+        # Save to DB
+        meme = SavedMeme(
+            title=data.get("title", ""),
+            caption=data.get("caption", ""),
+            media_type=media_type,
+            template_format=data.get("template_format", ""),
+            file_path=file_path,
+            file_size=file_size,
+            source_media_id=data.get("source_media_id"),
+        )
+        db.add(meme)
+        db.commit()
+        db.refresh(meme)
+
+        logger.info("Saved meme #{} to {}", meme.id, file_path)
+
+        return jsonify({
+            "id": meme.id,
+            "file_url": f"/api/viewer/memes/{meme.id}/file",
+            "message": "Meme sauvegarde avec succes!",
+        }), 201
+
+    except Exception as exc:
+        logger.exception("Error saving meme: {}", exc)
+        db.rollback()
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+@viewer_api_bp.route("/viewer/memes/<int:meme_id>", methods=["DELETE"])
+def delete_meme(meme_id: int):
+    """Delete a saved meme."""
+    db = SessionLocal()
+    try:
+        meme = db.query(SavedMeme).filter_by(id=meme_id).first()
+        if not meme:
+            return jsonify({"error": "Meme not found"}), 404
+
+        # Delete file
+        if meme.file_path and os.path.exists(meme.file_path):
+            os.remove(meme.file_path)
+
+        db.delete(meme)
+        db.commit()
+
+        return jsonify({"message": "Meme supprime"})
+    except Exception as exc:
+        logger.error("Error deleting meme: {}", exc)
+        db.rollback()
         return jsonify({"error": str(exc)}), 500
     finally:
         db.close()
