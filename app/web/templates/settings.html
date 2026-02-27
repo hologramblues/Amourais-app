@@ -138,6 +138,77 @@
   </div>
 </div>
 
+{# ===== PROXY ===== #}
+<div class="s-section">
+  <div class="s-card">
+    <div class="s-card-header">
+      <h3>Proxy</h3>
+      {% if env.get('PROXY_URL') or env.get('PROXY_INSTAGRAM') %}
+        <span class="s-badge s-badge-green">Configure</span>
+      {% else %}
+        <span class="s-badge s-badge-gray">Non configure</span>
+      {% endif %}
+    </div>
+
+    <details class="mb-3">
+      <summary>Pourquoi utiliser un proxy ?</summary>
+      <div style="padding-top: 0.5rem;">
+        <p><strong>Instagram et TikTok bloquent les IP de serveurs cloud (comme Railway).</strong></p>
+        <p style="color: var(--s-text-secondary); font-size: 0.87rem;">
+          Un proxy residentiel fait croire que la requete vient d'une vraie connexion internet.
+          <br>Services recommandes :
+          <a href="https://www.webshare.io/" target="_blank" rel="noopener">Webshare</a>,
+          <a href="https://smartproxy.com/" target="_blank" rel="noopener">Smartproxy</a>,
+          <a href="https://brightdata.com/" target="_blank" rel="noopener">Bright Data</a>
+        </p>
+        <p style="color: var(--s-text-secondary); font-size: 0.87rem;">
+          Format: <code>http://username:password@host:port</code>
+        </p>
+      </div>
+    </details>
+
+    <form hx-post="/api/settings/env" hx-target="#proxy-status" hx-swap="innerHTML">
+      <label>
+        Proxy global (toutes les plateformes)
+        <div class="password-wrapper">
+          <input type="password" class="secret-field" name="PROXY_URL" value="{{ env.get('PROXY_URL', '') }}" placeholder="http://user:pass@host:port">
+          <button type="button" class="toggle-btn" onclick="toggleSecret(this)">Voir</button>
+        </div>
+        <small>Utilise pour toutes les plateformes sauf si un proxy specifique est defini</small>
+      </label>
+
+      <details class="mt-2">
+        <summary>Proxy par plateforme (optionnel)</summary>
+        <div style="padding-top: 0.5rem;">
+          <div class="grid">
+            <label>
+              Instagram
+              <input type="password" class="secret-field" name="PROXY_INSTAGRAM" value="{{ env.get('PROXY_INSTAGRAM', '') }}" placeholder="http://user:pass@host:port">
+            </label>
+            <label>
+              TikTok
+              <input type="password" class="secret-field" name="PROXY_TIKTOK" value="{{ env.get('PROXY_TIKTOK', '') }}" placeholder="http://user:pass@host:port">
+            </label>
+          </div>
+          <div class="grid">
+            <label>
+              Twitter / X
+              <input type="password" class="secret-field" name="PROXY_TWITTER" value="{{ env.get('PROXY_TWITTER', '') }}" placeholder="http://user:pass@host:port">
+            </label>
+            <label>
+              Reddit
+              <input type="password" class="secret-field" name="PROXY_REDDIT" value="{{ env.get('PROXY_REDDIT', '') }}" placeholder="http://user:pass@host:port">
+            </label>
+          </div>
+        </div>
+      </details>
+
+      <button type="submit" class="mt-2">Sauvegarder</button>
+    </form>
+    <div id="proxy-status" class="mt-1"></div>
+  </div>
+</div>
+
 {# ===== COOKIES ===== #}
 <div class="s-section">
   <div class="s-card">

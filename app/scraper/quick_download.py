@@ -24,7 +24,7 @@ from scrapling.fetchers import StealthyFetcher
 from app.scraper.base import MediaItemData
 from app.scraper.downloaders import download_media, DownloadResult
 
-from app.config import SESSIONS_DIR
+from app.config import SESSIONS_DIR, get_proxy_for_platform
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +138,12 @@ def _extract_instagram(url: str, post_id: str) -> list[MediaItemData]:
         page.wait_for_timeout(3000)
 
     try:
-        adaptor = StealthyFetcher.fetch(url, headless=True, network_idle=True, page_action=page_action)
+        fetch_kwargs = dict(headless=True, network_idle=True, page_action=page_action)
+        proxy = get_proxy_for_platform("instagram")
+        if proxy:
+            fetch_kwargs["proxy"] = proxy
+            fetch_kwargs["geoip"] = True
+        adaptor = StealthyFetcher.fetch(url, **fetch_kwargs)
     except Exception as exc:
         logger.error("Instagram fetch failed: {}", exc)
         return []
@@ -328,7 +333,12 @@ def _extract_tiktok(url: str, post_id: str) -> list[MediaItemData]:
         page.wait_for_timeout(3000)
 
     try:
-        adaptor = StealthyFetcher.fetch(url, headless=True, network_idle=True, page_action=page_action)
+        fetch_kwargs = dict(headless=True, network_idle=True, page_action=page_action)
+        proxy = get_proxy_for_platform("tiktok")
+        if proxy:
+            fetch_kwargs["proxy"] = proxy
+            fetch_kwargs["geoip"] = True
+        adaptor = StealthyFetcher.fetch(url, **fetch_kwargs)
     except Exception as exc:
         logger.error("TikTok fetch failed: {}", exc)
         return []
@@ -609,7 +619,12 @@ def _extract_twitter(url: str, post_id: str) -> list[MediaItemData]:
     # Normalize URL to x.com
     normalized = re.sub(r"twitter\.com", "x.com", url)
     try:
-        adaptor = StealthyFetcher.fetch(normalized, headless=True, network_idle=True, page_action=page_action)
+        fetch_kwargs = dict(headless=True, network_idle=True, page_action=page_action)
+        proxy = get_proxy_for_platform("twitter")
+        if proxy:
+            fetch_kwargs["proxy"] = proxy
+            fetch_kwargs["geoip"] = True
+        adaptor = StealthyFetcher.fetch(normalized, **fetch_kwargs)
     except Exception as exc:
         logger.error("Twitter fetch failed: {}", exc)
         return []
@@ -759,7 +774,12 @@ def _extract_reddit(url: str, post_id: str) -> list[MediaItemData]:
         page.wait_for_timeout(3000)
 
     try:
-        adaptor = StealthyFetcher.fetch(url, headless=True, network_idle=True, page_action=page_action)
+        fetch_kwargs = dict(headless=True, network_idle=True, page_action=page_action)
+        proxy = get_proxy_for_platform("reddit")
+        if proxy:
+            fetch_kwargs["proxy"] = proxy
+            fetch_kwargs["geoip"] = True
+        adaptor = StealthyFetcher.fetch(url, **fetch_kwargs)
     except Exception as exc:
         logger.error("Reddit fetch failed: {}", exc)
         return []

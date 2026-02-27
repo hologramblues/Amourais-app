@@ -303,12 +303,15 @@ class TwitterExtractor(PlatformExtractor):
         # -- Fetch ----------------------------------------------------------
         logger.info("Fetching Twitter profile: {}", media_url)
         try:
-            adaptor = StealthyFetcher.fetch(
-                media_url,
+            fetch_kwargs = dict(
                 headless=True,
                 network_idle=True,
                 page_action=page_action,
             )
+            if opts.proxy:
+                fetch_kwargs["proxy"] = opts.proxy
+                fetch_kwargs["geoip"] = True
+            adaptor = StealthyFetcher.fetch(media_url, **fetch_kwargs)
         except Exception as exc:
             logger.error("StealthyFetcher failed for Twitter: {}", exc)
             return result

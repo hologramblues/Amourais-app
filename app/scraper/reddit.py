@@ -379,12 +379,15 @@ class RedditExtractor(PlatformExtractor):
         # -- Fetch ----------------------------------------------------------
         logger.info("Fetching Reddit profile: {}", submitted_url)
         try:
-            adaptor = StealthyFetcher.fetch(
-                submitted_url,
+            fetch_kwargs = dict(
                 headless=True,
                 network_idle=True,
                 page_action=page_action,
             )
+            if opts.proxy:
+                fetch_kwargs["proxy"] = opts.proxy
+                fetch_kwargs["geoip"] = True
+            adaptor = StealthyFetcher.fetch(submitted_url, **fetch_kwargs)
         except Exception as exc:
             logger.error("StealthyFetcher failed for Reddit: {}", exc)
             return result

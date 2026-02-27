@@ -19,6 +19,7 @@ from app.config import (
     DAILY_MAX_SCROLLS,
     DAILY_SCRAPE_INTERVAL_MINUTES,
     STORAGE_MODE,
+    get_proxy_for_platform,
 )
 from app.db import MediaItem, Profile, ScrapeJob, SessionLocal
 from app.scraper.base import ExtractOptions, PlatformExtractor
@@ -126,11 +127,16 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
     max_scrolls = (
         BACKFILL_MAX_SCROLLS if scrape_mode == "backfill" else DAILY_MAX_SCROLLS
     )
+    proxy = get_proxy_for_platform(profile.platform)
+    if proxy:
+        logger.info("Using proxy for {}: {}...{}", profile.platform, proxy[:20], proxy[-10:])
+
     options = ExtractOptions(
         scrape_mode=scrape_mode,
         max_scrolls=max_scrolls,
         backfill_from=float(profile.backfill_from) if profile.backfill_from else None,
         backfill_to=float(profile.backfill_to) if profile.backfill_to else None,
+        proxy=proxy or None,
     )
 
     # ------------------------------------------------------------------

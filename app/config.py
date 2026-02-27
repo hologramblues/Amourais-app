@@ -48,6 +48,24 @@ EDITOR_UPLOAD_DIR = DATA_DIR / "editor" / "uploads"
 EDITOR_OUTPUT_DIR = DATA_DIR / "editor" / "outputs"
 EDITOR_MAX_FILE_SIZE_MB = int(os.getenv("EDITOR_MAX_FILE_SIZE_MB", "100"))
 
+# Proxy — format: http://username:password@host:port
+# Can be set globally or per-platform (platform-specific takes priority)
+PROXY_URL = os.getenv("PROXY_URL", "")
+PROXY_INSTAGRAM = os.getenv("PROXY_INSTAGRAM", "")
+PROXY_TIKTOK = os.getenv("PROXY_TIKTOK", "")
+PROXY_TWITTER = os.getenv("PROXY_TWITTER", "")
+PROXY_REDDIT = os.getenv("PROXY_REDDIT", "")
+
+def get_proxy_for_platform(platform: str) -> str:
+    """Return proxy URL for a given platform (platform-specific or global fallback)."""
+    specific = {
+        "instagram": PROXY_INSTAGRAM,
+        "tiktok": PROXY_TIKTOK,
+        "twitter": PROXY_TWITTER,
+        "reddit": PROXY_REDDIT,
+    }.get(platform, "")
+    return specific or PROXY_URL
+
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 

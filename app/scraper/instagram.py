@@ -295,12 +295,16 @@ class InstagramExtractor(PlatformExtractor):
         # -- Fetch ----------------------------------------------------------
         logger.info("Fetching Instagram profile: {}", profile_url)
         try:
-            adaptor = StealthyFetcher.fetch(
-                profile_url,
+            fetch_kwargs = dict(
                 headless=True,
                 network_idle=True,
                 page_action=page_action,
             )
+            if opts.proxy:
+                fetch_kwargs["proxy"] = opts.proxy
+                fetch_kwargs["geoip"] = True  # Spoof location to match proxy IP
+                logger.info("Instagram fetch with proxy + geoip enabled")
+            adaptor = StealthyFetcher.fetch(profile_url, **fetch_kwargs)
         except Exception as exc:
             logger.error("StealthyFetcher failed for Instagram: {}", exc)
             return result
