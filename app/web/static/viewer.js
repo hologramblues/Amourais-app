@@ -225,10 +225,15 @@
     const src = item.file_url || item.media_url || "";
 
     if (item.media_type === "video") {
-      const img = document.createElement("img");
-      img.dataset.src = src;
-      img.alt = item.caption || "Video";
-      card.appendChild(img);
+      // Use <video> with preload="none" — no download until visible
+      const vid = document.createElement("video");
+      vid.dataset.src = src;
+      vid.muted = true;
+      vid.playsInline = true;
+      vid.preload = "none";
+      vid.loop = true;
+      vid.setAttribute("loading", "lazy");
+      card.appendChild(vid);
 
       const play = document.createElement("div");
       play.className = "play-icon";
@@ -357,6 +362,8 @@
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             const card = entry.target;
+
+            // Handle images
             const img = card.querySelector("img[data-src]");
             if (img) {
               img.src = img.dataset.src;
@@ -367,6 +374,23 @@
                 img.style.opacity = "0.3";
               };
             }
+
+            // Handle videos — load only metadata (first frame), stay paused
+            const vid = card.querySelector("video[data-src]");
+            if (vid) {
+              vid.src = vid.dataset.src;
+              vid.removeAttribute("data-src");
+              vid.preload = "metadata";
+              vid.onloadeddata = () => {
+                card.classList.remove("loading");
+                vid.pause(); // Make sure it stays paused
+              };
+              vid.onerror = () => {
+                card.classList.remove("loading");
+                vid.style.opacity = "0.3";
+              };
+            }
+
             observer.unobserve(card);
           }
         });
