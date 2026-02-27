@@ -11,40 +11,12 @@
             min-height: 100vh;
         }
 
-        /* Navigation Tabs */
-        .nav-tabs {
-            display: flex;
-            background: #111;
-            border-bottom: 1px solid #222;
-            padding: 0 20px;
-        }
-
-        .nav-tab {
-            padding: 16px 24px;
-            font-size: 14px;
-            font-weight: 500;
-            color: #888;
-            text-decoration: none;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s;
-        }
-
-        .nav-tab:hover {
-            color: #fff;
-        }
-
-        .nav-tab.active {
-            color: #ef4444;
-            border-bottom-color: #ef4444;
-        }
-
-        .nav-tab .icon {
-            margin-right: 8px;
-        }
+        /* Navigation Tabs — handled by shared nav partial */
+        .nav-tabs { display: none; }
 
         .app {
             display: flex;
-            height: calc(100vh - 53px);
+            height: calc(100vh - 56px);
         }
 
         /* Sidebar */

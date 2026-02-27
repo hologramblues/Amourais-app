@@ -4,53 +4,52 @@
 <h1>Dashboard</h1>
 
 {% if storage_mode == "local" %}
-<p style="background: rgba(59,130,246,0.15); border-left: 3px solid #3b82f6; padding: 0.6rem 1rem; border-radius: 4px; font-size: 0.9rem;">
-  <strong>Mode local</strong> — Les medias sont sauvegardes dans <code>{{ data_dir }}/downloads/</code>. Pour activer Google Drive, configurez vos credentials dans <a href="/settings">Settings</a> et passez <code>STORAGE_MODE=gdrive</code> dans le <code>.env</code>.
-</p>
+<div class="s-alert">
+  <strong>Mode local</strong> — Les medias sont sauvegardes dans <code>{{ data_dir }}/downloads/</code>.
+  Pour activer Google Drive, configurez vos credentials dans <a href="/settings">Settings</a>.
+</div>
 {% endif %}
 
-<div class="grid">
-  <article>
-    <header>Profiles</header>
-    <h2>{{ stats.totalProfiles }}</h2>
-    <small>{{ stats.activeProfiles }} actifs</small>
-  </article>
-  <article>
-    <header>Media total</header>
-    <h2>{{ stats.totalMedia }}</h2>
-    <small>{{ stats.uploadedMedia }} uploaded</small>
-  </article>
-  <article>
-    <header>Jobs aujourd'hui</header>
-    <h2>{{ stats.todayJobs }}</h2>
-    <small>{{ stats.runningJobs }} en cours</small>
-  </article>
-  <article>
-    <header>En attente</header>
-    <h2>{{ stats.pendingMedia }}</h2>
-    <small>media a traiter</small>
-  </article>
+<!-- KPI Cards -->
+<div class="s-grid-4">
+  <div class="s-card">
+    <div class="s-card-header"><h5>Profiles</h5></div>
+    <div class="s-card-value">{{ stats.totalProfiles }}</div>
+    <div class="s-card-sub">{{ stats.activeProfiles }} actifs</div>
+  </div>
+  <div class="s-card">
+    <div class="s-card-header"><h5>Media total</h5></div>
+    <div class="s-card-value">{{ stats.totalMedia }}</div>
+    <div class="s-card-sub">{{ stats.uploadedMedia }} uploaded</div>
+  </div>
+  <div class="s-card">
+    <div class="s-card-header"><h5>Jobs aujourd'hui</h5></div>
+    <div class="s-card-value">{{ stats.todayJobs }}</div>
+    <div class="s-card-sub">{{ stats.runningJobs }} en cours</div>
+  </div>
+  <div class="s-card">
+    <div class="s-card-header"><h5>En attente</h5></div>
+    <div class="s-card-value">{{ stats.pendingMedia }}</div>
+    <div class="s-card-sub">media a traiter</div>
+  </div>
 </div>
 
 <!-- Quick Download -->
-<section>
-  <h2>&#x26A1; Quick Download</h2>
-  <p style="font-size: 0.9rem; color: var(--pico-muted-color); margin-bottom: 1rem;">
-    Colle un lien Instagram, TikTok, Twitter/X ou Reddit pour telecharger le media directement.
-  </p>
-  <div style="display: flex; gap: 0.5rem; align-items: stretch;">
+<div class="s-section">
+  <h2>Quick Download</h2>
+  <p>Colle un lien Instagram, TikTok, Twitter/X ou Reddit pour telecharger le media.</p>
+  <div class="s-input-group">
     <input
       type="url"
       id="quick-dl-url"
       placeholder="https://www.instagram.com/p/ABC123/ ..."
-      style="flex: 1; margin-bottom: 0;"
     >
-    <button id="quick-dl-btn" onclick="quickDownload()" style="white-space: nowrap; margin-bottom: 0;">
-      &#x1F4E5; Telecharger
+    <button id="quick-dl-btn" onclick="quickDownload()" class="s-btn-primary">
+      Telecharger
     </button>
   </div>
-  <div id="quick-dl-status" style="margin-top: 0.75rem;"></div>
-</section>
+  <div id="quick-dl-status" class="mt-1"></div>
+</div>
 
 <script>
 function quickDownload() {
@@ -60,14 +59,14 @@ function quickDownload() {
   const url = urlInput.value.trim();
 
   if (!url) {
-    statusDiv.innerHTML = '<small style="color:#ef4444;">Colle une URL valide</small>';
+    statusDiv.innerHTML = '<small class="text-error">Colle une URL valide</small>';
     return;
   }
 
   btn.disabled = true;
   btn.setAttribute('aria-busy', 'true');
-  btn.textContent = 'Téléchargement...';
-  statusDiv.innerHTML = '<small style="color:#3b82f6;" aria-busy="true">Envoi en cours...</small>';
+  btn.textContent = 'En cours...';
+  statusDiv.innerHTML = '<small class="text-secondary">Envoi en cours...</small>';
 
   fetch('/api/quick-download', {
     method: 'POST',
@@ -77,27 +76,26 @@ function quickDownload() {
   .then(r => r.json().then(data => ({ ok: r.ok, data })))
   .then(({ ok, data }) => {
     if (!ok) {
-      statusDiv.innerHTML = `<small style="color:#ef4444;">&#x274C; ${data.error || 'Erreur inconnue'}</small>`;
+      statusDiv.innerHTML = `<small class="text-error">${data.error || 'Erreur inconnue'}</small>`;
     } else {
       const platform = data.platform || '';
       const postId = data.post_id || '';
       statusDiv.innerHTML =
-        `<small style="color:#22c55e;">&#x2705; ${data.message || 'Téléchargement lancé'}</small>` +
-        `<br><small style="color:var(--pico-muted-color);">Plateforme: ${platform} — Post: ${postId}. Le media apparaitra dans le Viewer une fois terminé.</small>`;
+        `<small class="text-success">${data.message || 'Lancement OK'}</small>` +
+        `<br><small class="text-muted">${platform} — ${postId}. Le media apparaitra dans le Viewer.</small>`;
       urlInput.value = '';
     }
   })
   .catch(err => {
-    statusDiv.innerHTML = `<small style="color:#ef4444;">&#x274C; Erreur réseau: ${err.message}</small>`;
+    statusDiv.innerHTML = `<small class="text-error">Erreur reseau: ${err.message}</small>`;
   })
   .finally(() => {
     btn.disabled = false;
     btn.removeAttribute('aria-busy');
-    btn.innerHTML = '&#x1F4E5; Telecharger';
+    btn.textContent = 'Telecharger';
   });
 }
 
-// Allow Enter key to trigger download
 document.getElementById('quick-dl-url').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -106,17 +104,24 @@ document.getElementById('quick-dl-url').addEventListener('keydown', function(e) 
 });
 </script>
 
-<section>
-  <h2>Activite recente</h2>
+<!-- Recent Jobs -->
+<div class="s-section">
+  <div class="s-section-header">
+    <h2>Activite recente</h2>
+  </div>
   <div hx-get="/api/jobs/recent" hx-trigger="load, every 10s" hx-target="#recent-jobs">
     <div id="recent-jobs">
-      <p aria-busy="true">Chargement...</p>
+      <p class="text-muted">Chargement...</p>
     </div>
   </div>
-</section>
+</div>
 
-<section>
-  <h2>Profiles suivis</h2>
+<!-- Profiles -->
+<div class="s-section">
+  <div class="s-section-header">
+    <h2>Profiles suivis</h2>
+    <a href="/profiles" class="s-btn s-btn-sm s-btn-ghost">Voir tout &rarr;</a>
+  </div>
   <table>
     <thead>
       <tr>
@@ -135,27 +140,21 @@ document.getElementById('quick-dl-url').addEventListener('keydown', function(e) 
         <td>{{ p.last_scraped_at|formatdate }}</td>
         <td>
           {% if p.is_active %}
-            <span style="color: #22c55e;">Actif</span>
+            <span class="s-badge s-badge-green"><span class="s-dot s-dot-green"></span>Actif</span>
           {% else %}
-            <span style="color: #6b7280;">Pause</span>
+            <span class="s-badge s-badge-gray"><span class="s-dot s-dot-gray"></span>Pause</span>
           {% endif %}
         </td>
         <td>
-          <button
-            class="outline small"
-            hx-post="/api/profiles/{{ p.id }}/scrape"
-            hx-swap="none"
-          >
-            Scrape Now
-          </button>
+          <button class="s-btn-sm" hx-post="/api/profiles/{{ p.id }}/scrape" hx-swap="none">Scrape</button>
         </td>
       </tr>
       {% else %}
       <tr>
-        <td colspan="5">Aucun profil. <a href="/profiles">Ajouter un profil</a></td>
+        <td colspan="5" class="text-muted">Aucun profil. <a href="/profiles">Ajouter un profil</a></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-</section>
+</div>
 {% endblock %}

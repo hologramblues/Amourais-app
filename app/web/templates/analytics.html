@@ -11,24 +11,8 @@
     <link rel="stylesheet" href="/static/analytics.css">
 </head>
 <body>
-    <!-- Navigation -->
-    <nav class="nav-tabs">
-        <a href="/" class="nav-tab">
-            <span class="icon">&#x2694;</span>Dashboard
-        </a>
-        <a href="/viewer" class="nav-tab">
-            <span class="icon">&#x1F3AC;</span>Viewer
-        </a>
-        <a href="/editor" class="nav-tab">
-            <span class="icon">&#x1F3A8;</span>Editor
-        </a>
-        <a href="/calendar" class="nav-tab">
-            <span class="icon">&#x1F4C5;</span>Calendrier
-        </a>
-        <a href="/analytics" class="nav-tab active">
-            <span class="icon">&#x1F4CA;</span>Analytics
-        </a>
-    </nav>
+    {% set nav_active = 'analytics' %}
+    {% include "partials/nav.html" %}
 
     <div class="app">
         <!-- Header -->

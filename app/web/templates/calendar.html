@@ -11,24 +11,8 @@
     <link rel="stylesheet" href="/static/calendar.css">
 </head>
 <body>
-    <!-- Navigation -->
-    <nav class="nav-tabs">
-        <a href="/" class="nav-tab">
-            <span class="icon">&#x2694;</span>Dashboard
-        </a>
-        <a href="/viewer" class="nav-tab">
-            <span class="icon">&#x1F3AC;</span>Viewer
-        </a>
-        <a href="/editor" class="nav-tab">
-            <span class="icon">&#x1F3A8;</span>Editor
-        </a>
-        <a href="/calendar" class="nav-tab active">
-            <span class="icon">&#x1F4C5;</span>Calendrier
-        </a>
-        <a href="/analytics" class="nav-tab">
-            <span class="icon">&#x1F4CA;</span>Analytics
-        </a>
-    </nav>
+    {% set nav_active = 'calendar' %}
+    {% include "partials/nav.html" %}
 
     <!-- Stats row -->
     <div style="padding: 24px 24px 0;">

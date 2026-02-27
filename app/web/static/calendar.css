@@ -30,48 +30,13 @@ body {
     overflow-x: hidden;
 }
 
-/* Navigation (same as editor) */
-.nav-tabs {
-    display: flex;
-    gap: 0;
-    background: #111;
-    border-bottom: 1px solid var(--cal-border);
-    padding: 0 16px;
-    overflow-x: auto;
-}
-
-.nav-tab {
-    padding: 14px 20px;
-    color: var(--cal-text-muted);
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s;
-    white-space: nowrap;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.nav-tab:hover {
-    color: var(--cal-text);
-    background: rgba(255, 255, 255, 0.03);
-}
-
-.nav-tab.active {
-    color: var(--cal-accent);
-    border-bottom-color: var(--cal-accent);
-}
-
-.nav-tab .icon {
-    font-size: 16px;
-}
+/* Navigation — handled by shared nav partial */
+.nav-tabs { display: none; }
 
 /* Layout */
 .calendar-app {
     display: flex;
-    height: calc(100vh - 49px);
+    height: calc(100vh - 56px);
     overflow: hidden;
 }
 

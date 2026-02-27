@@ -29,43 +29,8 @@ body {
     min-height: 100vh;
 }
 
-/* Navigation */
-.nav-tabs {
-    display: flex;
-    gap: 0;
-    background: #111;
-    border-bottom: 1px solid var(--ana-border);
-    padding: 0 16px;
-    overflow-x: auto;
-}
-
-.nav-tab {
-    padding: 14px 20px;
-    color: var(--ana-muted);
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s;
-    white-space: nowrap;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.nav-tab:hover {
-    color: var(--ana-text);
-    background: rgba(255, 255, 255, 0.03);
-}
-
-.nav-tab.active {
-    color: var(--ana-accent);
-    border-bottom-color: var(--ana-accent);
-}
-
-.nav-tab .icon {
-    font-size: 16px;
-}
+/* Navigation — handled by shared nav partial */
+.nav-tabs { display: none; }
 
 /* Main container */
 .app {

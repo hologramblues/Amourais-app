@@ -3,14 +3,14 @@
 {% block content %}
 <h1>Jobs</h1>
 
-<section>
+<div class="s-section">
   <table>
     <thead>
       <tr>
         <th>ID</th>
         <th>Profil</th>
         <th>Status</th>
-        <th>Declenche par</th>
+        <th>Trigger</th>
         <th>Trouve</th>
         <th>Nouveau</th>
         <th>Download</th>
@@ -20,8 +20,8 @@
       </tr>
     </thead>
     <tbody hx-get="/api/jobs/list" hx-trigger="load, every 10s" hx-swap="innerHTML">
-      <tr><td colspan="10" aria-busy="true">Chargement...</td></tr>
+      <tr><td colspan="10" class="text-muted">Chargement...</td></tr>
     </tbody>
   </table>
-</section>
+</div>
 {% endblock %}

@@ -3,27 +3,35 @@
 {% block content %}
 <h1>Profiles</h1>
 
-<section>
+<div class="s-section">
   <h2>Ajouter un profil</h2>
   <form hx-post="/api/profiles" hx-target="#profile-list" hx-swap="innerHTML" hx-on::after-request="this.reset()">
-    <div class="grid">
-      <select name="platform" required>
-        <option value="">Plateforme...</option>
-        <option value="instagram">Instagram</option>
-        <option value="reddit">Reddit</option>
-        <option value="tiktok">TikTok</option>
-        <option value="twitter">Twitter / X</option>
-      </select>
-      <input type="text" name="username" placeholder="@username (sans le @)" required>
-      <button type="submit">Ajouter</button>
+    <div class="s-grid-3" style="align-items: end;">
+      <label>
+        Plateforme
+        <select name="platform" required>
+          <option value="">Choisir...</option>
+          <option value="instagram">Instagram</option>
+          <option value="reddit">Reddit</option>
+          <option value="tiktok">TikTok</option>
+          <option value="twitter">Twitter / X</option>
+        </select>
+      </label>
+      <label>
+        Username
+        <input type="text" name="username" placeholder="username (sans le @)" required>
+      </label>
+      <div>
+        <button type="submit" class="s-btn-primary" style="width:100%">Ajouter</button>
+      </div>
     </div>
   </form>
-</section>
+</div>
 
-<section>
+<div class="s-section">
   <h2>Profiles suivis</h2>
   <div id="profile-list">
     {% include "partials/profile_list.html" %}
   </div>
-</section>
+</div>
 {% endblock %}

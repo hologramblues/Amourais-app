@@ -1,0 +1,28 @@
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+  .s-header{position:sticky;top:0;z-index:1000;height:56px;background:rgba(10,10,10,0.85);backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2);border-bottom:1px solid #222;display:flex;align-items:center;padding:0 1.5rem;gap:2rem}
+  .s-logo{font-family:'Space Grotesk',system-ui,sans-serif;font-weight:700;font-size:1.15rem;color:#ece7df;text-decoration:none;letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:.5rem;flex-shrink:0;white-space:nowrap}
+  .s-logo-mark{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:#c8102e;color:#fff;font-size:.9rem;line-height:1}
+  .s-nav{display:flex;align-items:center;gap:0;overflow-x:auto;flex:1;-ms-overflow-style:none;scrollbar-width:none}
+  .s-nav::-webkit-scrollbar{display:none}
+  .s-nav a{font-family:'DM Sans',system-ui,sans-serif;font-weight:500;font-size:.8rem;color:#9a948a;text-decoration:none;padding:0 .75rem;height:56px;display:flex;align-items:center;white-space:nowrap;position:relative;transition:color .15s ease;letter-spacing:.02em;text-transform:uppercase}
+  .s-nav a:hover{color:#ece7df}
+  .s-nav a.active{color:#ece7df}
+  .s-nav a.active::after{content:'';position:absolute;bottom:0;left:.75rem;right:.75rem;height:2px;background:#c8102e}
+</style>
+<header class="s-header">
+  <a href="/" class="s-logo">
+    <span class="s-logo-mark">&#x2694;</span>
+    <span>Samourais</span>
+  </a>
+  <nav class="s-nav">
+    <a href="/">Dashboard</a>
+    <a href="/profiles">Profiles</a>
+    <a href="/jobs">Jobs</a>
+    <a href="/viewer" {% if nav_active == 'viewer' %}class="active"{% endif %}>Viewer</a>
+    <a href="/editor" {% if nav_active == 'editor' %}class="active"{% endif %}>Editor</a>
+    <a href="/calendar" {% if nav_active == 'calendar' %}class="active"{% endif %}>Calendrier</a>
+    <a href="/analytics" {% if nav_active == 'analytics' %}class="active"{% endif %}>Analytics</a>
+    <a href="/settings">Settings</a>
+  </nav>
+</header>

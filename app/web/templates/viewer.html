@@ -3,14 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SAMOURAIS SCRAPPER — Viewer</title>
+  <title>SAMOURAIS — Viewer</title>
   <link rel="stylesheet" href="/static/viewer.css">
 </head>
 <body>
 
+{% set nav_active = 'viewer' %}
+{% include "partials/nav.html" %}
+
 <!-- ═══ TOP BAR ═══ -->
 <div class="topbar">
-  <a href="/" class="topbar-brand">&#x2694; SAMOURAIS</a>
 
   <div class="topbar-filters">
     <select id="filter-platform">

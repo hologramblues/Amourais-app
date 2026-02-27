@@ -269,7 +269,7 @@ def jobs_recent():
         )
 
         if not rows:
-            return "<p>Aucun job pour le moment.</p>"
+            return '<p class="text-muted">Aucun job pour le moment.</p>'
 
         html_rows = ""
         for job, profile in rows:
@@ -279,7 +279,7 @@ def jobs_recent():
             html_rows += (
                 f"<tr>"
                 f"<td>{username}</td>"
-                f'<td><span class="status-{color}">{job.status}</span></td>'
+                f'<td><span class="s-badge s-badge-{color}">{job.status}</span></td>'
                 f"<td>{job.media_new}</td>"
                 f"<td>{job.media_uploaded}</td>"
                 f"<td>{date_str}</td>"
@@ -321,7 +321,7 @@ def jobs_list():
             retry_btn = ""
             if job.status == "failed":
                 retry_btn = (
-                    f'<button class="outline small" '
+                    f'<button class="s-btn-sm" '
                     f'hx-post="/api/jobs/{job.id}/retry" hx-swap="none">'
                     f"Retry</button>"
                 )
@@ -329,7 +329,7 @@ def jobs_list():
                 f"<tr>"
                 f"<td>{job.id}</td>"
                 f"<td>{username}</td>"
-                f'<td><span class="status-{color}">{job.status}</span></td>'
+                f'<td><span class="s-badge s-badge-{color}">{job.status}</span></td>'
                 f"<td>{job.triggered_by}</td>"
                 f"<td>{job.media_found}</td>"
                 f"<td>{job.media_new}</td>"

@@ -19,7 +19,8 @@
       <td>{{ p.platform|platformicon|safe }} {{ p.platform }}</td>
       <td><a href="{{ p.profile_url }}" target="_blank" rel="noopener">@{{ p.username }}</a></td>
       <td>
-        <select style="padding:2px 4px; font-size:0.85rem; margin:0; min-width:100px"
+        <select class="s-btn-sm"
+          style="width: auto; min-width: 100px; padding: 0.2rem 1.8rem 0.2rem 0.5rem;"
           hx-patch="/api/profiles/{{ p.id }}"
           hx-target="#profile-list"
           hx-swap="innerHTML"
@@ -29,55 +30,55 @@
           <option value="daily" {{ 'selected' if p.scrape_mode == 'daily' }}>Quotidien</option>
         </select>
       </td>
-      <td>{{ p.scrape_interval_minutes }} min</td>
+      <td class="font-mono" style="font-size:0.8rem">{{ p.scrape_interval_minutes }}m</td>
       <td>{{ p.last_scraped_at|formatdate }}</td>
-      <td>{{ item.media_count }}</td>
+      <td class="font-mono">{{ item.media_count }}</td>
       <td>
         {% if p.is_active %}
-          <span style="color: #22c55e;">Actif</span>
+          <span class="s-badge s-badge-green"><span class="s-dot s-dot-green"></span>Actif</span>
         {% else %}
-          <span style="color: #6b7280;">Pause</span>
+          <span class="s-badge s-badge-gray"><span class="s-dot s-dot-gray"></span>Pause</span>
         {% endif %}
       </td>
       <td>
-        <button class="outline small"
+        <button class="s-btn-sm"
           hx-post="/api/profiles/{{ p.id }}/scrape"
           hx-swap="none">Scrape</button>
         {% if p.is_active %}
-        <button class="outline small secondary"
+        <button class="s-btn-sm s-btn-ghost"
           hx-patch="/api/profiles/{{ p.id }}"
           hx-vals='{"isActive": false}'
           hx-target="#profile-list"
           hx-swap="innerHTML">Pause</button>
         {% else %}
-        <button class="outline small secondary"
+        <button class="s-btn-sm s-btn-ghost"
           hx-patch="/api/profiles/{{ p.id }}"
           hx-vals='{"isActive": true}'
           hx-target="#profile-list"
           hx-swap="innerHTML">Resume</button>
         {% endif %}
-        <button class="outline small contrast"
+        <button class="s-btn-sm s-btn-danger"
           hx-delete="/api/profiles/{{ p.id }}"
           hx-confirm="Supprimer ce profil ?"
           hx-target="#profile-list"
           hx-swap="innerHTML">Suppr</button>
-        <details style="margin-top:4px">
-          <summary style="font-size:0.8rem; cursor:pointer">Dates backfill</summary>
-          <form style="display:flex; gap:6px; align-items:end; margin-top:4px"
-            hx-patch="/api/profiles/{{ p.id }}"
+
+        <details class="s-backfill-details">
+          <summary>Dates backfill</summary>
+          <form hx-patch="/api/profiles/{{ p.id }}"
             hx-target="#profile-list"
             hx-swap="innerHTML">
-            <label style="font-size:0.75rem; margin:0">
+            <label>
               Du
-              <input type="date" name="backfillFrom" style="padding:2px 4px; font-size:0.8rem; margin:0"
+              <input type="date" name="backfillFrom"
                 value="{{ p.backfill_from|timestamptodate if p.backfill_from }}">
             </label>
-            <label style="font-size:0.75rem; margin:0">
+            <label>
               Au
-              <input type="date" name="backfillTo" style="padding:2px 4px; font-size:0.8rem; margin:0"
+              <input type="date" name="backfillTo"
                 value="{{ p.backfill_to|timestamptodate if p.backfill_to }}">
             </label>
-            <button type="submit" class="outline small" style="padding:2px 8px; font-size:0.8rem; margin:0">OK</button>
+            <button type="submit" class="s-btn-sm s-btn-primary">OK</button>
           </form>
         </details>
       </td>
@@ -86,5 +87,5 @@
   </tbody>
 </table>
 {% else %}
-<p>Aucun profil pour l'instant. Ajoutez-en un ci-dessus.</p>
+<p class="text-muted">Aucun profil pour l'instant. Ajoutez-en un ci-dessus.</p>
 {% endif %}

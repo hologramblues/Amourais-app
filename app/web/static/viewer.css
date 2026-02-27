@@ -28,7 +28,7 @@ body {
 /* ========== TOP BAR ========== */
 .topbar {
   position: sticky;
-  top: 0;
+  top: 56px;
   z-index: 100;
   background: var(--bg-card);
   border-bottom: 1px solid var(--border);
@@ -40,11 +40,7 @@ body {
 }
 
 .topbar-brand {
-  font-weight: 700;
-  font-size: 1rem;
-  color: var(--accent);
-  text-decoration: none;
-  white-space: nowrap;
+  display: none;
 }
 
 .topbar-filters {
