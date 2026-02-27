@@ -286,5 +286,46 @@ document.body.addEventListener('htmx:afterRequest', function(evt) {
     setTimeout(function() { banner.style.display = 'none'; }, 8000);
   }
 });
+
+/* ── Cookie upload via JS (bypasses HTMX for reliability) ── */
+document.querySelectorAll('.s-cookie-grid form').forEach(function(form) {
+  /* Remove HTMX attributes so it doesn't interfere */
+  form.removeAttribute('hx-post');
+  form.removeAttribute('hx-encoding');
+  form.removeAttribute('hx-swap');
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var btn = form.querySelector('button[type="submit"]');
+    var targetId = form.getAttribute('hx-target');
+    var statusEl = targetId ? document.querySelector(targetId) : null;
+    var fileInput = form.querySelector('input[type="file"]');
+
+    if (!fileInput || !fileInput.files.length) {
+      if (statusEl) statusEl.innerHTML = '<small style="color:red;">Selectionne un fichier d\'abord</small>';
+      return;
+    }
+
+    var fd = new FormData(form);
+    btn.disabled = true;
+    btn.textContent = 'Upload...';
+
+    fetch('/api/settings/session', {
+      method: 'POST',
+      body: fd
+    })
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+      if (statusEl) statusEl.innerHTML = html;
+      btn.disabled = false;
+      btn.textContent = 'Upload';
+    })
+    .catch(function(err) {
+      if (statusEl) statusEl.innerHTML = '<small style="color:red;">Erreur: ' + err.message + '</small>';
+      btn.disabled = false;
+      btn.textContent = 'Upload';
+    });
+  });
+});
 </script>
 {% endblock %}
