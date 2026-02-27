@@ -14,7 +14,7 @@ from flask import Blueprint, jsonify, render_template, request
 from loguru import logger
 from sqlalchemy import func, desc
 
-from app.config import PLATFORM_URLS, SESSIONS_DIR, BASE_DIR
+from app.config import PLATFORM_URLS, SESSIONS_DIR, BASE_DIR, DATA_DIR, DB_PATH, DOWNLOAD_DIR
 from app.db import MediaItem, Profile, ScrapeJob, SessionLocal
 from app.scheduler import enqueue_manual_scrape
 
@@ -388,6 +388,74 @@ def status():
         return jsonify(profiles=profile_count, media=media_count, pending=pending_count)
     finally:
         db.close()
+
+
+@api_bp.route("/debug/volume")
+def debug_volume():
+    """Diagnostic endpoint to check persistent volume health."""
+    import time
+
+    data_dir = str(DATA_DIR)
+    is_mount = os.path.ismount(data_dir)
+    data_dir_exists = os.path.exists(data_dir)
+
+    # Disk stats
+    disk = {}
+    try:
+        stat = os.statvfs(data_dir)
+        disk = {
+            "total_gb": round((stat.f_frsize * stat.f_blocks) / (1024 ** 3), 2),
+            "free_gb": round((stat.f_frsize * stat.f_bavail) / (1024 ** 3), 2),
+            "used_gb": round((stat.f_frsize * (stat.f_blocks - stat.f_bavail)) / (1024 ** 3), 2),
+        }
+    except Exception as e:
+        disk = {"error": str(e)}
+
+    # Marker file
+    marker_path = Path(data_dir) / ".samourais_volume_marker"
+    marker_value = None
+    if marker_path.exists():
+        marker_value = marker_path.read_text().strip()
+
+    # DB info
+    db_exists = DB_PATH.exists()
+    db_size = DB_PATH.stat().st_size if db_exists else 0
+
+    # Downloads count
+    dl_count = len(list(DOWNLOAD_DIR.glob("**/*"))) if DOWNLOAD_DIR.exists() else 0
+
+    # Top-level contents
+    contents = []
+    if Path(data_dir).exists():
+        contents = sorted([c.name for c in Path(data_dir).iterdir()])
+
+    # Profile / media counts from DB
+    db = SessionLocal()
+    try:
+        profile_count = db.query(func.count(Profile.id)).scalar() or 0
+        media_count = db.query(func.count(MediaItem.id)).scalar() or 0
+    except Exception:
+        profile_count = -1
+        media_count = -1
+    finally:
+        db.close()
+
+    return jsonify({
+        "data_dir": data_dir,
+        "data_dir_env": os.getenv("DATA_DIR", "<not set>"),
+        "data_dir_exists": data_dir_exists,
+        "is_mount_point": is_mount,
+        "disk": disk,
+        "marker_from_previous_boot": marker_value,
+        "volume_persists": marker_value is not None,
+        "db_exists": db_exists,
+        "db_size_kb": round(db_size / 1024, 1),
+        "download_files": dl_count,
+        "profiles_in_db": profile_count,
+        "media_in_db": media_count,
+        "data_dir_contents": contents,
+        "current_time": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+    })
 
 
 # ===========================================================================
