@@ -375,15 +375,18 @@
               };
             }
 
-            // Handle videos — load only metadata (first frame), stay paused
+            // Handle videos — load metadata + seek to show first frame
             const vid = card.querySelector("video[data-src]");
             if (vid) {
               vid.src = vid.dataset.src;
               vid.removeAttribute("data-src");
               vid.preload = "metadata";
-              vid.onloadeddata = () => {
+              vid.onloadedmetadata = () => {
+                vid.currentTime = 0.1; // Force browser to render a frame
+              };
+              vid.onseeked = () => {
                 card.classList.remove("loading");
-                vid.pause(); // Make sure it stays paused
+                vid.pause();
               };
               vid.onerror = () => {
                 card.classList.remove("loading");
