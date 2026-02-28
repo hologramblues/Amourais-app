@@ -263,6 +263,59 @@ class InstagramExtractor(PlatformExtractor):
                 page.reload(wait_until="networkidle")
                 page.wait_for_timeout(2000)
 
+            # 1b. Dismiss consent / GDPR / ad-free subscription popups
+            try:
+                current_url = page.url
+                if "/consent" in current_url or "/challenge" in current_url:
+                    logger.info("Detected consent/challenge page: {}", current_url[:120])
+                    # Try clicking "Not now" or "Decline" buttons
+                    for selector in [
+                        'button:has-text("Not now")',
+                        'button:has-text("Pas maintenant")',
+                        'button:has-text("Decline optional cookies")',
+                        'button:has-text("Refuser")',
+                        'a:has-text("Not now")',
+                        'a:has-text("Pas maintenant")',
+                    ]:
+                        try:
+                            btn = page.locator(selector).first
+                            if btn.is_visible(timeout=1000):
+                                btn.click()
+                                logger.info("Clicked dismiss button: {}", selector)
+                                page.wait_for_timeout(2000)
+                                break
+                        except Exception:
+                            continue
+
+                    # If still on consent page, navigate directly to the profile
+                    if "/consent" in page.url or "/challenge" in page.url:
+                        logger.info("Still on consent page, navigating directly to profile")
+                        page.goto(profile_url, wait_until="networkidle")
+                        page.wait_for_timeout(2000)
+            except Exception as consent_exc:
+                logger.debug("Consent page handling: {}", consent_exc)
+
+            # Also dismiss any overlay/modal popups on the profile page
+            try:
+                for selector in [
+                    'button:has-text("Not Now")',
+                    'button:has-text("Pas maintenant")',
+                    'button:has-text("Not now")',
+                    'button:has-text("Decline optional cookies")',
+                    '[role="dialog"] button:has-text("Not Now")',
+                    '[role="dialog"] button:has-text("Pas maintenant")',
+                ]:
+                    try:
+                        btn = page.locator(selector).first
+                        if btn.is_visible(timeout=500):
+                            btn.click()
+                            logger.info("Dismissed overlay popup: {}", selector)
+                            page.wait_for_timeout(1000)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
             # 2. Set up response interception
             def on_response(response):
                 url = response.url
