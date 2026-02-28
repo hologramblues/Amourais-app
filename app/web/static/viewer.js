@@ -170,6 +170,9 @@
     }
 
     loading = false;
+
+    // If grid doesn't fill viewport (e.g. zoomed out), load more
+    requestAnimationFrame(() => loadMoreIfNeeded());
   }
 
   // ─── Load memes ──────────────────────────────────────────────
@@ -456,19 +459,25 @@
   }
 
   // ─── Infinite scroll ───────────────────────────────────────
-  function setupInfiniteScroll() {
-    window.addEventListener("scroll", () => {
-      const bottom = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
-      if (bottom < 500) {
-        if (activeTab === "media" && !loading && currentPage < totalPages) {
-          currentPage++;
-          loadMedia(true);
-        } else if (activeTab === "memes" && !memeLoading && memePage < memeTotalPages) {
-          memePage++;
-          loadMemes(true);
-        }
+  function needsMoreContent() {
+    return document.documentElement.scrollHeight <= window.innerHeight + 500;
+  }
+
+  function loadMoreIfNeeded() {
+    const bottom = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+    if (bottom < 500 || needsMoreContent()) {
+      if (activeTab === "media" && !loading && currentPage < totalPages) {
+        currentPage++;
+        loadMedia(true);
+      } else if (activeTab === "memes" && !memeLoading && memePage < memeTotalPages) {
+        memePage++;
+        loadMemes(true);
       }
-    });
+    }
+  }
+
+  function setupInfiniteScroll() {
+    window.addEventListener("scroll", loadMoreIfNeeded);
   }
 
   // ─── Filters ────────────────────────────────────────────────
@@ -772,6 +781,8 @@
     size = Math.max(60, Math.min(300, parseInt(size)));
     document.documentElement.style.setProperty("--grid-size", size + "px");
     localStorage.setItem("viewer_zoom", size);
+    // When zooming out, grid may need more content to fill viewport
+    requestAnimationFrame(() => loadMoreIfNeeded());
   }
 
   // ─── Selection mode ─────────────────────────────────────────
