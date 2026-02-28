@@ -54,6 +54,7 @@
       userNameEl.textContent = userName;
     }
 
+    initZoom();
     loadProfiles();
     loadMedia();
     loadMemes();
@@ -756,6 +757,23 @@
     });
   }
 
+  // ─── Zoom ──────────────────────────────────────────────────
+
+  function initZoom() {
+    const saved = localStorage.getItem("viewer_zoom");
+    if (saved) {
+      setZoom(parseInt(saved));
+      const slider = document.getElementById("zoom-slider");
+      if (slider) slider.value = saved;
+    }
+  }
+
+  function setZoom(size) {
+    size = Math.max(60, Math.min(300, parseInt(size)));
+    document.documentElement.style.setProperty("--grid-size", size + "px");
+    localStorage.setItem("viewer_zoom", size);
+  }
+
   // ─── Selection mode ─────────────────────────────────────────
 
   function toggleSelectionMode() {
@@ -893,6 +911,7 @@
   window.__closeLightbox = closeLightbox;
   window.__navLightbox = navigateLightbox;
   window.__switchTab = switchTab;
+  window.__setZoom = setZoom;
   window.__toggleSelectionMode = toggleSelectionMode;
   window.__selectAllVisible = selectAllVisible;
   window.__clearSelection = clearSelection;

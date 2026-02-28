@@ -58,6 +58,12 @@
 
   <span id="topbar-stats" class="topbar-stats"></span>
 
+  <div class="zoom-control">
+    <span class="zoom-icon" title="Vue large">&#x1F50D;&#x2212;</span>
+    <input type="range" id="zoom-slider" min="60" max="300" value="220" step="10" oninput="window.__setZoom(this.value)" title="Taille de la grille">
+    <span class="zoom-icon" title="Vue rapprochee">&#x1F50D;&#x2B;</span>
+  </div>
+
   <button id="btn-select-mode" class="btn-select-mode" onclick="window.__toggleSelectionMode()">&#x2714; Selectionner</button>
 
   <div class="topbar-user">
