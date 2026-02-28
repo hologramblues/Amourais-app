@@ -14,7 +14,7 @@ from flask import Blueprint, jsonify, render_template, request
 from loguru import logger
 from sqlalchemy import func, desc
 
-from app.config import PLATFORM_URLS, SESSIONS_DIR, BASE_DIR, DATA_DIR, DB_PATH, DOWNLOAD_DIR
+from app.config import PLATFORM_URLS, SESSIONS_DIR, BASE_DIR, DATA_DIR, DB_PATH, DOWNLOAD_DIR, SETTINGS_ENV
 from app.db import MediaItem, Profile, ScrapeJob, SessionLocal
 from app.scheduler import enqueue_manual_scrape
 
@@ -25,23 +25,28 @@ api_bp = Blueprint("api", __name__)
 # Helper: read / write .env
 # ---------------------------------------------------------------------------
 def _read_env_file() -> dict[str, str]:
-    env_path = BASE_DIR / ".env"
+    """Read user settings from the persistent .env (survives Railway redeploy)."""
     values: dict[str, str] = {}
-    if not env_path.exists():
-        return values
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        trimmed = line.strip()
-        if not trimmed or trimmed.startswith("#"):
+    # Merge: project-root .env (defaults) then persistent volume .env (overrides)
+    for env_path in [BASE_DIR / ".env", SETTINGS_ENV]:
+        if not env_path.exists():
             continue
-        eq_idx = trimmed.find("=")
-        if eq_idx == -1:
-            continue
-        values[trimmed[:eq_idx].strip()] = trimmed[eq_idx + 1 :].strip()
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            trimmed = line.strip()
+            if not trimmed or trimmed.startswith("#"):
+                continue
+            eq_idx = trimmed.find("=")
+            if eq_idx == -1:
+                continue
+            values[trimmed[:eq_idx].strip()] = trimmed[eq_idx + 1 :].strip()
     return values
 
 
 def _write_env_file(updates: dict[str, str]) -> None:
-    env_path = BASE_DIR / ".env"
+    """Write user settings to the persistent .env on the data volume."""
+    env_path = SETTINGS_ENV  # DATA_DIR/.env — persistent on Railway
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+
     content = ""
     if env_path.exists():
         content = env_path.read_text(encoding="utf-8")
@@ -72,7 +77,7 @@ def _write_env_file(updates: dict[str, str]) -> None:
             new_lines.append(f"{key}={value}")
 
     env_path.write_text("\n".join(new_lines), encoding="utf-8")
-    logger.info("Settings saved to .env: {}", list(updates.keys()))
+    logger.info("Settings saved to {}: {}", env_path, list(updates.keys()))
 
 
 # ---------------------------------------------------------------------------

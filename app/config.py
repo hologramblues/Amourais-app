@@ -3,9 +3,21 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-_ENV_FILE = BASE_DIR / ".env"
 
-load_dotenv(_ENV_FILE)
+# ---------------------------------------------------------------------------
+# Load .env files
+# 1) Project-root .env  — base defaults (local dev, Dockerfile defaults)
+# 2) DATA_DIR/.env       — user settings saved via Settings UI
+#    On Railway DATA_DIR=/data (persistent volume), so settings survive redeploy.
+#    Locally DATA_DIR=<project>/data.
+# ---------------------------------------------------------------------------
+load_dotenv(BASE_DIR / ".env")
+
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
+
+# User-settings .env — lives on the persistent volume so it survives redeploy
+SETTINGS_ENV = DATA_DIR / ".env"
+load_dotenv(SETTINGS_ENV, override=True)
 
 # Server
 PORT = int(os.getenv("PORT", "8080"))
@@ -31,12 +43,6 @@ DAILY_MAX_SCROLLS = int(os.getenv("DAILY_MAX_SCROLLS", "15"))
 DAILY_SCRAPE_INTERVAL_MINUTES = int(os.getenv("DAILY_SCRAPE_INTERVAL_MINUTES", "1440"))
 DELAY_BETWEEN_PROFILES_MS = int(os.getenv("DELAY_BETWEEN_PROFILES_MS", "10000"))
 
-# ---------------------------------------------------------------------------
-# Data directory — on Railway, set DATA_DIR to the volume mount path
-# (e.g. DATA_DIR=/data). Locally, defaults to <project>/data.
-# ---------------------------------------------------------------------------
-DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
-
 # Paths (all derived from DATA_DIR)
 DOWNLOAD_DIR = DATA_DIR / "downloads"
 DB_PATH = DATA_DIR / "samourais.db"
@@ -60,11 +66,11 @@ PROXY_REDDIT = os.getenv("PROXY_REDDIT", "")
 def get_proxy_for_platform(platform: str) -> str:
     """Return proxy URL for a given platform (platform-specific or global fallback).
 
-    Re-reads .env every time so that changes from Settings UI take effect
-    without requiring an app restart.
+    Re-reads the persistent .env every time so that changes from Settings UI
+    take effect without requiring an app restart.
     """
     from dotenv import load_dotenv
-    load_dotenv(_ENV_FILE, override=True)
+    load_dotenv(SETTINGS_ENV, override=True)
 
     specific = {
         "instagram": os.getenv("PROXY_INSTAGRAM", ""),
