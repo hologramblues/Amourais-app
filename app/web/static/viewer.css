@@ -285,6 +285,129 @@ body {
   50% { opacity: 1; }
 }
 
+/* ========== SELECTION MODE ========== */
+
+/* Select button in topbar */
+.btn-select-mode {
+  background: #f7f7f7;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.btn-select-mode:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-select-mode.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* Selection toolbar */
+.selection-toolbar {
+  position: sticky;
+  top: 128px;
+  z-index: 99;
+  background: #fff3f5;
+  border-bottom: 1px solid #f5c6cb;
+  padding: 0.5rem 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.stb-btn {
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.stb-btn:hover {
+  background: #f7f7f7;
+  border-color: #ccc;
+}
+
+.stb-delete {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  margin-left: auto;
+}
+
+.stb-delete:hover:not(:disabled) {
+  background: #c4162f;
+}
+
+.stb-delete:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.stb-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Card checkbox overlay */
+.card-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+  cursor: pointer;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.3));
+}
+
+/* Show checkboxes in selection mode */
+body.selection-active .card-checkbox {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Also show on hover even when not in selection mode */
+.media-card:hover .card-checkbox {
+  opacity: 0.5;
+}
+
+body.selection-active .media-card:hover .card-checkbox {
+  opacity: 1;
+}
+
+/* Selected card style */
+.media-card.selected {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.media-card.selected::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(226, 27, 60, 0.12);
+  pointer-events: none;
+}
+
 /* ========== LIGHTBOX ========== */
 .lightbox {
   position: fixed;

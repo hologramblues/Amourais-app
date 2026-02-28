@@ -16,6 +16,10 @@
   let activeTab = "media"; // "media" or "memes"
   let userName = localStorage.getItem("viewer_user") || "";
 
+  // ─── Selection mode ────────────────────────────────────────
+  let selectionMode = false;
+  let selectedIds = new Set();
+
   const API = "/api/viewer";
 
   // ─── DOM refs ────────────────────────────────────────────────
@@ -219,7 +223,14 @@
     const card = document.createElement("div");
     card.className = "media-card loading";
     card.dataset.index = index;
-    card.onclick = () => openLightbox(index);
+    card.dataset.mediaId = item.id;
+    card.onclick = () => {
+      if (selectionMode) {
+        toggleCardSelection(item.id, card);
+      } else {
+        openLightbox(index);
+      }
+    };
 
     // Determine thumbnail source
     const src = item.file_url || item.media_url || "";
@@ -271,6 +282,13 @@
     }
 
     card.appendChild(overlay);
+
+    // Selection checkbox (hidden by default)
+    const cb = document.createElement("div");
+    cb.className = "card-checkbox";
+    cb.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="10" fill="rgba(0,0,0,0.4)" stroke="white" stroke-width="2"/></svg>';
+    card.appendChild(cb);
+
     return card;
   }
 
@@ -738,10 +756,147 @@
     });
   }
 
+  // ─── Selection mode ─────────────────────────────────────────
+
+  function toggleSelectionMode() {
+    selectionMode = !selectionMode;
+    selectedIds.clear();
+
+    const toolbar = document.getElementById("selection-toolbar");
+    const selectBtn = document.getElementById("btn-select-mode");
+    const cards = document.querySelectorAll("#media-grid .media-card");
+
+    if (selectionMode) {
+      toolbar.style.display = "flex";
+      selectBtn.textContent = "Annuler";
+      selectBtn.classList.add("active");
+      document.body.classList.add("selection-active");
+    } else {
+      toolbar.style.display = "none";
+      selectBtn.textContent = "\u2714 Selectionner";
+      selectBtn.classList.remove("active");
+      document.body.classList.remove("selection-active");
+    }
+
+    // Update all cards visual state
+    cards.forEach((card) => {
+      card.classList.remove("selected");
+      const cb = card.querySelector(".card-checkbox svg");
+      if (cb) {
+        cb.innerHTML = '<circle cx="12" cy="12" r="10" fill="rgba(0,0,0,0.4)" stroke="white" stroke-width="2"/>';
+      }
+    });
+
+    updateSelectionCount();
+  }
+
+  function toggleCardSelection(mediaId, card) {
+    if (selectedIds.has(mediaId)) {
+      selectedIds.delete(mediaId);
+      card.classList.remove("selected");
+      const cb = card.querySelector(".card-checkbox svg");
+      if (cb) cb.innerHTML = '<circle cx="12" cy="12" r="10" fill="rgba(0,0,0,0.4)" stroke="white" stroke-width="2"/>';
+    } else {
+      selectedIds.add(mediaId);
+      card.classList.add("selected");
+      const cb = card.querySelector(".card-checkbox svg");
+      if (cb) cb.innerHTML = '<circle cx="12" cy="12" r="10" fill="#E21B3C" stroke="white" stroke-width="2"/><path d="M8 12l3 3 5-5" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+    }
+    updateSelectionCount();
+  }
+
+  function selectAllVisible() {
+    const cards = document.querySelectorAll("#media-grid .media-card");
+    cards.forEach((card) => {
+      const id = parseInt(card.dataset.mediaId);
+      if (id && !selectedIds.has(id)) {
+        selectedIds.add(id);
+        card.classList.add("selected");
+        const cb = card.querySelector(".card-checkbox svg");
+        if (cb) cb.innerHTML = '<circle cx="12" cy="12" r="10" fill="#E21B3C" stroke="white" stroke-width="2"/><path d="M8 12l3 3 5-5" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+      }
+    });
+    updateSelectionCount();
+  }
+
+  function clearSelection() {
+    selectedIds.clear();
+    const cards = document.querySelectorAll("#media-grid .media-card");
+    cards.forEach((card) => {
+      card.classList.remove("selected");
+      const cb = card.querySelector(".card-checkbox svg");
+      if (cb) cb.innerHTML = '<circle cx="12" cy="12" r="10" fill="rgba(0,0,0,0.4)" stroke="white" stroke-width="2"/>';
+    });
+    updateSelectionCount();
+  }
+
+  function updateSelectionCount() {
+    const countEl = document.getElementById("selection-count");
+    const deleteBtn = document.getElementById("btn-delete-selected");
+    if (countEl) countEl.textContent = selectedIds.size + " selectionne" + (selectedIds.size > 1 ? "s" : "");
+    if (deleteBtn) deleteBtn.disabled = selectedIds.size === 0;
+  }
+
+  async function deleteSelected() {
+    if (selectedIds.size === 0) return;
+
+    const count = selectedIds.size;
+    if (!confirm("Supprimer " + count + " media" + (count > 1 ? "s" : "") + " ?\n\nCette action est irreversible.")) {
+      return;
+    }
+
+    const deleteBtn = document.getElementById("btn-delete-selected");
+    if (deleteBtn) {
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = "Suppression...";
+    }
+
+    try {
+      const res = await fetch(API + "/media/batch", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        alert("Erreur: " + data.error);
+        return;
+      }
+
+      // Remove deleted cards from DOM
+      selectedIds.forEach((id) => {
+        const card = document.querySelector('#media-grid .media-card[data-media-id="' + id + '"]');
+        if (card) card.remove();
+      });
+
+      // Remove from local state
+      mediaItems = mediaItems.filter((item) => !selectedIds.has(item.id));
+
+      // Exit selection mode
+      toggleSelectionMode();
+
+      // Reload to get fresh data
+      loadMedia();
+    } catch (e) {
+      console.error("Failed to delete", e);
+      alert("Erreur lors de la suppression");
+    } finally {
+      if (deleteBtn) {
+        deleteBtn.disabled = false;
+        deleteBtn.textContent = "\uD83D\uDDD1 Supprimer";
+      }
+    }
+  }
+
   // ─── Global handlers ───────────────────────────────────────
   window.__closeLightbox = closeLightbox;
   window.__navLightbox = navigateLightbox;
   window.__switchTab = switchTab;
+  window.__toggleSelectionMode = toggleSelectionMode;
+  window.__selectAllVisible = selectAllVisible;
+  window.__clearSelection = clearSelection;
+  window.__deleteSelected = deleteSelected;
   window.__changeUser = function () {
     promptUserName();
     if (currentIndex >= 0 && mediaItems[currentIndex]) {

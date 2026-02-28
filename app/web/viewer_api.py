@@ -10,7 +10,7 @@ from flask import Blueprint, jsonify, request, send_file
 from loguru import logger
 from sqlalchemy import func
 
-from app.config import EDITOR_OUTPUT_DIR
+from app.config import DOWNLOAD_DIR, EDITOR_OUTPUT_DIR
 from app.db import MediaComment, MediaItem, MediaRating, Profile, SavedMeme, SessionLocal
 
 viewer_api_bp = Blueprint("viewer_api", __name__)
@@ -385,6 +385,60 @@ def list_profiles():
         ])
     except Exception as exc:
         logger.error("Error listing profiles: {}", exc)
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Saved Memes
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Batch delete media
+# ---------------------------------------------------------------------------
+
+@viewer_api_bp.route("/viewer/media/batch", methods=["DELETE"])
+def batch_delete_media():
+    """Delete multiple media items at once (files + DB records)."""
+    db = SessionLocal()
+    try:
+        data = request.get_json(force=True)
+        ids = data.get("ids", [])
+
+        if not ids or not isinstance(ids, list):
+            return jsonify({"error": "ids array required"}), 400
+
+        if len(ids) > 500:
+            return jsonify({"error": "Maximum 500 items per batch"}), 400
+
+        deleted = 0
+        errors = 0
+
+        items = db.query(MediaItem).filter(MediaItem.id.in_(ids)).all()
+
+        for item in items:
+            try:
+                # Delete local file
+                if item.local_path:
+                    file_path = DOWNLOAD_DIR / item.local_path
+                    if file_path.exists():
+                        file_path.unlink()
+
+                # Delete DB record (cascade deletes comments + ratings)
+                db.delete(item)
+                deleted += 1
+            except Exception as exc:
+                logger.error("Error deleting media {}: {}", item.id, exc)
+                errors += 1
+
+        db.commit()
+        logger.info("Batch deleted {} media items ({} errors)", deleted, errors)
+
+        return jsonify({"deleted": deleted, "errors": errors})
+    except Exception as exc:
+        db.rollback()
+        logger.error("Error in batch delete: {}", exc)
         return jsonify({"error": str(exc)}), 500
     finally:
         db.close()

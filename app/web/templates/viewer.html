@@ -58,10 +58,20 @@
 
   <span id="topbar-stats" class="topbar-stats"></span>
 
+  <button id="btn-select-mode" class="btn-select-mode" onclick="window.__toggleSelectionMode()">&#x2714; Selectionner</button>
+
   <div class="topbar-user">
     <span class="user-label">&#x1F464;</span>
     <span class="user-name" id="user-name-display" onclick="window.__changeUser()" title="Cliquer pour changer"></span>
   </div>
+</div>
+
+<!-- ═══ SELECTION TOOLBAR ═══ -->
+<div id="selection-toolbar" class="selection-toolbar" style="display:none;">
+  <button class="stb-btn" onclick="window.__selectAllVisible()">Tout selectionner</button>
+  <button class="stb-btn" onclick="window.__clearSelection()">Deselectionner</button>
+  <span id="selection-count" class="stb-count">0 selectionne</span>
+  <button id="btn-delete-selected" class="stb-btn stb-delete" onclick="window.__deleteSelected()" disabled>&#x1F5D1; Supprimer</button>
 </div>
 
 <!-- ═══ MEDIA GRID ═══ -->
