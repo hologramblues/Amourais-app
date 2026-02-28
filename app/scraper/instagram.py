@@ -165,9 +165,10 @@ def _media_items_from_node(node: dict) -> list[dict]:
             or "video_versions" in child
         )
         if is_video:
+            video_versions = child.get("video_versions") or []
             media_url = (
                 child.get("video_url")
-                or child.get("video_versions", [{}])[0].get("url", "")
+                or (video_versions[0].get("url", "") if video_versions else "")
             )
             media_type = "video"
         else:
@@ -179,7 +180,7 @@ def _media_items_from_node(node: dict) -> list[dict]:
             )
             # Try image_versions2 (API v1 format)
             if not media_url:
-                candidates = child.get("image_versions2", {}).get("candidates", [])
+                candidates = (child.get("image_versions2") or {}).get("candidates") or []
                 if candidates:
                     media_url = candidates[0].get("url", "")
             media_type = "image"
