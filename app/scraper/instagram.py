@@ -309,6 +309,23 @@ class InstagramExtractor(PlatformExtractor):
             logger.error("StealthyFetcher failed for Instagram: {}", exc)
             return result
 
+        # -- Debug: log page status ------------------------------------------
+        try:
+            page_title = adaptor.css("title").first
+            title_text = page_title.text if page_title else "(no title)"
+            page_text = adaptor.get_all_text()[:500] if hasattr(adaptor, 'get_all_text') else ""
+            logger.info("Instagram page title: {}", title_text)
+            if page_text:
+                logger.info("Instagram page text preview: {}", page_text[:300])
+            # Detect login/challenge page
+            page_html = str(adaptor.html)[:2000] if hasattr(adaptor, 'html') else ""
+            if "login" in page_html.lower() or "challenge" in page_html.lower():
+                logger.warning("Instagram returned a login/challenge page — proxy or cookies may be blocked")
+            if "suspicious" in page_html.lower() or "automated" in page_html.lower():
+                logger.warning("Instagram detected automation — bot detection triggered")
+        except Exception as dbg_exc:
+            logger.debug("Debug page inspection failed: {}", dbg_exc)
+
         # -- Phase 1: Parse embedded JSON -----------------------------------
         embedded_nodes: list[dict] = []
         try:
