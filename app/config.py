@@ -57,14 +57,21 @@ PROXY_TWITTER = os.getenv("PROXY_TWITTER", "")
 PROXY_REDDIT = os.getenv("PROXY_REDDIT", "")
 
 def get_proxy_for_platform(platform: str) -> str:
-    """Return proxy URL for a given platform (platform-specific or global fallback)."""
+    """Return proxy URL for a given platform (platform-specific or global fallback).
+
+    Re-reads .env every time so that changes from Settings UI take effect
+    without requiring an app restart.
+    """
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+
     specific = {
-        "instagram": PROXY_INSTAGRAM,
-        "tiktok": PROXY_TIKTOK,
-        "twitter": PROXY_TWITTER,
-        "reddit": PROXY_REDDIT,
+        "instagram": os.getenv("PROXY_INSTAGRAM", ""),
+        "tiktok": os.getenv("PROXY_TIKTOK", ""),
+        "twitter": os.getenv("PROXY_TWITTER", ""),
+        "reddit": os.getenv("PROXY_REDDIT", ""),
     }.get(platform, "")
-    return specific or PROXY_URL
+    return specific or os.getenv("PROXY_URL", "")
 
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
