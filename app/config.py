@@ -2,9 +2,10 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
+_ENV_FILE = BASE_DIR / ".env"
+
+load_dotenv(_ENV_FILE)
 
 # Server
 PORT = int(os.getenv("PORT", "8080"))
@@ -63,7 +64,7 @@ def get_proxy_for_platform(platform: str) -> str:
     without requiring an app restart.
     """
     from dotenv import load_dotenv
-    load_dotenv(override=True)
+    load_dotenv(_ENV_FILE, override=True)
 
     specific = {
         "instagram": os.getenv("PROXY_INSTAGRAM", ""),
