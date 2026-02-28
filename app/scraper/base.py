@@ -36,6 +36,7 @@ class ExtractOptions:
 class ExtractorResult:
     profile_info: ProfileInfo = field(default_factory=ProfileInfo)
     media: list[MediaItemData] = field(default_factory=list)
+    total_seen: int = 0  # total posts found on page (including already-known / skipped)
 
 
 class PlatformExtractor:

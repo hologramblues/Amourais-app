@@ -331,19 +331,38 @@ class InstagramExtractor(PlatformExtractor):
 
             # 3. Scroll the page
             scroll_count = opts.max_scrolls
-            logger.info("Scrolling Instagram profile (up to {} scrolls)", scroll_count)
+            is_backfill = opts.scrape_mode == "backfill"
+            # Backfill: wait longer between scrolls, check less often, allow stalls
+            scroll_pause = 2500 if is_backfill else 1500
+            check_interval = 10 if is_backfill else 5
+            max_stalls = 3 if is_backfill else 1  # allow a few "no new content" checks before stopping
+            stall_count = 0
+
+            logger.info("Scrolling Instagram profile (up to {} scrolls, mode={})", scroll_count, opts.scrape_mode)
             for i in range(scroll_count):
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(scroll_pause)
 
                 # Early-stop heuristic: check if new content appeared
-                if i > 0 and i % 5 == 0:
+                if i > 0 and i % check_interval == 0:
                     current_height = page.evaluate("document.body.scrollHeight")
-                    page.wait_for_timeout(500)
+                    page.wait_for_timeout(1000)
                     new_height = page.evaluate("document.body.scrollHeight")
                     if new_height == current_height:
-                        logger.info("No new content after scroll {}, stopping", i)
-                        break
+                        stall_count += 1
+                        logger.info(
+                            "No new content after scroll {} (stall {}/{})",
+                            i, stall_count, max_stalls,
+                        )
+                        if stall_count >= max_stalls:
+                            logger.info("Max stalls reached at scroll {}, stopping", i)
+                            break
+                        # Wait a bit longer before retrying
+                        page.wait_for_timeout(2000)
+                    else:
+                        stall_count = 0  # reset on new content
+
+            logger.info("Scrolling done after {} iterations (stalls={})", min(i + 1, scroll_count), stall_count)
 
         # -- Fetch ----------------------------------------------------------
         logger.info("Fetching Instagram profile: {}", profile_url)
@@ -425,6 +444,7 @@ class InstagramExtractor(PlatformExtractor):
                 if pid in seen_ids:
                     continue
                 seen_ids.add(pid)
+                result.total_seen += 1
 
                 # Daily mode: stop when we hit already-known content
                 if opts.scrape_mode == "daily" and pid in known_post_ids:
@@ -440,6 +460,7 @@ class InstagramExtractor(PlatformExtractor):
                             stop_early = True
                             break
                     if pid in known_post_ids:
+                        logger.debug("Backfill: skipping known post {}", pid)
                         continue
 
                 result.media.append(MediaItemData(**item))

@@ -167,7 +167,11 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
         return
 
     media_found = len(result.media)
-    logger.info("Extracted {} media items for job {}", media_found, job_id)
+    total_seen = getattr(result, "total_seen", media_found)
+    logger.info(
+        "Extracted {} new media items for job {} (total seen on page: {})",
+        media_found, job_id, total_seen,
+    )
 
     # ------------------------------------------------------------------
     # 6. Update profile display_name / avatar_url
@@ -378,19 +382,29 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
     )
 
     # ------------------------------------------------------------------
-    # 12. Auto-transition: backfill -> daily when no new media found
+    # 12. Auto-transition: backfill -> daily when truly exhausted
     # ------------------------------------------------------------------
-    if scrape_mode == "backfill" and media_new == 0:
-        logger.info(
-            "Backfill complete for @{} (no new media). "
-            "Switching to daily mode (interval={}min)",
-            profile.username,
-            DAILY_SCRAPE_INTERVAL_MINUTES,
-        )
-        profile.scrape_mode = "daily"
-        profile.scrape_interval_minutes = DAILY_SCRAPE_INTERVAL_MINUTES
-        profile.updated_at = _now_ts()
-        db.commit()
+    if scrape_mode == "backfill":
+        if media_new == 0 and total_seen == 0:
+            # Page returned zero content at all — likely blocked or empty profile
+            logger.info(
+                "Backfill for @{}: page returned 0 content. "
+                "Keeping backfill mode (may be a temporary block).",
+                profile.username,
+            )
+        elif media_new == 0 and total_seen > 0:
+            # Found posts but they're all already in DB — true backfill complete
+            logger.info(
+                "Backfill complete for @{} ({} posts seen, all already known). "
+                "Switching to daily mode (interval={}min)",
+                profile.username,
+                total_seen,
+                DAILY_SCRAPE_INTERVAL_MINUTES,
+            )
+            profile.scrape_mode = "daily"
+            profile.scrape_interval_minutes = DAILY_SCRAPE_INTERVAL_MINUTES
+            profile.updated_at = _now_ts()
+            db.commit()
 
     # ------------------------------------------------------------------
     # 13. Update profile.last_scraped_at
