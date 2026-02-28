@@ -256,19 +256,25 @@ class InstagramExtractor(PlatformExtractor):
         def page_action(page):
             nonlocal intercepted_responses
 
-            # 1. Inject cookies
+            # 1. Inject cookies and reload
             if pw_cookies:
                 logger.info("Adding {} Instagram cookies", len(pw_cookies))
                 page.context.add_cookies(pw_cookies)
-                page.reload(wait_until="networkidle")
-                page.wait_for_timeout(2000)
+                try:
+                    # Use "load" instead of "networkidle" — Instagram has constant
+                    # background requests (analytics, tracking) that prevent
+                    # networkidle from ever being reached, causing a 30s timeout.
+                    page.reload(wait_until="load")
+                    page.wait_for_timeout(3000)
+                except Exception as reload_exc:
+                    logger.warning("Page reload after cookies failed: {}. Continuing anyway.", reload_exc)
+                    page.wait_for_timeout(2000)
 
             # 1b. Dismiss consent / GDPR / ad-free subscription popups
             try:
                 current_url = page.url
                 if "/consent" in current_url or "/challenge" in current_url:
                     logger.info("Detected consent/challenge page: {}", current_url[:120])
-                    # Try clicking "Not now" or "Decline" buttons
                     for selector in [
                         'button:has-text("Not now")',
                         'button:has-text("Pas maintenant")',
@@ -290,8 +296,11 @@ class InstagramExtractor(PlatformExtractor):
                     # If still on consent page, navigate directly to the profile
                     if "/consent" in page.url or "/challenge" in page.url:
                         logger.info("Still on consent page, navigating directly to profile")
-                        page.goto(profile_url, wait_until="networkidle")
-                        page.wait_for_timeout(2000)
+                        try:
+                            page.goto(profile_url, wait_until="load")
+                            page.wait_for_timeout(3000)
+                        except Exception:
+                            logger.warning("Direct navigation after consent failed, continuing")
             except Exception as consent_exc:
                 logger.debug("Consent page handling: {}", consent_exc)
 
@@ -316,7 +325,7 @@ class InstagramExtractor(PlatformExtractor):
             except Exception:
                 pass
 
-            # 2. Set up response interception
+            # 2. Set up response interception BEFORE scrolling
             def on_response(response):
                 url = response.url
                 if any(frag in url for frag in ("/graphql", "/api/v1/users/", "/api/v1/feed/", "/api/v1/clips/")):
@@ -521,11 +530,13 @@ class InstagramExtractor(PlatformExtractor):
             if not shortcode or shortcode in seen_ids:
                 continue
             seen_ids.add(shortcode)
+            result.total_seen += 1
 
             if opts.scrape_mode == "daily" and shortcode in known_post_ids:
                 logger.info("DOM fallback daily mode: hit known post {}", shortcode)
                 break
             if opts.scrape_mode == "backfill" and shortcode in known_post_ids:
+                logger.debug("DOM fallback: skipping known post {}", shortcode)
                 continue
 
             # Try to find an image inside the link
