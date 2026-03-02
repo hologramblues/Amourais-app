@@ -1,14 +1,14 @@
 """
-Analytics API blueprint — real metrics from the SAMOURAIS SCRAPPER database.
+Analytics API blueprint — Instagram account stats for @samourais_.
 
 Endpoints:
-    GET /api/analytics/overview               — KPI cards (totals, rates, storage)
-    GET /api/analytics/collection-timeline     — media discovered per day
-    GET /api/analytics/platform-breakdown      — media count by platform
-    GET /api/analytics/top-rated               — top 10 by avg rating
-    GET /api/analytics/scrape-activity         — jobs per day with status breakdown
-    GET /api/analytics/best-posting-times      — hour distribution of original post times
-    GET /api/analytics/content-table           — paginated sortable table of all media
+    GET /api/analytics/account-overview      — profile info, followers, engagement rate
+    GET /api/analytics/follower-growth       — historical followers/following per day
+    GET /api/analytics/engagement            — engagement rate per post over period
+    GET /api/analytics/content-breakdown     — images vs videos distribution
+    GET /api/analytics/best-posting-times    — hour distribution of original post times
+    GET /api/analytics/top-posts             — top 10 posts by engagement (likes + comments)
+    GET /api/analytics/posting-frequency     — posts per week
 
 All endpoints accept ?days=7|30|90 for period filtering.
 """
@@ -23,8 +23,7 @@ from loguru import logger
 from sqlalchemy import func, case, desc
 
 from app.db import (
-    MediaItem, MediaComment, MediaRating, Profile, ScrapeJob,
-    ScheduledPost, SessionLocal,
+    MediaItem, Profile, ProfileSnapshot, SessionLocal,
 )
 
 analytics_api_bp = Blueprint("analytics_api", __name__)
@@ -44,238 +43,230 @@ def _cutoff_ts(days: int) -> int:
     return int((datetime.now() - timedelta(days=days)).timestamp())
 
 
+def _get_main_profile(db):
+    """Get the main Instagram profile (@samourais_) or first active Instagram profile."""
+    profile = (
+        db.query(Profile)
+        .filter(Profile.platform == "instagram", Profile.username == "samourais_")
+        .first()
+    )
+    if not profile:
+        profile = (
+            db.query(Profile)
+            .filter(Profile.platform == "instagram", Profile.is_active == True)  # noqa: E712
+            .first()
+        )
+    return profile
+
+
 # ──────────────────────────────────────────────────────────
-# KPI Overview
+# Account Overview
 # ──────────────────────────────────────────────────────────
-@analytics_api_bp.route("/analytics/overview", methods=["GET"])
-def overview():
-    """KPI cards: total media, this period, avg rating, active profiles, storage."""
+@analytics_api_bp.route("/analytics/account-overview", methods=["GET"])
+def account_overview():
+    """Profile info: followers, following, bio, avatar, verified, posts, engagement rate."""
     days = _days_param()
     cutoff = _cutoff_ts(days)
     db = SessionLocal()
     try:
-        total_media = db.query(func.count(MediaItem.id)).scalar() or 0
-        period_media = (
-            db.query(func.count(MediaItem.id))
-            .filter(MediaItem.discovered_at >= cutoff)
+        profile = _get_main_profile(db)
+        if not profile:
+            return jsonify({"error": "No Instagram profile found"}), 404
+
+        # Average engagement rate from posts in the period
+        avg_likes = (
+            db.query(func.avg(MediaItem.ig_like_count))
+            .filter(
+                MediaItem.profile_id == profile.id,
+                MediaItem.ig_like_count.isnot(None),
+                MediaItem.posted_at >= cutoff,
+            )
+            .scalar() or 0
+        )
+        avg_comments = (
+            db.query(func.avg(MediaItem.ig_comment_count))
+            .filter(
+                MediaItem.profile_id == profile.id,
+                MediaItem.ig_comment_count.isnot(None),
+                MediaItem.posted_at >= cutoff,
+            )
+            .scalar() or 0
+        )
+        followers = profile.followers_count or 0
+        engagement_rate = (
+            round((avg_likes + avg_comments) / followers * 100, 2)
+            if followers > 0 else 0
+        )
+
+        total_posts = (
+            db.query(func.count(func.distinct(MediaItem.post_url)))
+            .filter(MediaItem.profile_id == profile.id)
             .scalar() or 0
         )
 
-        avg_rating = (
-            db.query(func.avg(MediaRating.rating)).scalar()
+        # Follower delta over the period
+        oldest_snapshot = (
+            db.query(ProfileSnapshot)
+            .filter(
+                ProfileSnapshot.profile_id == profile.id,
+                ProfileSnapshot.snapshot_at >= cutoff,
+            )
+            .order_by(ProfileSnapshot.snapshot_at.asc())
+            .first()
         )
-        avg_rating = round(avg_rating, 1) if avg_rating else 0
-
-        active_profiles = (
-            db.query(func.count(Profile.id))
-            .filter(Profile.is_active == True)  # noqa: E712
-            .scalar() or 0
-        )
-
-        total_storage_bytes = (
-            db.query(func.sum(MediaItem.file_size))
-            .filter(MediaItem.file_size.isnot(None))
-            .scalar() or 0
-        )
-
-        total_comments = db.query(func.count(MediaComment.id)).scalar() or 0
-        total_ratings = db.query(func.count(MediaRating.id)).scalar() or 0
-
-        total_jobs = db.query(func.count(ScrapeJob.id)).scalar() or 0
-        completed_jobs = (
-            db.query(func.count(ScrapeJob.id))
-            .filter(ScrapeJob.status == "completed")
-            .scalar() or 0
-        )
-        success_rate = round(completed_jobs / total_jobs * 100, 1) if total_jobs > 0 else 0
-
-        scheduled_posts = (
-            db.query(func.count(ScheduledPost.id))
-            .filter(ScheduledPost.status.in_(["draft", "scheduled"]))
-            .scalar() or 0
-        )
+        follower_delta = 0
+        if oldest_snapshot and oldest_snapshot.followers_count and profile.followers_count:
+            follower_delta = profile.followers_count - oldest_snapshot.followers_count
 
         return jsonify({
-            "total_media": total_media,
-            "period_media": period_media,
-            "avg_rating": avg_rating,
-            "active_profiles": active_profiles,
-            "storage_bytes": total_storage_bytes,
-            "storage_mb": round(total_storage_bytes / (1024 * 1024), 1),
-            "total_comments": total_comments,
-            "total_ratings": total_ratings,
-            "success_rate": success_rate,
-            "scheduled_posts": scheduled_posts,
+            "username": profile.username,
+            "display_name": profile.display_name,
+            "avatar_url": profile.avatar_url,
+            "biography": profile.biography,
+            "is_verified": profile.is_verified or False,
+            "followers_count": profile.followers_count or 0,
+            "following_count": profile.following_count or 0,
+            "media_count": profile.media_count or 0,
+            "total_posts_scraped": total_posts,
+            "engagement_rate": engagement_rate,
+            "avg_likes": round(avg_likes, 1),
+            "avg_comments": round(avg_comments, 1),
+            "follower_delta": follower_delta,
             "days": days,
         })
     except Exception as exc:
-        logger.exception("Error in analytics overview: {}", exc)
+        logger.exception("Error in account overview: {}", exc)
         return jsonify({"error": str(exc)}), 500
     finally:
         db.close()
 
 
 # ──────────────────────────────────────────────────────────
-# Collection Timeline
+# Follower Growth
 # ──────────────────────────────────────────────────────────
-@analytics_api_bp.route("/analytics/collection-timeline", methods=["GET"])
-def collection_timeline():
-    """Media discovered per day, stacked by platform."""
+@analytics_api_bp.route("/analytics/follower-growth", methods=["GET"])
+def follower_growth():
+    """Historical followers/following per day from ProfileSnapshot."""
     days = _days_param()
     cutoff = _cutoff_ts(days)
     db = SessionLocal()
     try:
+        profile = _get_main_profile(db)
+        if not profile:
+            return jsonify({"error": "No Instagram profile found"}), 404
+
+        snapshots = (
+            db.query(ProfileSnapshot)
+            .filter(
+                ProfileSnapshot.profile_id == profile.id,
+                ProfileSnapshot.snapshot_at >= cutoff,
+            )
+            .order_by(ProfileSnapshot.snapshot_at.asc())
+            .all()
+        )
+
+        labels = []
+        followers = []
+        following = []
+        for s in snapshots:
+            day = datetime.fromtimestamp(s.snapshot_at).strftime("%Y-%m-%d")
+            labels.append(day)
+            followers.append(s.followers_count or 0)
+            following.append(s.following_count or 0)
+
+        return jsonify({
+            "labels": labels,
+            "followers": followers,
+            "following": following,
+            "days": days,
+        })
+    except Exception as exc:
+        logger.exception("Error in follower growth: {}", exc)
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+# ──────────────────────────────────────────────────────────
+# Engagement per post
+# ──────────────────────────────────────────────────────────
+@analytics_api_bp.route("/analytics/engagement", methods=["GET"])
+def engagement():
+    """Engagement (likes + comments) per post over the period."""
+    days = _days_param()
+    cutoff = _cutoff_ts(days)
+    db = SessionLocal()
+    try:
+        profile = _get_main_profile(db)
+        if not profile:
+            return jsonify({"error": "No Instagram profile found"}), 404
+
         rows = (
             db.query(
-                MediaItem.platform,
-                MediaItem.discovered_at,
+                MediaItem.posted_at,
+                MediaItem.ig_like_count,
+                MediaItem.ig_comment_count,
+                MediaItem.post_url,
             )
-            .filter(MediaItem.discovered_at >= cutoff)
+            .filter(
+                MediaItem.profile_id == profile.id,
+                MediaItem.posted_at.isnot(None),
+                MediaItem.posted_at >= cutoff,
+                MediaItem.ig_like_count.isnot(None),
+            )
+            .order_by(MediaItem.posted_at.asc())
             .all()
         )
 
-        # Bucket by date and platform
-        buckets: dict[str, dict[str, int]] = {}
-        for platform, ts in rows:
-            if ts is None:
+        # Deduplicate by post_url (carousel items share the same post)
+        seen_urls = set()
+        labels = []
+        likes = []
+        comments = []
+        for posted_at, lc, cc, url in rows:
+            if url in seen_urls:
                 continue
-            day = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
-            if day not in buckets:
-                buckets[day] = {}
-            buckets[day][platform] = buckets[day].get(platform, 0) + 1
-
-        # Build sorted response
-        all_dates = sorted(buckets.keys())
-        platforms = sorted({platform for platform, _ in rows if platform})
-
-        series = {}
-        for p in platforms:
-            series[p] = [buckets.get(d, {}).get(p, 0) for d in all_dates]
+            seen_urls.add(url)
+            day = datetime.fromtimestamp(posted_at).strftime("%d/%m")
+            labels.append(day)
+            likes.append(lc or 0)
+            comments.append(cc or 0)
 
         return jsonify({
-            "labels": all_dates,
-            "series": series,
-            "platforms": platforms,
+            "labels": labels,
+            "likes": likes,
+            "comments": comments,
             "days": days,
         })
     except Exception as exc:
-        logger.exception("Error in collection timeline: {}", exc)
+        logger.exception("Error in engagement: {}", exc)
         return jsonify({"error": str(exc)}), 500
     finally:
         db.close()
 
 
 # ──────────────────────────────────────────────────────────
-# Platform Breakdown
+# Content Breakdown
 # ──────────────────────────────────────────────────────────
-@analytics_api_bp.route("/analytics/platform-breakdown", methods=["GET"])
-def platform_breakdown():
-    """Media count by platform (all time)."""
+@analytics_api_bp.route("/analytics/content-breakdown", methods=["GET"])
+def content_breakdown():
+    """Distribution of images vs videos."""
     db = SessionLocal()
     try:
+        profile = _get_main_profile(db)
+        if not profile:
+            return jsonify({"error": "No Instagram profile found"}), 404
+
         rows = (
-            db.query(MediaItem.platform, func.count(MediaItem.id))
-            .group_by(MediaItem.platform)
+            db.query(MediaItem.media_type, func.count(MediaItem.id))
+            .filter(MediaItem.profile_id == profile.id)
+            .group_by(MediaItem.media_type)
             .all()
         )
-        data = {platform: count for platform, count in rows}
+        data = {media_type: count for media_type, count in rows}
         return jsonify(data)
     except Exception as exc:
-        logger.exception("Error in platform breakdown: {}", exc)
-        return jsonify({"error": str(exc)}), 500
-    finally:
-        db.close()
-
-
-# ──────────────────────────────────────────────────────────
-# Top Rated
-# ──────────────────────────────────────────────────────────
-@analytics_api_bp.route("/analytics/top-rated", methods=["GET"])
-def top_rated():
-    """Top 10 media by average rating."""
-    db = SessionLocal()
-    try:
-        rows = (
-            db.query(
-                MediaItem.id,
-                MediaItem.platform,
-                MediaItem.media_type,
-                MediaItem.post_url,
-                MediaItem.caption,
-                MediaItem.local_path,
-                MediaItem.discovered_at,
-                func.avg(MediaRating.rating).label("avg_rating"),
-                func.count(MediaRating.id).label("rating_count"),
-            )
-            .join(MediaRating, MediaRating.media_item_id == MediaItem.id)
-            .group_by(MediaItem.id)
-            .having(func.count(MediaRating.id) >= 1)
-            .order_by(desc("avg_rating"), desc("rating_count"))
-            .limit(10)
-            .all()
-        )
-
-        results = []
-        for r in rows:
-            results.append({
-                "id": r.id,
-                "platform": r.platform,
-                "media_type": r.media_type,
-                "post_url": r.post_url,
-                "caption": (r.caption or "")[:100],
-                "avg_rating": round(r.avg_rating, 1),
-                "rating_count": r.rating_count,
-                "discovered_at": r.discovered_at,
-            })
-        return jsonify(results)
-    except Exception as exc:
-        logger.exception("Error in top rated: {}", exc)
-        return jsonify({"error": str(exc)}), 500
-    finally:
-        db.close()
-
-
-# ──────────────────────────────────────────────────────────
-# Scrape Activity
-# ──────────────────────────────────────────────────────────
-@analytics_api_bp.route("/analytics/scrape-activity", methods=["GET"])
-def scrape_activity():
-    """Jobs per day with status breakdown."""
-    days = _days_param()
-    cutoff = _cutoff_ts(days)
-    db = SessionLocal()
-    try:
-        rows = (
-            db.query(ScrapeJob.status, ScrapeJob.created_at)
-            .filter(ScrapeJob.created_at >= cutoff)
-            .all()
-        )
-
-        buckets: dict[str, dict[str, int]] = {}
-        for status, ts in rows:
-            if ts is None:
-                continue
-            day = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
-            if day not in buckets:
-                buckets[day] = {}
-            buckets[day][status] = buckets[day].get(status, 0) + 1
-
-        all_dates = sorted(buckets.keys())
-        statuses = ["completed", "failed", "partial", "running", "queued"]
-
-        series = {}
-        for s in statuses:
-            vals = [buckets.get(d, {}).get(s, 0) for d in all_dates]
-            if any(v > 0 for v in vals):
-                series[s] = vals
-
-        return jsonify({
-            "labels": all_dates,
-            "series": series,
-            "days": days,
-        })
-    except Exception as exc:
-        logger.exception("Error in scrape activity: {}", exc)
+        logger.exception("Error in content breakdown: {}", exc)
         return jsonify({"error": str(exc)}), 500
     finally:
         db.close()
@@ -286,12 +277,19 @@ def scrape_activity():
 # ──────────────────────────────────────────────────────────
 @analytics_api_bp.route("/analytics/best-posting-times", methods=["GET"])
 def best_posting_times():
-    """Hour distribution of original post times (from scraped content)."""
+    """Hour distribution of original post times."""
     db = SessionLocal()
     try:
+        profile = _get_main_profile(db)
+        if not profile:
+            return jsonify({"error": "No Instagram profile found"}), 404
+
         rows = (
             db.query(MediaItem.posted_at)
-            .filter(MediaItem.posted_at.isnot(None))
+            .filter(
+                MediaItem.profile_id == profile.id,
+                MediaItem.posted_at.isnot(None),
+            )
             .all()
         )
 
@@ -316,85 +314,118 @@ def best_posting_times():
 
 
 # ──────────────────────────────────────────────────────────
-# Content Table
+# Top Posts
 # ──────────────────────────────────────────────────────────
-@analytics_api_bp.route("/analytics/content-table", methods=["GET"])
-def content_table():
-    """Paginated sortable table of all media with metrics."""
-    days = _days_param()
-    cutoff = _cutoff_ts(days)
-    page = max(1, int(request.args.get("page", 1)))
-    per_page = min(100, max(1, int(request.args.get("per_page", 20))))
-    sort_by = request.args.get("sort", "discovered_at")
-    order = request.args.get("order", "desc")
-    platform_filter = request.args.get("platform")
-
+@analytics_api_bp.route("/analytics/top-posts", methods=["GET"])
+def top_posts():
+    """Top 10 posts by engagement (likes + comments)."""
     db = SessionLocal()
     try:
-        # Base query with aggregates
-        query = (
+        profile = _get_main_profile(db)
+        if not profile:
+            return jsonify({"error": "No Instagram profile found"}), 404
+
+        rows = (
             db.query(
                 MediaItem.id,
-                MediaItem.platform,
-                MediaItem.media_type,
                 MediaItem.post_url,
+                MediaItem.media_type,
                 MediaItem.caption,
-                MediaItem.file_size,
-                MediaItem.discovered_at,
+                MediaItem.ig_like_count,
+                MediaItem.ig_comment_count,
+                MediaItem.ig_view_count,
                 MediaItem.posted_at,
-                func.coalesce(func.avg(MediaRating.rating), 0).label("avg_rating"),
-                func.count(func.distinct(MediaComment.id)).label("comment_count"),
+                MediaItem.local_path,
             )
-            .outerjoin(MediaRating, MediaRating.media_item_id == MediaItem.id)
-            .outerjoin(MediaComment, MediaComment.media_item_id == MediaItem.id)
-            .filter(MediaItem.discovered_at >= cutoff)
+            .filter(
+                MediaItem.profile_id == profile.id,
+                MediaItem.ig_like_count.isnot(None),
+            )
+            .order_by(desc(MediaItem.ig_like_count + func.coalesce(MediaItem.ig_comment_count, 0)))
+            .limit(10)
+            .all()
         )
 
-        if platform_filter:
-            query = query.filter(MediaItem.platform == platform_filter)
-
-        query = query.group_by(MediaItem.id)
-
-        # Sorting
-        sort_map = {
-            "discovered_at": MediaItem.discovered_at,
-            "avg_rating": "avg_rating",
-            "comment_count": "comment_count",
-            "file_size": MediaItem.file_size,
-        }
-        sort_col = sort_map.get(sort_by, MediaItem.discovered_at)
-        if order == "asc":
-            query = query.order_by(sort_col)
-        else:
-            query = query.order_by(desc(sort_col))
-
-        total = query.count()
-        rows = query.offset((page - 1) * per_page).limit(per_page).all()
-
-        items = []
+        results = []
+        seen_urls = set()
         for r in rows:
-            items.append({
+            if r.post_url in seen_urls:
+                continue
+            seen_urls.add(r.post_url)
+            results.append({
                 "id": r.id,
-                "platform": r.platform,
-                "media_type": r.media_type,
                 "post_url": r.post_url,
-                "caption": (r.caption or "")[:80],
-                "file_size": r.file_size,
-                "discovered_at": r.discovered_at,
+                "media_type": r.media_type,
+                "caption": (r.caption or "")[:100],
+                "likes": r.ig_like_count or 0,
+                "comments": r.ig_comment_count or 0,
+                "views": r.ig_view_count,
                 "posted_at": r.posted_at,
-                "avg_rating": round(float(r.avg_rating), 1),
-                "comment_count": r.comment_count,
             })
+        return jsonify(results)
+    except Exception as exc:
+        logger.exception("Error in top posts: {}", exc)
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+# ──────────────────────────────────────────────────────────
+# Posting Frequency
+# ──────────────────────────────────────────────────────────
+@analytics_api_bp.route("/analytics/posting-frequency", methods=["GET"])
+def posting_frequency():
+    """Number of posts per week."""
+    days = _days_param()
+    cutoff = _cutoff_ts(days)
+    db = SessionLocal()
+    try:
+        profile = _get_main_profile(db)
+        if not profile:
+            return jsonify({"error": "No Instagram profile found"}), 404
+
+        rows = (
+            db.query(MediaItem.posted_at, MediaItem.post_url)
+            .filter(
+                MediaItem.profile_id == profile.id,
+                MediaItem.posted_at.isnot(None),
+                MediaItem.posted_at >= cutoff,
+            )
+            .order_by(MediaItem.posted_at.asc())
+            .all()
+        )
+
+        # Deduplicate by post_url (carousel items)
+        seen_urls = set()
+        post_dates = []
+        for ts, url in rows:
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            post_dates.append(ts)
+
+        # Bucket by week
+        buckets: dict[str, int] = {}
+        for ts in post_dates:
+            try:
+                dt = datetime.fromtimestamp(ts)
+                # ISO week start (Monday)
+                week_start = dt - timedelta(days=dt.weekday())
+                week_label = week_start.strftime("%d/%m")
+                buckets[week_label] = buckets.get(week_label, 0) + 1
+            except (OSError, ValueError):
+                pass
+
+        labels = list(buckets.keys())
+        data = list(buckets.values())
 
         return jsonify({
-            "items": items,
-            "total": total,
-            "page": page,
-            "per_page": per_page,
-            "pages": (total + per_page - 1) // per_page,
+            "labels": labels,
+            "data": data,
+            "days": days,
         })
     except Exception as exc:
-        logger.exception("Error in content table: {}", exc)
+        logger.exception("Error in posting frequency: {}", exc)
         return jsonify({"error": str(exc)}), 500
     finally:
         db.close()

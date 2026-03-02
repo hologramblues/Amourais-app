@@ -1,5 +1,5 @@
 // ============================================
-// SAMOURAIS Analytics — Chart.js dashboard
+// SAMOURAIS Analytics — Instagram Account Stats
 // ============================================
 
 (function () {
@@ -7,34 +7,19 @@
 
     // ─── State ────────────────────────────────────────────
     let currentDays = 30;
-    let timelineChart = null;
-    let platformChart = null;
-    let activityChart = null;
+    let followerChart = null;
+    let contentChart = null;
+    let engagementChart = null;
     let postingTimesChart = null;
-    let contentPage = 1;
-    let contentSort = 'discovered_at';
-    let contentOrder = 'desc';
-    let contentPlatform = '';
+    let frequencyChart = null;
 
     // ─── Chart.js defaults ────────────────────────────────
     Chart.defaults.color = '#888';
-    Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+    Chart.defaults.borderColor = 'rgba(0,0,0,0.06)';
     Chart.defaults.font.family = "'Inter', sans-serif";
 
-    const PLATFORM_COLORS = {
-        instagram: '#e1306c',
-        tiktok: '#00f2ea',
-        twitter: '#1da1f2',
-        reddit: '#ff4500',
-    };
-
-    const STATUS_COLORS = {
-        completed: '#22c55e',
-        failed: '#ef4444',
-        partial: '#eab308',
-        running: '#3b82f6',
-        queued: '#6b7280',
-    };
+    const ACCENT = '#E21B3C';
+    const ACCENT_LIGHT = 'rgba(226, 27, 60, 0.15)';
 
     // ─── Fetch helper ─────────────────────────────────────
     async function api(endpoint, params = {}) {
@@ -58,88 +43,125 @@
     // ─── Refresh all data ─────────────────────────────────
     async function refreshAll() {
         await Promise.all([
-            loadOverview(),
-            loadTimeline(),
-            loadPlatformBreakdown(),
-            loadTopRated(),
-            loadScrapeActivity(),
+            loadAccountOverview(),
+            loadFollowerGrowth(),
+            loadContentBreakdown(),
+            loadEngagement(),
             loadPostingTimes(),
-            loadContentTable(),
+            loadTopPosts(),
+            loadPostingFrequency(),
         ]);
     }
 
-    // ─── KPI Cards ────────────────────────────────────────
-    async function loadOverview() {
+    // ─── Account Overview (Profile Header + KPIs) ─────────
+    async function loadAccountOverview() {
         try {
-            const d = await api('overview');
-            setText('kpi-total', d.total_media.toLocaleString());
-            setText('kpi-period', d.period_media.toLocaleString());
-            setText('kpi-period-label', `${d.days} derniers jours`);
-            setText('kpi-rating', d.avg_rating ? `${d.avg_rating} ★` : '—');
-            setText('kpi-profiles', d.active_profiles);
-            setText('kpi-storage', `${d.storage_mb} MB`);
-            setText('kpi-success', `${d.success_rate}%`);
-            setText('kpi-comments', d.total_comments);
-            setText('kpi-scheduled', d.scheduled_posts);
+            const d = await api('account-overview');
+
+            // Profile header
+            const avatar = document.getElementById('profile-avatar');
+            if (avatar && d.avatar_url) avatar.src = d.avatar_url;
+
+            setText('profile-display-name', d.display_name || d.username);
+            setText('profile-username', `@${d.username}`);
+            setText('profile-bio', d.biography || '');
+            setText('profile-followers', formatNumber(d.followers_count));
+            setText('profile-following', formatNumber(d.following_count));
+            setText('profile-posts', formatNumber(d.media_count));
+
+            const badge = document.getElementById('verified-badge');
+            if (badge) badge.style.display = d.is_verified ? 'flex' : 'none';
+
+            // KPI Cards
+            setText('kpi-followers', formatNumber(d.followers_count));
+            const deltaEl = document.getElementById('kpi-follower-delta');
+            if (deltaEl) {
+                if (d.follower_delta > 0) {
+                    deltaEl.textContent = `+${formatNumber(d.follower_delta)} sur ${d.days}j`;
+                    deltaEl.className = 'stat-sub positive';
+                } else if (d.follower_delta < 0) {
+                    deltaEl.textContent = `${formatNumber(d.follower_delta)} sur ${d.days}j`;
+                    deltaEl.className = 'stat-sub negative';
+                } else {
+                    deltaEl.textContent = `Stable sur ${d.days}j`;
+                    deltaEl.className = 'stat-sub';
+                }
+            }
+
+            setText('kpi-engagement', `${d.engagement_rate}%`);
+            setText('kpi-engagement-sub', `Moy. likes + comments / followers`);
+            setText('kpi-avg-likes', formatNumber(Math.round(d.avg_likes)));
+            setText('kpi-avg-comments', `${formatNumber(Math.round(d.avg_comments))} commentaires moy.`);
+            setText('kpi-total-posts', formatNumber(d.media_count));
+            setText('kpi-scraped-posts', `${d.total_posts_scraped} medias scrapes`);
         } catch (e) {
-            console.error('Overview error:', e);
+            console.error('Account overview error:', e);
         }
     }
 
-    // ─── Collection Timeline ──────────────────────────────
-    async function loadTimeline() {
+    // ─── Follower Growth ──────────────────────────────────
+    async function loadFollowerGrowth() {
         try {
-            const d = await api('collection-timeline');
-            const ctx = document.getElementById('timeline-chart');
+            const d = await api('follower-growth');
+            const ctx = document.getElementById('follower-chart');
             if (!ctx) return;
 
-            const datasets = d.platforms.map(p => ({
-                label: p,
-                data: d.series[p] || [],
-                backgroundColor: PLATFORM_COLORS[p] || '#666',
-                borderColor: PLATFORM_COLORS[p] || '#666',
-                borderWidth: 1,
-                borderRadius: 3,
-            }));
+            if (followerChart) followerChart.destroy();
 
-            if (timelineChart) timelineChart.destroy();
-            timelineChart = new Chart(ctx, {
-                type: 'bar',
+            const datasets = [
+                {
+                    label: 'Followers',
+                    data: d.followers,
+                    borderColor: ACCENT,
+                    backgroundColor: ACCENT_LIGHT,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    pointBackgroundColor: ACCENT,
+                    borderWidth: 2,
+                },
+            ];
+
+            followerChart = new Chart(ctx, {
+                type: 'line',
                 data: { labels: d.labels, datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: true, position: 'top', labels: { boxWidth: 12, padding: 16 } },
+                        legend: { display: false },
                     },
                     scales: {
-                        x: { stacked: true, grid: { display: false } },
-                        y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } },
+                        x: { grid: { display: false } },
+                        y: {
+                            beginAtZero: false,
+                            ticks: { callback: v => formatNumber(v) },
+                        },
                     },
                 },
             });
         } catch (e) {
-            console.error('Timeline error:', e);
+            console.error('Follower growth error:', e);
         }
     }
 
-    // ─── Platform Breakdown (Doughnut) ────────────────────
-    async function loadPlatformBreakdown() {
+    // ─── Content Breakdown (Doughnut) ─────────────────────
+    async function loadContentBreakdown() {
         try {
-            const d = await api('platform-breakdown');
-            const ctx = document.getElementById('platform-chart');
+            const d = await api('content-breakdown');
+            const ctx = document.getElementById('content-chart');
             if (!ctx) return;
 
-            const labels = Object.keys(d);
+            const labels = Object.keys(d).map(k => k === 'image' ? 'Photos' : k === 'video' ? 'Videos/Reels' : k);
             const data = Object.values(d);
-            const colors = labels.map(l => PLATFORM_COLORS[l] || '#666');
+            const colors = ['#e1306c', '#833AB4', '#F77737', '#405DE6'];
 
-            if (platformChart) platformChart.destroy();
-            platformChart = new Chart(ctx, {
+            if (contentChart) contentChart.destroy();
+            contentChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels,
-                    datasets: [{ data, backgroundColor: colors, borderWidth: 0 }],
+                    datasets: [{ data, backgroundColor: colors.slice(0, data.length), borderWidth: 0 }],
                 },
                 options: {
                     responsive: true,
@@ -151,60 +173,37 @@
                 },
             });
         } catch (e) {
-            console.error('Platform breakdown error:', e);
+            console.error('Content breakdown error:', e);
         }
     }
 
-    // ─── Top Rated ────────────────────────────────────────
-    async function loadTopRated() {
+    // ─── Engagement per Post ──────────────────────────────
+    async function loadEngagement() {
         try {
-            const items = await api('top-rated');
-            const container = document.getElementById('top-rated-list');
-            if (!container) return;
-
-            if (items.length === 0) {
-                container.innerHTML = '<div class="empty-state"><p>Aucune note pour le moment</p></div>';
-                return;
-            }
-
-            container.innerHTML = items.map((item, i) => {
-                const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-                return `
-                    <div class="best-post-item">
-                        <div class="best-post-rank ${rankClass}">${i + 1}</div>
-                        <div class="best-post-info">
-                            <div class="best-post-caption">${escHtml(item.caption || 'Sans caption')}</div>
-                            <div class="best-post-meta">${item.platform} · ${item.rating_count} note(s)</div>
-                        </div>
-                        <div class="best-post-rating">${item.avg_rating} ★</div>
-                    </div>
-                `;
-            }).join('');
-        } catch (e) {
-            console.error('Top rated error:', e);
-        }
-    }
-
-    // ─── Scrape Activity ──────────────────────────────────
-    async function loadScrapeActivity() {
-        try {
-            const d = await api('scrape-activity');
-            const ctx = document.getElementById('activity-chart');
+            const d = await api('engagement');
+            const ctx = document.getElementById('engagement-chart');
             if (!ctx) return;
 
-            const datasets = Object.entries(d.series).map(([status, data]) => ({
-                label: status,
-                data,
-                backgroundColor: STATUS_COLORS[status] || '#666',
-                borderColor: STATUS_COLORS[status] || '#666',
-                borderWidth: 1,
-                borderRadius: 3,
-            }));
-
-            if (activityChart) activityChart.destroy();
-            activityChart = new Chart(ctx, {
+            if (engagementChart) engagementChart.destroy();
+            engagementChart = new Chart(ctx, {
                 type: 'bar',
-                data: { labels: d.labels, datasets },
+                data: {
+                    labels: d.labels,
+                    datasets: [
+                        {
+                            label: 'Likes',
+                            data: d.likes,
+                            backgroundColor: 'rgba(226, 27, 60, 0.7)',
+                            borderRadius: 3,
+                        },
+                        {
+                            label: 'Commentaires',
+                            data: d.comments,
+                            backgroundColor: 'rgba(131, 58, 180, 0.7)',
+                            borderRadius: 3,
+                        },
+                    ],
+                },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -213,12 +212,12 @@
                     },
                     scales: {
                         x: { stacked: true, grid: { display: false } },
-                        y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } },
+                        y: { stacked: true, beginAtZero: true, ticks: { callback: v => formatNumber(v) } },
                     },
                 },
             });
         } catch (e) {
-            console.error('Activity error:', e);
+            console.error('Engagement error:', e);
         }
     }
 
@@ -237,8 +236,8 @@
                     datasets: [{
                         label: 'Posts par heure',
                         data: d.data,
-                        backgroundColor: 'rgba(239, 68, 68, 0.6)',
-                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(226, 27, 60, 0.5)',
+                        borderColor: ACCENT,
                         borderWidth: 1,
                         borderRadius: 4,
                     }],
@@ -246,9 +245,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                    },
+                    plugins: { legend: { display: false } },
                     scales: {
                         x: { grid: { display: false } },
                         y: { beginAtZero: true, ticks: { stepSize: 1 } },
@@ -260,86 +257,74 @@
         }
     }
 
-    // ─── Content Table ────────────────────────────────────
-    async function loadContentTable() {
+    // ─── Top Posts ─────────────────────────────────────────
+    async function loadTopPosts() {
         try {
-            const params = {
-                page: contentPage,
-                per_page: 15,
-                sort: contentSort,
-                order: contentOrder,
-            };
-            if (contentPlatform) params.platform = contentPlatform;
-
-            const d = await api('content-table', params);
-            const tbody = document.getElementById('content-tbody');
-            const footer = document.getElementById('table-footer-info');
-            const pagination = document.getElementById('table-pagination');
+            const items = await api('top-posts');
+            const tbody = document.getElementById('top-posts-tbody');
             if (!tbody) return;
 
-            if (d.items.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:40px;">Aucun média trouvé</td></tr>';
-            } else {
-                tbody.innerHTML = d.items.map(item => `
+            if (items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#888;padding:40px;">Pas encore de donnees d\'engagement</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = items.map((item, i) => {
+                const rankClass = i === 0 ? 'rank-gold' : i === 1 ? 'rank-silver' : i === 2 ? 'rank-bronze' : '';
+                return `
                     <tr>
-                        <td><span class="platform-badge ${item.platform}">${item.platform}</span></td>
-                        <td>${item.media_type === 'video' ? '🎥' : '🖼'} ${item.media_type}</td>
-                        <td title="${escHtml(item.caption)}">${escHtml(item.caption) || '—'}</td>
-                        <td>${formatDate(item.discovered_at)}</td>
-                        <td>${item.avg_rating > 0 ? `<span class="rating-stars">${item.avg_rating} ★</span>` : '—'}</td>
-                        <td>${item.comment_count || 0}</td>
-                        <td>${formatSize(item.file_size)}</td>
+                        <td><span class="rank-badge ${rankClass}">${i + 1}</span></td>
+                        <td>${item.media_type === 'video' ? '🎥' : '🖼'}</td>
+                        <td class="caption-cell">
+                            ${item.post_url ? `<a href="${item.post_url}" target="_blank" rel="noopener">${escHtml(item.caption || 'Sans caption')}</a>` : escHtml(item.caption || 'Sans caption')}
+                        </td>
+                        <td class="num-cell">${formatNumber(item.likes)}</td>
+                        <td class="num-cell">${formatNumber(item.comments)}</td>
+                        <td class="num-cell">${item.views ? formatNumber(item.views) : '—'}</td>
+                        <td>${formatDate(item.posted_at)}</td>
                     </tr>
-                `).join('');
-            }
-
-            if (footer) {
-                const start = (d.page - 1) * d.per_page + 1;
-                const end = Math.min(d.page * d.per_page, d.total);
-                footer.textContent = `${start}-${end} sur ${d.total} médias`;
-            }
-
-            if (pagination) {
-                let btns = '';
-                btns += `<button class="page-btn" onclick="changePage(${d.page - 1})" ${d.page <= 1 ? 'disabled' : ''}>←</button>`;
-                for (let p = Math.max(1, d.page - 2); p <= Math.min(d.pages, d.page + 2); p++) {
-                    btns += `<button class="page-btn ${p === d.page ? 'active' : ''}" onclick="changePage(${p})">${p}</button>`;
-                }
-                btns += `<button class="page-btn" onclick="changePage(${d.page + 1})" ${d.page >= d.pages ? 'disabled' : ''}>→</button>`;
-                pagination.innerHTML = btns;
-            }
+                `;
+            }).join('');
         } catch (e) {
-            console.error('Content table error:', e);
+            console.error('Top posts error:', e);
         }
     }
 
-    // ─── Table interactions ───────────────────────────────
-    window.changePage = function (p) {
-        if (p < 1) return;
-        contentPage = p;
-        loadContentTable();
-    };
+    // ─── Posting Frequency ────────────────────────────────
+    async function loadPostingFrequency() {
+        try {
+            const d = await api('posting-frequency');
+            const ctx = document.getElementById('frequency-chart');
+            if (!ctx) return;
 
-    window.sortTable = function (col) {
-        if (contentSort === col) {
-            contentOrder = contentOrder === 'desc' ? 'asc' : 'desc';
-        } else {
-            contentSort = col;
-            contentOrder = 'desc';
+            if (frequencyChart) frequencyChart.destroy();
+            frequencyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: d.labels,
+                    datasets: [{
+                        label: 'Posts / semaine',
+                        data: d.data,
+                        backgroundColor: 'rgba(226, 27, 60, 0.6)',
+                        borderColor: ACCENT,
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } },
+                    },
+                },
+            });
+        } catch (e) {
+            console.error('Posting frequency error:', e);
         }
-        contentPage = 1;
-        loadContentTable();
-    };
-
-    window.filterPlatform = function (platform) {
-        contentPlatform = contentPlatform === platform ? '' : platform;
-        contentPage = 1;
-        // Update button states
-        document.querySelectorAll('.filter-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.platform === contentPlatform);
-        });
-        loadContentTable();
-    };
+    }
 
     // ─── Helpers ──────────────────────────────────────────
     function setText(id, text) {
@@ -354,6 +339,13 @@
         return div.innerHTML;
     }
 
+    function formatNumber(n) {
+        if (n == null) return '—';
+        if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+        if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+        return n.toLocaleString('fr-FR');
+    }
+
     function formatDate(ts) {
         if (!ts) return '—';
         try {
@@ -363,13 +355,6 @@
         } catch {
             return '—';
         }
-    }
-
-    function formatSize(bytes) {
-        if (!bytes) return '—';
-        if (bytes < 1024) return `${bytes} B`;
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     }
 
     // ─── Boot ─────────────────────────────────────────────

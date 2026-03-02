@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SAMOURAIS - Analytics</title>
+    <title>SAMOURAIS - Analytics Instagram</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -15,9 +15,38 @@
     {% include "partials/nav.html" %}
 
     <div class="app">
-        <!-- Header -->
+        <!-- Profile Header -->
+        <div class="profile-header">
+            <div class="profile-avatar-wrapper">
+                <img id="profile-avatar" class="profile-avatar" src="" alt="Avatar">
+                <span id="verified-badge" class="verified-badge" style="display:none;">&#x2713;</span>
+            </div>
+            <div class="profile-info">
+                <div class="profile-name-row">
+                    <h1 id="profile-display-name">Chargement...</h1>
+                    <span class="profile-username" id="profile-username">@...</span>
+                </div>
+                <p class="profile-bio" id="profile-bio"></p>
+                <div class="profile-stats-row">
+                    <div class="profile-stat">
+                        <span class="profile-stat-value" id="profile-followers">-</span>
+                        <span class="profile-stat-label">Followers</span>
+                    </div>
+                    <div class="profile-stat">
+                        <span class="profile-stat-value" id="profile-following">-</span>
+                        <span class="profile-stat-label">Following</span>
+                    </div>
+                    <div class="profile-stat">
+                        <span class="profile-stat-value" id="profile-posts">-</span>
+                        <span class="profile-stat-label">Posts</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Period Selector -->
         <div class="header">
-            <h1>&#x1F4CA; Analytics Dashboard</h1>
+            <h2>&#x1F4CA; Statistiques Instagram</h2>
             <div class="period-selector">
                 <button class="period-btn" data-days="7">7 jours</button>
                 <button class="period-btn active" data-days="30">30 jours</button>
@@ -29,70 +58,70 @@
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-card-header">
-                    <div class="stat-icon media">&#x1F4F7;</div>
+                    <div class="stat-icon followers">&#x1F465;</div>
                 </div>
-                <div class="stat-value" id="kpi-total">&mdash;</div>
-                <div class="stat-label">M&eacute;dias total</div>
-                <div class="stat-sub" id="kpi-storage"></div>
+                <div class="stat-value" id="kpi-followers">&mdash;</div>
+                <div class="stat-label">Followers</div>
+                <div class="stat-sub" id="kpi-follower-delta"></div>
             </div>
 
             <div class="stat-card">
                 <div class="stat-card-header">
-                    <div class="stat-icon period">&#x1F4C8;</div>
+                    <div class="stat-icon engagement">&#x1F4AB;</div>
                 </div>
-                <div class="stat-value" id="kpi-period">&mdash;</div>
-                <div class="stat-label" id="kpi-period-label">30 derniers jours</div>
-                <div class="stat-sub"><span id="kpi-scheduled">0</span> posts planifi&eacute;s</div>
+                <div class="stat-value" id="kpi-engagement">&mdash;</div>
+                <div class="stat-label">Taux d'engagement</div>
+                <div class="stat-sub" id="kpi-engagement-sub"></div>
             </div>
 
             <div class="stat-card">
                 <div class="stat-card-header">
-                    <div class="stat-icon rating">&#x2B50;</div>
+                    <div class="stat-icon likes">&#x2764;</div>
                 </div>
-                <div class="stat-value" id="kpi-rating">&mdash;</div>
-                <div class="stat-label">Note moyenne</div>
-                <div class="stat-sub"><span id="kpi-comments">0</span> commentaires</div>
+                <div class="stat-value" id="kpi-avg-likes">&mdash;</div>
+                <div class="stat-label">Likes moyens / post</div>
+                <div class="stat-sub" id="kpi-avg-comments"></div>
             </div>
 
             <div class="stat-card">
                 <div class="stat-card-header">
-                    <div class="stat-icon profiles">&#x1F465;</div>
+                    <div class="stat-icon posts">&#x1F4F7;</div>
                 </div>
-                <div class="stat-value" id="kpi-profiles">&mdash;</div>
-                <div class="stat-label">Profils actifs</div>
-                <div class="stat-sub">Taux de succ&egrave;s: <span id="kpi-success">&mdash;</span></div>
+                <div class="stat-value" id="kpi-total-posts">&mdash;</div>
+                <div class="stat-label">Posts Instagram</div>
+                <div class="stat-sub" id="kpi-scraped-posts"></div>
             </div>
         </div>
 
-        <!-- Charts Row 1: Collection Timeline + Platform Breakdown -->
+        <!-- Charts Row 1: Follower Growth + Content Breakdown -->
         <div class="charts-grid">
             <div class="chart-card">
                 <div class="chart-header">
-                    <span class="chart-title">&#x1F4C8; Collecte par jour</span>
+                    <span class="chart-title">&#x1F4C8; Evolution des followers</span>
                 </div>
                 <div class="chart-container">
-                    <canvas id="timeline-chart"></canvas>
+                    <canvas id="follower-chart"></canvas>
                 </div>
             </div>
 
             <div class="chart-card">
                 <div class="chart-header">
-                    <span class="chart-title">&#x1F310; R&eacute;partition par plateforme</span>
+                    <span class="chart-title">&#x1F3AC; Type de contenu</span>
                 </div>
                 <div class="chart-container">
-                    <canvas id="platform-chart"></canvas>
+                    <canvas id="content-chart"></canvas>
                 </div>
             </div>
         </div>
 
-        <!-- Charts Row 2: Scrape Activity + Best Posting Times -->
+        <!-- Charts Row 2: Engagement + Posting Times -->
         <div class="charts-row2">
             <div class="chart-card">
                 <div class="chart-header">
-                    <span class="chart-title">&#x1F504; Activit&eacute; de scraping</span>
+                    <span class="chart-title">&#x1F4AB; Engagement par post</span>
                 </div>
                 <div class="chart-container">
-                    <canvas id="activity-chart"></canvas>
+                    <canvas id="engagement-chart"></canvas>
                 </div>
             </div>
 
@@ -106,58 +135,47 @@
             </div>
         </div>
 
-        <!-- Top Rated Content -->
-        <div class="charts-grid">
-            <div class="chart-card">
+        <!-- Charts Row 3: Posting Frequency -->
+        <div class="charts-row2">
+            <div class="chart-card" style="flex: 1;">
                 <div class="chart-header">
-                    <span class="chart-title">&#x1F3C6; Top contenu not&eacute;</span>
+                    <span class="chart-title">&#x1F4C5; Fr&eacute;quence de publication</span>
                 </div>
-                <div class="best-posts-list" id="top-rated-list">
-                    <div class="empty-state"><p>Chargement...</p></div>
+                <div class="chart-container">
+                    <canvas id="frequency-chart"></canvas>
                 </div>
             </div>
-
             <div class="chart-card" style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 40px;">
                 <div style="font-size: 48px; margin-bottom: 16px;">&#x2694;</div>
                 <div style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">SAMOURAIS Analytics</div>
                 <div style="color: var(--ana-muted); font-size: 14px; line-height: 1.5;">
-                    Donn&eacute;es en temps r&eacute;el depuis ta base de scraping.<br>
-                    Tout est calcul&eacute; automatiquement.
+                    Stats de ton compte Instagram.<br>
+                    Mises &agrave; jour &agrave; chaque scrape.
                 </div>
             </div>
         </div>
 
-        <!-- Content Table -->
+        <!-- Top Posts -->
         <div class="table-card">
             <div class="table-header">
-                <h3>&#x1F4CB; Tous les m&eacute;dias</h3>
-                <div class="table-filters">
-                    <button class="filter-btn" data-platform="instagram" onclick="filterPlatform('instagram')">&#x1F4F7; Instagram</button>
-                    <button class="filter-btn" data-platform="tiktok" onclick="filterPlatform('tiktok')">&#x1F3B5; TikTok</button>
-                    <button class="filter-btn" data-platform="twitter" onclick="filterPlatform('twitter')">&#x1F426; Twitter</button>
-                    <button class="filter-btn" data-platform="reddit" onclick="filterPlatform('reddit')">&#x1F47D; Reddit</button>
-                </div>
+                <h3>&#x1F3C6; Meilleurs posts par engagement</h3>
             </div>
             <table>
                 <thead>
                     <tr>
-                        <th onclick="sortTable('platform')">Plateforme <span class="sort-icon">&#x2195;</span></th>
+                        <th>#</th>
                         <th>Type</th>
                         <th>Caption</th>
-                        <th onclick="sortTable('discovered_at')">D&eacute;couvert <span class="sort-icon">&#x2195;</span></th>
-                        <th onclick="sortTable('avg_rating')">Note <span class="sort-icon">&#x2195;</span></th>
-                        <th onclick="sortTable('comment_count')">Commentaires <span class="sort-icon">&#x2195;</span></th>
-                        <th onclick="sortTable('file_size')">Taille <span class="sort-icon">&#x2195;</span></th>
+                        <th>&#x2764; Likes</th>
+                        <th>&#x1F4AC; Commentaires</th>
+                        <th>&#x1F440; Vues</th>
+                        <th>Date</th>
                     </tr>
                 </thead>
-                <tbody id="content-tbody">
+                <tbody id="top-posts-tbody">
                     <tr><td colspan="7" style="text-align:center;color:#888;padding:40px;">Chargement...</td></tr>
                 </tbody>
             </table>
-            <div class="table-footer">
-                <span id="table-footer-info">&mdash;</span>
-                <div class="pagination" id="table-pagination"></div>
-            </div>
         </div>
     </div>
 

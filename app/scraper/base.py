@@ -15,12 +15,20 @@ class MediaItemData:
     width: Optional[int] = None
     height: Optional[int] = None
     duration: Optional[float] = None
+    like_count: Optional[int] = None
+    comment_count: Optional[int] = None
+    view_count: Optional[int] = None
 
 
 @dataclass
 class ProfileInfo:
     display_name: Optional[str] = None
     avatar_url: Optional[str] = None
+    followers_count: Optional[int] = None
+    following_count: Optional[int] = None
+    biography: Optional[str] = None
+    is_verified: Optional[bool] = None
+    media_count: Optional[int] = None
 
 
 @dataclass

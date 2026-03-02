@@ -21,7 +21,7 @@ from app.config import (
     STORAGE_MODE,
     get_proxy_for_platform,
 )
-from app.db import MediaItem, Profile, ScrapeJob, SessionLocal
+from app.db import MediaItem, Profile, ProfileSnapshot, ScrapeJob, SessionLocal
 from app.scraper.base import ExtractOptions, PlatformExtractor
 from app.scraper.downloaders import download_media
 
@@ -174,15 +174,59 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
     )
 
     # ------------------------------------------------------------------
-    # 6. Update profile display_name / avatar_url
+    # 6. Update profile display_name / avatar_url / account stats
     # ------------------------------------------------------------------
     if result.profile_info:
         if result.profile_info.display_name:
             profile.display_name = result.profile_info.display_name
         if result.profile_info.avatar_url:
             profile.avatar_url = result.profile_info.avatar_url
+        if result.profile_info.biography is not None:
+            profile.biography = result.profile_info.biography
+        if result.profile_info.is_verified is not None:
+            profile.is_verified = result.profile_info.is_verified
+        if result.profile_info.followers_count is not None:
+            profile.followers_count = result.profile_info.followers_count
+        if result.profile_info.following_count is not None:
+            profile.following_count = result.profile_info.following_count
+        if result.profile_info.media_count is not None:
+            profile.media_count = result.profile_info.media_count
         profile.updated_at = _now_ts()
         db.commit()
+
+        # Create a daily snapshot (max 1 per day per profile)
+        if result.profile_info.followers_count is not None:
+            today_start = int(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+            existing_snapshot = (
+                db.query(ProfileSnapshot)
+                .filter(
+                    ProfileSnapshot.profile_id == profile.id,
+                    ProfileSnapshot.snapshot_at >= today_start,
+                )
+                .first()
+            )
+            if existing_snapshot:
+                # Update today's snapshot
+                existing_snapshot.followers_count = result.profile_info.followers_count
+                existing_snapshot.following_count = result.profile_info.following_count
+                existing_snapshot.media_count = result.profile_info.media_count
+            else:
+                # Create new snapshot
+                snapshot = ProfileSnapshot(
+                    profile_id=profile.id,
+                    followers_count=result.profile_info.followers_count,
+                    following_count=result.profile_info.following_count,
+                    media_count=result.profile_info.media_count,
+                )
+                db.add(snapshot)
+            db.commit()
+            logger.info(
+                "Profile snapshot saved for @{}: {} followers, {} following, {} posts",
+                profile.username,
+                result.profile_info.followers_count,
+                result.profile_info.following_count,
+                result.profile_info.media_count,
+            )
 
     # ------------------------------------------------------------------
     # 7. Insert new media items (ON CONFLICT DO NOTHING via IntegrityError)
@@ -200,6 +244,9 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
             width=item.width,
             height=item.height,
             duration=item.duration,
+            ig_like_count=getattr(item, "like_count", None),
+            ig_comment_count=getattr(item, "comment_count", None),
+            ig_view_count=getattr(item, "view_count", None),
             posted_at=(
                 int(item.posted_at.timestamp()) if item.posted_at else None
             ),

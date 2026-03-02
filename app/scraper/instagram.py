@@ -192,6 +192,23 @@ def _media_items_from_node(node: dict) -> list[dict]:
         height = child.get("dimensions", {}).get("height") or child.get("original_height")
         duration = child.get("video_duration") if is_video else None
 
+        # Engagement counts (from post-level node, not per-child)
+        like_count = (
+            node.get("like_count")
+            or node.get("edge_media_preview_like", {}).get("count")
+            or node.get("edge_liked_by", {}).get("count")
+        )
+        comment_count_ig = (
+            node.get("comment_count")
+            or node.get("edge_media_to_comment", {}).get("count")
+            or node.get("edge_media_preview_comment", {}).get("count")
+        )
+        view_count = (
+            node.get("video_view_count")
+            or node.get("play_count")
+            or node.get("view_count")
+        ) if is_video else None
+
         child_id = f"{post_id}_{idx}" if len(children) > 1 else post_id
 
         items.append({
@@ -204,13 +221,16 @@ def _media_items_from_node(node: dict) -> list[dict]:
             "width": int(width) if width else None,
             "height": int(height) if height else None,
             "duration": float(duration) if duration else None,
+            "like_count": int(like_count) if like_count else None,
+            "comment_count": int(comment_count_ig) if comment_count_ig else None,
+            "view_count": int(view_count) if view_count else None,
         })
 
     return items
 
 
 def _extract_profile_info(data: Any) -> ProfileInfo | None:
-    """Try to pull display_name and avatar_url from any JSON blob."""
+    """Try to pull display_name, avatar_url, and account stats from any JSON blob."""
     info = ProfileInfo()
     if not isinstance(data, dict):
         return None
@@ -222,9 +242,36 @@ def _extract_profile_info(data: Any) -> ProfileInfo | None:
             info.avatar_url = obj["profile_pic_url_hd"]
         elif obj.get("profile_pic_url") and not info.avatar_url:
             info.avatar_url = obj["profile_pic_url"]
+        # Biography
+        if obj.get("biography") and not info.biography:
+            info.biography = obj["biography"]
+        # Verified
+        if "is_verified" in obj and info.is_verified is None:
+            info.is_verified = bool(obj["is_verified"])
+        # Followers count (GraphQL: edge_followed_by.count, API v1: follower_count)
+        if info.followers_count is None:
+            fc = obj.get("edge_followed_by", {}).get("count") if isinstance(obj.get("edge_followed_by"), dict) else None
+            if fc is None:
+                fc = obj.get("follower_count")
+            if fc is not None:
+                info.followers_count = int(fc)
+        # Following count
+        if info.following_count is None:
+            fg = obj.get("edge_follow", {}).get("count") if isinstance(obj.get("edge_follow"), dict) else None
+            if fg is None:
+                fg = obj.get("following_count")
+            if fg is not None:
+                info.following_count = int(fg)
+        # Media count (total posts)
+        if info.media_count is None:
+            mc = obj.get("edge_owner_to_timeline_media", {}).get("count") if isinstance(obj.get("edge_owner_to_timeline_media"), dict) else None
+            if mc is None:
+                mc = obj.get("media_count")
+            if mc is not None:
+                info.media_count = int(mc)
 
     _walk_json(data, _visitor)
-    if info.display_name or info.avatar_url:
+    if info.display_name or info.avatar_url or info.followers_count is not None:
         return info
     return None
 

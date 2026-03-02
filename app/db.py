@@ -18,6 +18,11 @@ class Profile(Base):
     profile_url = Column(Text, nullable=False)
     display_name = Column(Text)
     avatar_url = Column(Text)
+    biography = Column(Text)
+    is_verified = Column(Boolean)
+    followers_count = Column(Integer)
+    following_count = Column(Integer)
+    media_count = Column(Integer)
     is_active = Column(Boolean, nullable=False, default=True)
     scrape_mode = Column(Text, nullable=False, default="backfill")  # backfill | daily
     scrape_interval_minutes = Column(Integer, nullable=False, default=360)
@@ -30,6 +35,7 @@ class Profile(Base):
 
     media_items = relationship("MediaItem", back_populates="profile", cascade="all, delete-orphan")
     scrape_jobs = relationship("ScrapeJob", back_populates="profile", cascade="all, delete-orphan")
+    snapshots = relationship("ProfileSnapshot", back_populates="profile", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("platform", "username", name="idx_profiles_platform_username"),
@@ -58,6 +64,9 @@ class MediaItem(Base):
     height = Column(Integer)
     duration = Column(Float)
     caption = Column(Text)
+    ig_like_count = Column(Integer)
+    ig_comment_count = Column(Integer)
+    ig_view_count = Column(Integer)
     posted_at = Column(Integer)  # unix timestamp
     status = Column(Text, nullable=False, default="pending")
     local_path = Column(Text)
@@ -110,6 +119,25 @@ class MediaRating(Base):
     __table_args__ = (
         UniqueConstraint("media_item_id", "user_name", name="idx_rating_unique"),
         Index("idx_ratings_media", "media_item_id"),
+    )
+
+
+class ProfileSnapshot(Base):
+    """Daily snapshot of profile stats for tracking growth over time."""
+    __tablename__ = "profile_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    profile_id = Column(Integer, ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False)
+    followers_count = Column(Integer)
+    following_count = Column(Integer)
+    media_count = Column(Integer)
+    snapshot_at = Column(Integer, nullable=False, default=lambda: int(datetime.now().timestamp()))
+
+    profile = relationship("Profile", back_populates="snapshots")
+
+    __table_args__ = (
+        Index("idx_snapshots_profile", "profile_id"),
+        Index("idx_snapshots_date", "snapshot_at"),
     )
 
 
