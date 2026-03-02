@@ -215,10 +215,47 @@ engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
 SessionLocal = sessionmaker(bind=engine)
 
 
+def _migrate_add_columns():
+    """Add new columns to existing tables (SQLite ALTER TABLE).
+
+    create_all() only creates NEW tables — it never adds columns to
+    existing ones.  We run ALTER TABLE ADD COLUMN for every column that
+    may be missing.  SQLite raises an OperationalError if the column
+    already exists, which we silently ignore.
+    """
+    import sqlite3
+
+    conn = sqlite3.connect(str(DB_PATH))
+    cur = conn.cursor()
+
+    migrations = [
+        # Profile — analytics columns
+        ("profiles", "biography",        "TEXT"),
+        ("profiles", "is_verified",      "BOOLEAN"),
+        ("profiles", "followers_count",  "INTEGER"),
+        ("profiles", "following_count",  "INTEGER"),
+        ("profiles", "media_count",      "INTEGER"),
+        # MediaItem — Instagram engagement
+        ("media_items", "ig_like_count",    "INTEGER"),
+        ("media_items", "ig_comment_count", "INTEGER"),
+        ("media_items", "ig_view_count",    "INTEGER"),
+    ]
+
+    for table, column, col_type in migrations:
+        try:
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
+    conn.commit()
+    conn.close()
+
+
 def init_db():
-    """Create tables if they don't exist."""
+    """Create tables if they don't exist, then run column migrations."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(engine)
+    _migrate_add_columns()
 
 
 def get_db():
