@@ -146,21 +146,31 @@
         grid.innerHTML = "";
         mediaItems = [];
         lastWeekKey = "";
+        currentWeekGroup = null;
       }
 
       const startIdx = mediaItems.length;
       mediaItems.push(...data.items);
 
       data.items.forEach((item, i) => {
-        // Insert week separator when the week changes
+        // Insert week separator + group when the week changes
         const ts = item.posted_at || item.discovered_at;
         const wk = weekKey(ts);
         if (wk !== lastWeekKey) {
-          grid.appendChild(createWeekSeparator(ts));
+          grid.appendChild(createWeekSeparator(ts, wk));
+          currentWeekGroup = createWeekGroup(wk);
+          grid.appendChild(currentWeekGroup);
           lastWeekKey = wk;
         }
-        grid.appendChild(createCard(item, startIdx + i));
+        if (currentWeekGroup) {
+          currentWeekGroup.appendChild(createCard(item, startIdx + i));
+        } else {
+          grid.appendChild(createCard(item, startIdx + i));
+        }
       });
+
+      // Update media count badges on each week header
+      updateWeekCounts();
 
       // Lazy load images
       observeImages();
@@ -434,6 +444,9 @@
     );
 
     document.querySelectorAll("#media-grid .media-card.loading").forEach((card) => {
+      // Skip cards inside collapsed week groups (will be observed when expanded)
+      const weekGroup = card.closest(".week-group");
+      if (weekGroup && weekGroup.classList.contains("collapsed")) return;
       observer.observe(card);
     });
   }
@@ -760,6 +773,15 @@
 
   // ─── Week separator helpers ────────────────────────────────
   let lastWeekKey = "";  // Tracks last week rendered (for append mode)
+  let currentWeekGroup = null; // Current week-group container
+
+  // Track collapsed weeks in localStorage
+  const collapsedWeeks = new Set(
+    JSON.parse(localStorage.getItem("viewer_collapsed_weeks") || "[]")
+  );
+  function saveCollapsedWeeks() {
+    localStorage.setItem("viewer_collapsed_weeks", JSON.stringify([...collapsedWeeks]));
+  }
 
   function getWeekMonday(ts) {
     if (!ts) return null;
@@ -786,11 +808,79 @@
     });
   }
 
-  function createWeekSeparator(ts) {
+  function countWeekItems(wk) {
+    return mediaItems.filter(item => {
+      const ts = item.posted_at || item.discovered_at;
+      return weekKey(ts) === wk;
+    }).length;
+  }
+
+  function createWeekSeparator(ts, wk) {
     const sep = document.createElement("div");
     sep.className = "week-separator";
-    sep.textContent = weekLabel(ts);
+    sep.dataset.weekKey = wk;
+
+    const isCollapsed = collapsedWeeks.has(wk);
+    if (isCollapsed) sep.classList.add("collapsed");
+
+    // Arrow icon
+    const arrow = document.createElement("span");
+    arrow.className = "week-arrow";
+    sep.appendChild(arrow);
+
+    // Label
+    const label = document.createElement("span");
+    label.className = "week-label";
+    label.textContent = weekLabel(ts);
+    sep.appendChild(label);
+
+    // Media count badge (updated later)
+    const badge = document.createElement("span");
+    badge.className = "week-count";
+    sep.appendChild(badge);
+
+    // Toggle on click
+    sep.onclick = () => toggleWeekGroup(wk);
+
     return sep;
+  }
+
+  function createWeekGroup(wk) {
+    const group = document.createElement("div");
+    group.className = "week-group";
+    group.dataset.weekKey = wk;
+    if (collapsedWeeks.has(wk)) group.classList.add("collapsed");
+    return group;
+  }
+
+  function toggleWeekGroup(wk) {
+    const sep = grid.querySelector(`.week-separator[data-week-key="${wk}"]`);
+    const group = grid.querySelector(`.week-group[data-week-key="${wk}"]`);
+    if (!sep || !group) return;
+
+    const isCollapsed = group.classList.toggle("collapsed");
+    sep.classList.toggle("collapsed", isCollapsed);
+
+    if (isCollapsed) {
+      collapsedWeeks.add(wk);
+    } else {
+      collapsedWeeks.delete(wk);
+      // Re-observe lazy images that were hidden
+      observeImages();
+    }
+    saveCollapsedWeeks();
+  }
+
+  function updateWeekCounts() {
+    grid.querySelectorAll(".week-separator").forEach(sep => {
+      const wk = sep.dataset.weekKey;
+      const group = grid.querySelector(`.week-group[data-week-key="${wk}"]`);
+      const badge = sep.querySelector(".week-count");
+      if (group && badge) {
+        const count = group.querySelectorAll(".media-card").length;
+        badge.textContent = count + " media" + (count > 1 ? "s" : "");
+      }
+    });
   }
 
   // ─── Helpers ────────────────────────────────────────────────

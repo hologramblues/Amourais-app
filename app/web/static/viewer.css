@@ -334,23 +334,86 @@ body {
 /* ========== WEEK SEPARATORS ========== */
 .week-separator {
   grid-column: 1 / -1;
-  padding: 12px 16px;
-  margin: 8px 0 4px;
+  padding: 10px 16px;
+  margin: 12px 0 0;
   background: #f7f7f7;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius) var(--radius) 0 0;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text);
   letter-spacing: 0.01em;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s;
+}
+.week-separator:hover { background: #eeeeee; }
+
+.week-separator.collapsed {
+  border-radius: var(--radius);
+  margin-bottom: 0;
+}
+
+.week-arrow {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.week-arrow::before {
+  content: "";
+  display: block;
+  width: 0; height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--text);
+  margin: 6px auto 0;
+}
+.week-separator.collapsed .week-arrow {
+  transform: rotate(-90deg);
+}
+
+.week-label { flex: 1; }
+
+.week-count {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+
+/* Week group — wraps all cards for that week */
+.week-group {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--grid-size, 220px), 1fr));
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  padding: 4px;
+  background: var(--bg);
+  transition: padding 0.2s ease;
+}
+.week-group.collapsed {
+  display: none;
 }
 
 @media (max-width: 768px) {
   .week-separator {
     font-size: 0.78rem;
-    padding: 10px 12px;
-    margin: 6px 0 2px;
+    padding: 8px 12px;
+    margin: 8px 0 0;
   }
+  .week-count { font-size: 0.7rem; }
 }
 
 /* ========== SELECTION MODE ========== */
