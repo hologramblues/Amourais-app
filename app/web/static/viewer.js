@@ -39,6 +39,7 @@
   const filterProfile = document.getElementById("filter-profile");
   const filterRating = document.getElementById("filter-rating");
   const filterSort = document.getElementById("filter-sort");
+  const filterSource = document.getElementById("filter-source");
   const filterSearch = document.getElementById("filter-search");
   const statsEl = document.getElementById("topbar-stats");
   const userNameEl = document.getElementById("user-name-display");
@@ -132,6 +133,7 @@
     if (filterPlatform.value) params.set("platform", filterPlatform.value);
     if (filterProfile.value) params.set("profile_id", filterProfile.value);
     if (filterRating.value) params.set("min_rating", filterRating.value);
+    if (filterSource.value) params.set("source", filterSource.value);
     if (filterSearch.value) params.set("search", filterSearch.value);
 
     try {
@@ -143,12 +145,20 @@
       if (!append) {
         grid.innerHTML = "";
         mediaItems = [];
+        lastWeekKey = "";
       }
 
       const startIdx = mediaItems.length;
       mediaItems.push(...data.items);
 
       data.items.forEach((item, i) => {
+        // Insert week separator when the week changes
+        const ts = item.posted_at || item.discovered_at;
+        const wk = weekKey(ts);
+        if (wk !== lastWeekKey) {
+          grid.appendChild(createWeekSeparator(ts));
+          lastWeekKey = wk;
+        }
         grid.appendChild(createCard(item, startIdx + i));
       });
 
@@ -482,7 +492,7 @@
 
   // ─── Filters ────────────────────────────────────────────────
   function setupFilters() {
-    [filterPlatform, filterProfile, filterRating, filterSort].forEach((el) => {
+    [filterPlatform, filterProfile, filterRating, filterSort, filterSource].forEach((el) => {
       el.addEventListener("change", () => loadMedia());
     });
 
@@ -746,6 +756,41 @@
           break;
       }
     });
+  }
+
+  // ─── Week separator helpers ────────────────────────────────
+  let lastWeekKey = "";  // Tracks last week rendered (for append mode)
+
+  function getWeekMonday(ts) {
+    if (!ts) return null;
+    const d = new Date(ts * 1000);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
+    const monday = new Date(d);
+    monday.setDate(diff);
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  }
+
+  function weekKey(ts) {
+    const mon = getWeekMonday(ts);
+    if (!mon) return "unknown";
+    return mon.toISOString().slice(0, 10);
+  }
+
+  function weekLabel(ts) {
+    const mon = getWeekMonday(ts);
+    if (!mon) return "Date inconnue";
+    return "Semaine du " + mon.toLocaleDateString("fr-FR", {
+      day: "numeric", month: "long", year: "numeric"
+    });
+  }
+
+  function createWeekSeparator(ts) {
+    const sep = document.createElement("div");
+    sep.className = "week-separator";
+    sep.textContent = weekLabel(ts);
+    return sep;
   }
 
   // ─── Helpers ────────────────────────────────────────────────

@@ -32,6 +32,7 @@ def list_media():
         min_rating = request.args.get("min_rating", "")
         sort = request.args.get("sort", "date_desc")
         search = request.args.get("search", "").strip()
+        source = request.args.get("source", "")
 
         query = db.query(MediaItem).filter(MediaItem.status.in_(("uploaded", "downloaded")))
 
@@ -39,6 +40,23 @@ def list_media():
             query = query.filter(MediaItem.platform == platform)
         if profile_id:
             query = query.filter(MediaItem.profile_id == int(profile_id))
+
+        # Source filter: quicklink vs regular profiles
+        if source == "quicklink":
+            ql_ids = (
+                db.query(Profile.id)
+                .filter(Profile.username.like("__quick_download_%"))
+                .subquery()
+            )
+            query = query.filter(MediaItem.profile_id.in_(db.query(ql_ids.c.id)))
+        elif source == "profiles":
+            ql_ids = (
+                db.query(Profile.id)
+                .filter(Profile.username.like("__quick_download_%"))
+                .subquery()
+            )
+            query = query.filter(~MediaItem.profile_id.in_(db.query(ql_ids.c.id)))
+
         if search:
             query = query.filter(MediaItem.caption.ilike(f"%{search}%"))
 
