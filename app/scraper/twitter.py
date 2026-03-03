@@ -343,6 +343,8 @@ class TwitterExtractor(PlatformExtractor):
 
         # -- Phase 2: Build media list --------------------------------------
         stop_early = False
+        consecutive_known = 0
+        DAILY_KNOWN_THRESHOLD = 3
 
         # Deduplicate tweet objects by rest_id
         unique_tweets: dict[str, dict] = {}
@@ -364,9 +366,14 @@ class TwitterExtractor(PlatformExtractor):
                 seen_ids.add(pid)
 
                 if opts.scrape_mode == "daily" and pid in known_post_ids:
-                    logger.info("Daily mode: hit known post {}, stopping", pid)
-                    stop_early = True
-                    break
+                    consecutive_known += 1
+                    logger.debug("Daily mode: known post {} ({}/{})",
+                                 pid, consecutive_known, DAILY_KNOWN_THRESHOLD)
+                    if consecutive_known >= DAILY_KNOWN_THRESHOLD:
+                        logger.info("Daily mode: {} consecutive known posts, stopping", consecutive_known)
+                        stop_early = True
+                        break
+                    continue
 
                 if opts.scrape_mode == "backfill":
                     if item["posted_at"]:
@@ -384,6 +391,7 @@ class TwitterExtractor(PlatformExtractor):
                     if pid in known_post_ids:
                         continue
 
+                consecutive_known = 0
                 result.media.append(MediaItemData(**item))
 
         # -- Phase 3: DOM fallback ------------------------------------------

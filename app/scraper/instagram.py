@@ -491,6 +491,11 @@ class InstagramExtractor(PlatformExtractor):
         # -- Phase 4: Build media list from JSON ----------------------------
         all_nodes = embedded_nodes + api_nodes
         stop_early = False
+        # Daily mode: don't stop on the FIRST known post — Instagram nodes
+        # aren't always chronological (pinned posts, API ordering).  Instead
+        # stop after seeing several consecutive known posts.
+        consecutive_known = 0
+        DAILY_KNOWN_THRESHOLD = 3  # stop after 3 consecutive known posts
 
         for node in all_nodes:
             if stop_early:
@@ -503,11 +508,16 @@ class InstagramExtractor(PlatformExtractor):
                 seen_ids.add(pid)
                 result.total_seen += 1
 
-                # Daily mode: stop when we hit already-known content
+                # Daily mode: stop after N consecutive known posts
                 if opts.scrape_mode == "daily" and pid in known_post_ids:
-                    logger.info("Daily mode: hit known post {}, stopping", pid)
-                    stop_early = True
-                    break
+                    consecutive_known += 1
+                    logger.debug("Daily mode: known post {} ({}/{})",
+                                 pid, consecutive_known, DAILY_KNOWN_THRESHOLD)
+                    if consecutive_known >= DAILY_KNOWN_THRESHOLD:
+                        logger.info("Daily mode: {} consecutive known posts, stopping", consecutive_known)
+                        stop_early = True
+                        break
+                    continue  # skip this known post but keep looking
 
                 # Backfill mode: skip known but stop if too old
                 if opts.scrape_mode == "backfill":
@@ -520,6 +530,8 @@ class InstagramExtractor(PlatformExtractor):
                         logger.debug("Backfill: skipping known post {}", pid)
                         continue
 
+                # Found a new post — reset the known counter
+                consecutive_known = 0
                 result.media.append(MediaItemData(**item))
 
         # -- Phase 5: DOM fallback ------------------------------------------
@@ -581,8 +593,8 @@ class InstagramExtractor(PlatformExtractor):
             result.total_seen += 1
 
             if opts.scrape_mode == "daily" and shortcode in known_post_ids:
-                logger.info("DOM fallback daily mode: hit known post {}", shortcode)
-                break
+                logger.debug("DOM fallback daily: known post {}", shortcode)
+                continue  # skip but keep looking (don't break on first known)
             if opts.scrape_mode == "backfill" and shortcode in known_post_ids:
                 logger.debug("DOM fallback: skipping known post {}", shortcode)
                 continue
