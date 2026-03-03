@@ -390,9 +390,9 @@ class InstagramExtractor(PlatformExtractor):
             scroll_count = opts.max_scrolls
             is_backfill = opts.scrape_mode == "backfill"
             # Backfill: wait longer between scrolls, check less often, allow stalls
-            scroll_pause = 2500 if is_backfill else 1500
-            check_interval = 10 if is_backfill else 5
-            max_stalls = 3 if is_backfill else 1  # allow a few "no new content" checks before stopping
+            scroll_pause = 2500 if is_backfill else 1800
+            check_interval = 10 if is_backfill else 8
+            max_stalls = 3 if is_backfill else 2  # allow stalls before stopping (IG loads async)
             stall_count = 0
 
             logger.info("Scrolling Instagram profile (up to {} scrolls, mode={})", scroll_count, opts.scrape_mode)

@@ -287,18 +287,33 @@ class TwitterExtractor(PlatformExtractor):
 
             # 4. Scroll the page
             scroll_count = opts.max_scrolls
-            logger.info("Scrolling Twitter media tab (up to {} scrolls)", scroll_count)
+            is_backfill = opts.scrape_mode == "backfill"
+            scroll_pause = 2500 if is_backfill else 2000
+            check_interval = 8 if is_backfill else 6
+            max_stalls = 3 if is_backfill else 2
+            stall_count = 0
+
+            logger.info("Scrolling Twitter media tab (up to {} scrolls, mode={})", scroll_count, opts.scrape_mode)
             for i in range(scroll_count):
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(scroll_pause)
 
-                if i > 0 and i % 5 == 0:
+                if i > 0 and i % check_interval == 0:
                     current_height = page.evaluate("document.body.scrollHeight")
-                    page.wait_for_timeout(500)
+                    page.wait_for_timeout(1000)
                     new_height = page.evaluate("document.body.scrollHeight")
                     if new_height == current_height:
-                        logger.info("No new content after scroll {}, stopping", i)
-                        break
+                        stall_count += 1
+                        logger.info(
+                            "No new content after scroll {} (stall {}/{})",
+                            i, stall_count, max_stalls,
+                        )
+                        if stall_count >= max_stalls:
+                            logger.info("Max stalls reached at scroll {}, stopping", i)
+                            break
+                        page.wait_for_timeout(2000)
+                    else:
+                        stall_count = 0
 
         # -- Fetch ----------------------------------------------------------
         logger.info("Fetching Twitter profile: {}", media_url)
