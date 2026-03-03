@@ -43,20 +43,19 @@ def _cutoff_ts(days: int) -> int:
     return int((datetime.now() - timedelta(days=days)).timestamp())
 
 
+_SAMOURAIS_USERNAME = "samourais_"
+
+
 def _get_main_profile(db):
-    """Get the main Instagram profile (@samourais_) or first active Instagram profile."""
-    profile = (
+    """Get the @samourais_ Instagram profile (the only one used for analytics)."""
+    return (
         db.query(Profile)
-        .filter(Profile.platform == "instagram", Profile.username == "samourais_")
+        .filter(
+            Profile.platform == "instagram",
+            Profile.username == _SAMOURAIS_USERNAME,
+        )
         .first()
     )
-    if not profile:
-        profile = (
-            db.query(Profile)
-            .filter(Profile.platform == "instagram", Profile.is_active == True)  # noqa: E712
-            .first()
-        )
-    return profile
 
 
 # ──────────────────────────────────────────────────────────
@@ -71,7 +70,7 @@ def account_overview():
     try:
         profile = _get_main_profile(db)
         if not profile:
-            return jsonify({"error": "No Instagram profile found"}), 404
+            return jsonify({"error": "Profil @samourais_ introuvable. Ajoute-le dans Profiles pour activer les analytics."}), 404
 
         # Average engagement rate from posts in the period
         avg_likes = (
@@ -153,7 +152,7 @@ def follower_growth():
     try:
         profile = _get_main_profile(db)
         if not profile:
-            return jsonify({"error": "No Instagram profile found"}), 404
+            return jsonify({"error": "Profil @samourais_ introuvable. Ajoute-le dans Profiles pour activer les analytics."}), 404
 
         snapshots = (
             db.query(ProfileSnapshot)
@@ -199,7 +198,7 @@ def engagement():
     try:
         profile = _get_main_profile(db)
         if not profile:
-            return jsonify({"error": "No Instagram profile found"}), 404
+            return jsonify({"error": "Profil @samourais_ introuvable. Ajoute-le dans Profiles pour activer les analytics."}), 404
 
         rows = (
             db.query(
@@ -255,7 +254,7 @@ def content_breakdown():
     try:
         profile = _get_main_profile(db)
         if not profile:
-            return jsonify({"error": "No Instagram profile found"}), 404
+            return jsonify({"error": "Profil @samourais_ introuvable. Ajoute-le dans Profiles pour activer les analytics."}), 404
 
         rows = (
             db.query(MediaItem.media_type, func.count(MediaItem.id))
@@ -282,7 +281,7 @@ def best_posting_times():
     try:
         profile = _get_main_profile(db)
         if not profile:
-            return jsonify({"error": "No Instagram profile found"}), 404
+            return jsonify({"error": "Profil @samourais_ introuvable. Ajoute-le dans Profiles pour activer les analytics."}), 404
 
         rows = (
             db.query(MediaItem.posted_at)
@@ -323,7 +322,7 @@ def top_posts():
     try:
         profile = _get_main_profile(db)
         if not profile:
-            return jsonify({"error": "No Instagram profile found"}), 404
+            return jsonify({"error": "Profil @samourais_ introuvable. Ajoute-le dans Profiles pour activer les analytics."}), 404
 
         rows = (
             db.query(
@@ -382,7 +381,7 @@ def posting_frequency():
     try:
         profile = _get_main_profile(db)
         if not profile:
-            return jsonify({"error": "No Instagram profile found"}), 404
+            return jsonify({"error": "Profil @samourais_ introuvable. Ajoute-le dans Profiles pour activer les analytics."}), 404
 
         rows = (
             db.query(MediaItem.posted_at, MediaItem.post_url)

@@ -56,7 +56,16 @@
     // ─── Account Overview (Profile Header + KPIs) ─────────
     async function loadAccountOverview() {
         try {
-            const d = await api('account-overview');
+            const resp = await fetch(`/api/analytics/account-overview?days=${currentDays}`);
+            if (resp.status === 404) {
+                // Profile not found — show setup message
+                setText('profile-display-name', 'samourais_');
+                setText('profile-username', '@samourais_');
+                setText('profile-bio', 'Profil non trouvé. Ajoute @samourais_ dans Profiles et lance un scrape pour activer les analytics.');
+                return;
+            }
+            const d = await resp.json();
+            if (d.error) return;
 
             // Profile header
             const avatar = document.getElementById('profile-avatar');
