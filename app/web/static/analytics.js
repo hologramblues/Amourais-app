@@ -12,6 +12,9 @@
     let engagementChart = null;
     let postingTimesChart = null;
     let frequencyChart = null;
+    let reachChart = null;
+    let profileViewsChart = null;
+    let igApiConfigured = false;
 
     // ─── Chart.js defaults ────────────────────────────────
     Chart.defaults.color = '#888';
@@ -20,6 +23,10 @@
 
     const ACCENT = '#E21B3C';
     const ACCENT_LIGHT = 'rgba(226, 27, 60, 0.15)';
+    const BLUE = '#2563eb';
+    const BLUE_LIGHT = 'rgba(37, 99, 235, 0.15)';
+    const PURPLE = '#833AB4';
+    const PURPLE_LIGHT = 'rgba(131, 58, 180, 0.15)';
 
     // ─── Fetch helper ─────────────────────────────────────
     async function api(endpoint, params = {}) {
@@ -40,9 +47,45 @@
         });
     });
 
+    // ─── Check IG API status ──────────────────────────────
+    async function checkIgApiStatus() {
+        try {
+            const d = await api('ig-api-status');
+            const banner = document.getElementById('ig-api-banner');
+            const indicator = document.getElementById('ig-api-indicator');
+            const text = document.getElementById('ig-api-text');
+            const link = document.getElementById('ig-api-link');
+
+            if (!banner) return;
+            banner.style.display = 'block';
+
+            if (d.configured && d.has_profile) {
+                igApiConfigured = true;
+                indicator.style.background = '#22c55e';
+                const lastDate = d.last_snapshot
+                    ? new Date(d.last_snapshot * 1000).toLocaleString('fr-FR')
+                    : 'jamais';
+                text.textContent = `Graph API connecte — ${d.snapshot_count} snapshots — dernier: ${lastDate}`;
+                link.textContent = 'Settings';
+            } else if (d.configured && !d.has_profile) {
+                igApiConfigured = true;
+                indicator.style.background = '#f59e0b';
+                text.textContent = 'API configuree, premiere collecte en cours...';
+                link.textContent = 'Settings';
+            } else {
+                indicator.style.background = '#ef4444';
+                text.textContent = 'API Instagram non configuree — connecte ton compte pour les stats avancees (reach, impressions...)';
+                link.textContent = 'Configurer';
+            }
+        } catch (e) {
+            console.error('IG API status error:', e);
+        }
+    }
+
     // ─── Refresh all data ─────────────────────────────────
     async function refreshAll() {
         await Promise.all([
+            checkIgApiStatus(),
             loadAccountOverview(),
             loadFollowerGrowth(),
             loadContentBreakdown(),
@@ -50,6 +93,7 @@
             loadPostingTimes(),
             loadTopPosts(),
             loadPostingFrequency(),
+            loadReachImpressions(),
         ]);
     }
 
@@ -58,10 +102,9 @@
         try {
             const resp = await fetch(`/api/analytics/account-overview?days=${currentDays}`);
             if (resp.status === 404) {
-                // Profile not found — show setup message
                 setText('profile-display-name', 'samourais_');
                 setText('profile-username', '@samourais_');
-                setText('profile-bio', 'Profil non trouvé. Ajoute @samourais_ dans Profiles et lance un scrape pour activer les analytics.');
+                setText('profile-bio', 'Connecte l\'API Instagram dans Settings pour activer les analytics.');
                 return;
             }
             const d = await resp.json();
@@ -117,35 +160,29 @@
 
             if (followerChart) followerChart.destroy();
 
-            const datasets = [
-                {
-                    label: 'Followers',
-                    data: d.followers,
-                    borderColor: ACCENT,
-                    backgroundColor: ACCENT_LIGHT,
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 3,
-                    pointBackgroundColor: ACCENT,
-                    borderWidth: 2,
-                },
-            ];
-
             followerChart = new Chart(ctx, {
                 type: 'line',
-                data: { labels: d.labels, datasets },
+                data: {
+                    labels: d.labels,
+                    datasets: [{
+                        label: 'Followers',
+                        data: d.followers,
+                        borderColor: ACCENT,
+                        backgroundColor: ACCENT_LIGHT,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3,
+                        pointBackgroundColor: ACCENT,
+                        borderWidth: 2,
+                    }],
+                },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                    },
+                    plugins: { legend: { display: false } },
                     scales: {
                         x: { grid: { display: false } },
-                        y: {
-                            beginAtZero: false,
-                            ticks: { callback: v => formatNumber(v) },
-                        },
+                        y: { beginAtZero: false, ticks: { callback: v => formatNumber(v) } },
                     },
                 },
             });
@@ -332,6 +369,118 @@
             });
         } catch (e) {
             console.error('Posting frequency error:', e);
+        }
+    }
+
+    // ─── Reach & Impressions (IG Graph API) ───────────────
+    async function loadReachImpressions() {
+        const section = document.getElementById('reach-section');
+        if (!section) return;
+
+        try {
+            const d = await api('reach-impressions');
+
+            // Only show if we have data
+            if (!d.labels || d.labels.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'flex';
+
+            // Reach & Impressions chart
+            const reachCtx = document.getElementById('reach-chart');
+            if (reachCtx) {
+                if (reachChart) reachChart.destroy();
+                reachChart = new Chart(reachCtx, {
+                    type: 'line',
+                    data: {
+                        labels: d.labels.map(l => {
+                            const parts = l.split('-');
+                            return `${parts[2]}/${parts[1]}`;
+                        }),
+                        datasets: [
+                            {
+                                label: 'Reach',
+                                data: d.reach,
+                                borderColor: BLUE,
+                                backgroundColor: BLUE_LIGHT,
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 3,
+                                pointBackgroundColor: BLUE,
+                                borderWidth: 2,
+                            },
+                            {
+                                label: 'Impressions',
+                                data: d.impressions,
+                                borderColor: PURPLE,
+                                backgroundColor: PURPLE_LIGHT,
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 3,
+                                pointBackgroundColor: PURPLE,
+                                borderWidth: 2,
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: true, position: 'top', labels: { boxWidth: 12, padding: 16 } },
+                        },
+                        scales: {
+                            x: { grid: { display: false } },
+                            y: { beginAtZero: true, ticks: { callback: v => formatNumber(v) } },
+                        },
+                    },
+                });
+            }
+
+            // Profile Views & Accounts Engaged chart
+            const pvCtx = document.getElementById('profile-views-chart');
+            if (pvCtx) {
+                if (profileViewsChart) profileViewsChart.destroy();
+                profileViewsChart = new Chart(pvCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: d.labels.map(l => {
+                            const parts = l.split('-');
+                            return `${parts[2]}/${parts[1]}`;
+                        }),
+                        datasets: [
+                            {
+                                label: 'Visites profil',
+                                data: d.profile_views,
+                                backgroundColor: 'rgba(37, 99, 235, 0.6)',
+                                borderRadius: 3,
+                            },
+                            {
+                                label: 'Comptes engages',
+                                data: d.accounts_engaged,
+                                backgroundColor: 'rgba(131, 58, 180, 0.6)',
+                                borderRadius: 3,
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: true, position: 'top', labels: { boxWidth: 12, padding: 16 } },
+                        },
+                        scales: {
+                            x: { grid: { display: false } },
+                            y: { beginAtZero: true, ticks: { callback: v => formatNumber(v) } },
+                        },
+                    },
+                });
+            }
+        } catch (e) {
+            // If the endpoint fails (no data yet), hide the section
+            section.style.display = 'none';
+            console.debug('Reach data not available yet:', e.message);
         }
     }
 

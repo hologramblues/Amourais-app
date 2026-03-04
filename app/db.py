@@ -141,6 +141,29 @@ class ProfileSnapshot(Base):
     )
 
 
+class IgInsightSnapshot(Base):
+    """Daily snapshot of Instagram account insights from the Graph API."""
+    __tablename__ = "ig_insight_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    profile_id = Column(Integer, ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False)
+    followers_count = Column(Integer)
+    following_count = Column(Integer)
+    media_count = Column(Integer)
+    reach = Column(Integer, default=0)
+    impressions = Column(Integer, default=0)
+    accounts_engaged = Column(Integer, default=0)
+    profile_views = Column(Integer, default=0)
+    snapshot_at = Column(Integer, nullable=False, default=lambda: int(datetime.now().timestamp()))
+
+    profile = relationship("Profile", backref="ig_insights")
+
+    __table_args__ = (
+        Index("idx_ig_insights_profile", "profile_id"),
+        Index("idx_ig_insights_date", "snapshot_at"),
+    )
+
+
 class ScrapeJob(Base):
     __tablename__ = "scrape_jobs"
 

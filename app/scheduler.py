@@ -463,8 +463,31 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Job 5: Collect Instagram stats via Graph API every 6 hours
+    from app.analytics.ig_collector import collect_ig_stats, collect_media_insights
+
+    scheduler.add_job(
+        collect_ig_stats,
+        trigger="interval",
+        hours=6,
+        id="collect_ig_stats",
+        name="Collect IG stats (Graph API)",
+        replace_existing=True,
+    )
+
+    # Job 6: Collect media insights once a day at 06:00 UTC
+    scheduler.add_job(
+        collect_media_insights,
+        trigger="cron",
+        hour=6,
+        minute=30,
+        id="collect_media_insights",
+        name="Collect IG media insights",
+        replace_existing=True,
+    )
+
     scheduler.start()
-    logger.info("Scheduler started with 4 recurring jobs")
+    logger.info("Scheduler started with 6 recurring jobs")
 
     # Run an initial check immediately so we do not wait 30 minutes for
     # the first pass after server startup
@@ -475,6 +498,19 @@ def start_scheduler() -> None:
         name="Initial due-profile check",
         replace_existing=True,
     )
+
+    # Also collect IG stats on boot (with a 15s delay to let app start)
+    import threading
+
+    def _delayed_ig_collect():
+        import time
+        time.sleep(15)
+        try:
+            collect_ig_stats()
+        except Exception as e:
+            logger.warning("Initial IG stats collection failed: {}", e)
+
+    threading.Thread(target=_delayed_ig_collect, daemon=True, name="ig-initial").start()
 
 
 def stop_scheduler() -> None:

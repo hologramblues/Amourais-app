@@ -484,6 +484,83 @@ def save_env():
         return '<small style="color:red;">Erreur de sauvegarde</small>', 500
 
 
+@api_bp.route("/settings/ig-api", methods=["POST"])
+def setup_ig_api():
+    """Configure Instagram Graph API: save credentials, auto-discover IG User ID,
+    optionally exchange short-lived token for long-lived one."""
+    try:
+        data = request.get_json(force=True)
+        fb_app_id = data.get("FB_APP_ID", "").strip()
+        fb_app_secret = data.get("FB_APP_SECRET", "").strip()
+        access_token = data.get("IG_ACCESS_TOKEN", "").strip()
+        ig_user_id = data.get("IG_USER_ID", "").strip()
+
+        if not access_token:
+            return jsonify({"ok": False, "error": "Access Token requis"}), 400
+
+        # Save credentials to persistent .env first
+        env_updates = {"IG_ACCESS_TOKEN": access_token}
+        if fb_app_id:
+            env_updates["FB_APP_ID"] = fb_app_id
+        if fb_app_secret:
+            env_updates["FB_APP_SECRET"] = fb_app_secret
+
+        # Try to exchange for long-lived token if we have app credentials
+        if fb_app_id and fb_app_secret:
+            try:
+                from app.instagram_api import exchange_for_long_lived_token
+                result = exchange_for_long_lived_token(access_token)
+                long_token = result.get("access_token", "")
+                expires_in = result.get("expires_in", 0)
+                if long_token:
+                    env_updates["IG_ACCESS_TOKEN"] = long_token
+                    logger.info("Exchanged for long-lived token (expires in {}s)", expires_in)
+            except Exception as e:
+                logger.warning("Could not exchange token (may already be long-lived): {}", e)
+
+        _write_env_file(env_updates)
+
+        # Auto-discover IG User ID if not provided
+        if not ig_user_id:
+            try:
+                from app.instagram_api import discover_ig_user_id
+                discovery = discover_ig_user_id()
+                ig_user_id = discovery.get("ig_user_id", "")
+                page_name = discovery.get("page_name", "")
+                if ig_user_id:
+                    _write_env_file({"IG_USER_ID": ig_user_id})
+                    logger.info("Auto-discovered IG User ID: {} (page: {})", ig_user_id, page_name)
+            except Exception as e:
+                return jsonify({
+                    "ok": False,
+                    "error": f"Token sauvegarde mais impossible de detecter le compte IG: {e}",
+                }), 400
+        else:
+            _write_env_file({"IG_USER_ID": ig_user_id})
+
+        # Verify by fetching profile
+        try:
+            from app.instagram_api import fetch_profile
+            profile = fetch_profile()
+            username = profile.get("username", "?")
+            followers = profile.get("followers_count", 0)
+            return jsonify({
+                "ok": True,
+                "ig_user_id": ig_user_id,
+                "message": f"Connecte a @{username} ({followers} followers). Collection des stats en cours...",
+            })
+        except Exception as e:
+            return jsonify({
+                "ok": True,
+                "ig_user_id": ig_user_id,
+                "message": f"Credentials sauvegardees. Verification: {e}",
+            })
+
+    except Exception as exc:
+        logger.exception("Failed to setup IG API: {}", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @api_bp.route("/settings/session", methods=["POST"])
 def upload_session():
     try:

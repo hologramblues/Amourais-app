@@ -80,6 +80,12 @@ def get_proxy_for_platform(platform: str) -> str:
     }.get(platform, "")
     return specific or os.getenv("PROXY_URL", "")
 
+# Instagram Graph API
+IG_ACCESS_TOKEN = os.getenv("IG_ACCESS_TOKEN", "")
+IG_USER_ID = os.getenv("IG_USER_ID", "")
+FB_APP_ID = os.getenv("FB_APP_ID", "")
+FB_APP_SECRET = os.getenv("FB_APP_SECRET", "")
+
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 

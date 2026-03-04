@@ -67,6 +67,78 @@
   </div>
 </div>
 
+{# ===== INSTAGRAM GRAPH API ===== #}
+<div class="s-section">
+  <div class="s-card">
+    <div class="s-card-header">
+      <h3>Instagram Graph API (Analytics)</h3>
+      {% if env.get('IG_ACCESS_TOKEN') and env.get('IG_USER_ID') %}
+        <span class="s-badge s-badge-green">Configure</span>
+      {% else %}
+        <span class="s-badge s-badge-gray">Non configure</span>
+      {% endif %}
+    </div>
+
+    <details class="mb-3" {% if not env.get('IG_ACCESS_TOKEN') %}open{% endif %}>
+      <summary>Comment connecter l'API Instagram ?</summary>
+      <div style="padding-top: 0.5rem;">
+        <p><strong>L'API Graph donne les vraies stats de ton compte (reach, impressions, demographics).</strong></p>
+        <ol style="padding-left: 1.2rem; color: var(--s-text-secondary); font-size: 0.87rem; line-height: 2;">
+          <li>Passe @samourais_ en compte <strong>Creator</strong> ou <strong>Business</strong> (Settings &gt; Account type)</li>
+          <li>Cree une <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">Facebook App</a> (type Business)</li>
+          <li>Ajoute le produit <strong>Instagram Graph API</strong></li>
+          <li>Lie ta <strong>Page Facebook</strong> au compte IG</li>
+          <li>Dans Graph API Explorer, genere un token avec les permissions: <code>instagram_basic</code>, <code>instagram_manage_insights</code>, <code>pages_show_list</code>, <code>pages_read_engagement</code></li>
+          <li>Colle le token ci-dessous et clique <strong>Configurer</strong></li>
+        </ol>
+        <p style="color: var(--s-text-secondary); font-size: 0.87rem;">
+          <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Graph API Explorer</a> &mdash;
+          <a href="https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/get-started" target="_blank" rel="noopener">Documentation</a>
+        </p>
+      </div>
+    </details>
+
+    <form id="ig-api-form">
+      <div class="grid">
+        <label>
+          Facebook App ID
+          <input type="text" id="ig-fb-app-id" value="{{ env.get('FB_APP_ID', '') }}" placeholder="123456789012345">
+        </label>
+        <label>
+          Facebook App Secret
+          <div class="password-wrapper">
+            <input type="password" id="ig-fb-app-secret" value="{{ env.get('FB_APP_SECRET', '') }}" placeholder="abc123..." class="secret-field">
+            <button type="button" class="s-btn-sm s-btn-ghost toggle-secret" onclick="toggleSecret(this)">Voir</button>
+          </div>
+        </label>
+      </div>
+
+      <label>
+        Access Token (short-lived ou long-lived)
+        <div class="password-wrapper">
+          <input type="password" id="ig-access-token" value="{{ env.get('IG_ACCESS_TOKEN', '') }}" placeholder="EAAxxxxxxx..." class="secret-field" style="font-family: monospace; font-size: 0.85rem;">
+          <button type="button" class="s-btn-sm s-btn-ghost toggle-secret" onclick="toggleSecret(this)">Voir</button>
+        </div>
+        <small>Le token sera automatiquement echange pour un token long-duree (~60 jours)</small>
+      </label>
+
+      <label>
+        IG User ID <small>(auto-detecte si vide)</small>
+        <input type="text" id="ig-user-id" value="{{ env.get('IG_USER_ID', '') }}" placeholder="Sera detecte automatiquement">
+      </label>
+
+      <div class="flex gap-2 mt-1">
+        <button type="submit">Configurer</button>
+        {% if env.get('IG_ACCESS_TOKEN') %}
+          <button type="button" id="ig-collect-btn" class="s-btn" style="background: var(--s-accent-blue, #2563eb); color: #fff;">Collecter maintenant</button>
+        {% endif %}
+      </div>
+    </form>
+
+    <div id="ig-api-status" class="mt-1"></div>
+  </div>
+</div>
+
 {# ===== SCRAPER CONFIG ===== #}
 <div class="s-section">
   <div class="s-card">
@@ -357,6 +429,73 @@ document.body.addEventListener('htmx:afterRequest', function(evt) {
     setTimeout(function() { banner.style.display = 'none'; }, 8000);
   }
 });
+
+/* ── Instagram Graph API setup ── */
+(function() {
+  var igForm = document.getElementById('ig-api-form');
+  if (!igForm) return;
+
+  igForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var statusEl = document.getElementById('ig-api-status');
+    var btn = igForm.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Configuration...';
+    statusEl.innerHTML = '<small style="color:#888;">Sauvegarde et verification en cours...</small>';
+
+    var payload = {
+      FB_APP_ID: document.getElementById('ig-fb-app-id').value.trim(),
+      FB_APP_SECRET: document.getElementById('ig-fb-app-secret').value.trim(),
+      IG_ACCESS_TOKEN: document.getElementById('ig-access-token').value.trim(),
+      IG_USER_ID: document.getElementById('ig-user-id').value.trim()
+    };
+
+    fetch('/api/settings/ig-api', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      btn.disabled = false;
+      btn.textContent = 'Configurer';
+      if (data.ok) {
+        statusEl.innerHTML = '<small style="color:green;">' + (data.message || 'Configure !') + '</small>';
+        if (data.ig_user_id) {
+          document.getElementById('ig-user-id').value = data.ig_user_id;
+        }
+        setTimeout(function() { location.reload(); }, 2000);
+      } else {
+        statusEl.innerHTML = '<small style="color:red;">Erreur: ' + (data.error || 'Inconnue') + '</small>';
+      }
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      btn.textContent = 'Configurer';
+      statusEl.innerHTML = '<small style="color:red;">Erreur: ' + err.message + '</small>';
+    });
+  });
+
+  var collectBtn = document.getElementById('ig-collect-btn');
+  if (collectBtn) {
+    collectBtn.addEventListener('click', function() {
+      collectBtn.disabled = true;
+      collectBtn.textContent = 'Collection...';
+      fetch('/api/analytics/collect-now', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        collectBtn.disabled = false;
+        collectBtn.textContent = 'Collecter maintenant';
+        var statusEl = document.getElementById('ig-api-status');
+        statusEl.innerHTML = '<small style="color:green;">' + (d.message || 'Lance !') + '</small>';
+      })
+      .catch(function() {
+        collectBtn.disabled = false;
+        collectBtn.textContent = 'Collecter maintenant';
+      });
+    });
+  }
+})();
 
 /* ── Cookie upload via JS (bypasses HTMX for reliability) ── */
 document.querySelectorAll('.s-cookie-grid form').forEach(function(form) {

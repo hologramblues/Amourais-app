@@ -23,7 +23,7 @@ from loguru import logger
 from sqlalchemy import func, case, desc
 
 from app.db import (
-    MediaItem, Profile, ProfileSnapshot, SessionLocal,
+    IgInsightSnapshot, MediaItem, Profile, ProfileSnapshot, SessionLocal,
 )
 
 analytics_api_bp = Blueprint("analytics_api", __name__)
@@ -428,3 +428,119 @@ def posting_frequency():
         return jsonify({"error": str(exc)}), 500
     finally:
         db.close()
+
+
+# ──────────────────────────────────────────────────────────
+# Reach & Impressions (from IG Graph API insights)
+# ──────────────────────────────────────────────────────────
+@analytics_api_bp.route("/analytics/reach-impressions", methods=["GET"])
+def reach_impressions():
+    """Daily reach and impressions from IgInsightSnapshot."""
+    days = _days_param()
+    cutoff = _cutoff_ts(days)
+    db = SessionLocal()
+    try:
+        profile = _get_main_profile(db)
+        if not profile:
+            return jsonify({"error": "Profil introuvable"}), 404
+
+        snapshots = (
+            db.query(IgInsightSnapshot)
+            .filter(
+                IgInsightSnapshot.profile_id == profile.id,
+                IgInsightSnapshot.snapshot_at >= cutoff,
+            )
+            .order_by(IgInsightSnapshot.snapshot_at.asc())
+            .all()
+        )
+
+        labels = []
+        reach = []
+        impressions = []
+        profile_views = []
+        engaged = []
+
+        for s in snapshots:
+            day = datetime.fromtimestamp(s.snapshot_at).strftime("%Y-%m-%d")
+            labels.append(day)
+            reach.append(s.reach or 0)
+            impressions.append(s.impressions or 0)
+            profile_views.append(s.profile_views or 0)
+            engaged.append(s.accounts_engaged or 0)
+
+        return jsonify({
+            "labels": labels,
+            "reach": reach,
+            "impressions": impressions,
+            "profile_views": profile_views,
+            "accounts_engaged": engaged,
+            "days": days,
+        })
+    except Exception as exc:
+        logger.exception("Error in reach-impressions: {}", exc)
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+# ──────────────────────────────────────────────────────────
+# IG API Status
+# ──────────────────────────────────────────────────────────
+@analytics_api_bp.route("/analytics/ig-api-status", methods=["GET"])
+def ig_api_status():
+    """Check if IG Graph API is configured and working."""
+    from app.instagram_api import is_configured
+
+    db = SessionLocal()
+    try:
+        profile = _get_main_profile(db)
+        has_profile = profile is not None
+        configured = is_configured()
+
+        # Count insight snapshots
+        snapshot_count = 0
+        last_snapshot = None
+        if profile:
+            snapshot_count = (
+                db.query(func.count(IgInsightSnapshot.id))
+                .filter(IgInsightSnapshot.profile_id == profile.id)
+                .scalar() or 0
+            )
+            latest = (
+                db.query(IgInsightSnapshot)
+                .filter(IgInsightSnapshot.profile_id == profile.id)
+                .order_by(IgInsightSnapshot.snapshot_at.desc())
+                .first()
+            )
+            if latest:
+                last_snapshot = latest.snapshot_at
+
+        return jsonify({
+            "configured": configured,
+            "has_profile": has_profile,
+            "snapshot_count": snapshot_count,
+            "last_snapshot": last_snapshot,
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        db.close()
+
+
+# ──────────────────────────────────────────────────────────
+# Manual trigger for IG stats collection
+# ──────────────────────────────────────────────────────────
+@analytics_api_bp.route("/analytics/collect-now", methods=["POST"])
+def collect_now():
+    """Manually trigger an IG stats collection."""
+    import threading
+    from app.analytics.ig_collector import collect_ig_stats
+
+    def _run():
+        try:
+            collect_ig_stats()
+        except Exception as e:
+            logger.error("Manual IG collection failed: {}", e)
+
+    threading.Thread(target=_run, daemon=True, name="ig-manual").start()
+    return jsonify({"ok": True, "message": "Collection lancee en arriere-plan"})

@@ -93,6 +93,15 @@
             </div>
         </div>
 
+        <!-- IG API Status Banner -->
+        <div id="ig-api-banner" class="stat-card" style="display:none; padding: 12px 20px; margin-bottom: 16px;">
+            <div style="display:flex; align-items:center; gap: 12px;">
+                <div id="ig-api-indicator" style="width:10px;height:10px;border-radius:50%;background:#888;flex-shrink:0;"></div>
+                <span id="ig-api-text" style="font-size: 0.85rem; color: var(--ana-muted, #888);">Verification API...</span>
+                <a href="/settings" id="ig-api-link" style="margin-left:auto; font-size: 0.85rem;">Configurer</a>
+            </div>
+        </div>
+
         <!-- Charts Row 1: Follower Growth + Content Breakdown -->
         <div class="charts-grid">
             <div class="chart-card">
@@ -110,6 +119,29 @@
                 </div>
                 <div class="chart-container">
                     <canvas id="content-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row: Reach & Impressions (from IG Graph API) -->
+        <div class="charts-row2" id="reach-section" style="display:none;">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <span class="chart-title">&#x1F4E1; Reach & Impressions</span>
+                    <span style="font-size: 0.7rem; color: var(--ana-muted); background: rgba(226,27,60,0.1); padding: 2px 8px; border-radius: 4px;">Graph API</span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="reach-chart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-header">
+                    <span class="chart-title">&#x1F441; Visites profil & Comptes engages</span>
+                    <span style="font-size: 0.7rem; color: var(--ana-muted); background: rgba(226,27,60,0.1); padding: 2px 8px; border-radius: 4px;">Graph API</span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="profile-views-chart"></canvas>
                 </div>
             </div>
         </div>
@@ -150,7 +182,7 @@
                 <div style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">SAMOURAIS Analytics</div>
                 <div style="color: var(--ana-muted); font-size: 14px; line-height: 1.5;">
                     Stats de ton compte Instagram.<br>
-                    Mises &agrave; jour &agrave; chaque scrape.
+                    Mises &agrave; jour via l'API Graph toutes les 6h.
                 </div>
             </div>
         </div>
