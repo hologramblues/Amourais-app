@@ -260,15 +260,11 @@
     const src = item.file_url || item.media_url || "";
 
     if (item.media_type === "video") {
-      // Use <video> with preload="none" — no download until visible
-      const vid = document.createElement("video");
-      vid.dataset.src = src;
-      vid.muted = true;
-      vid.playsInline = true;
-      vid.preload = "none";
-      vid.loop = true;
-      vid.setAttribute("loading", "lazy");
-      card.appendChild(vid);
+      // Use server-side thumbnail (ffmpeg JPEG) instead of loading the video
+      const img = document.createElement("img");
+      img.dataset.src = item.thumb_url || src;
+      img.alt = item.caption || "Video";
+      card.appendChild(img);
 
       const play = document.createElement("div");
       play.className = "play-icon";
@@ -417,24 +413,7 @@
               };
             }
 
-            // Handle videos — load metadata + seek to show first frame
-            const vid = card.querySelector("video[data-src]");
-            if (vid) {
-              vid.src = vid.dataset.src;
-              vid.removeAttribute("data-src");
-              vid.preload = "metadata";
-              vid.onloadedmetadata = () => {
-                vid.currentTime = 0.1; // Force browser to render a frame
-              };
-              vid.onseeked = () => {
-                card.classList.remove("loading");
-                vid.pause();
-              };
-              vid.onerror = () => {
-                card.classList.remove("loading");
-                vid.style.opacity = "0.3";
-              };
-            }
+            // Videos now use <img> with server-side thumbnails — no special handling needed
 
             observer.unobserve(card);
           }

@@ -230,6 +230,52 @@ def serve_media_file(filename):
     return send_from_directory(str(DOWNLOAD_DIR), filename)
 
 
+@pages_bp.route("/media/thumb/<path:filename>")
+def serve_video_thumbnail(filename):
+    """Serve a JPEG thumbnail for a video file (extracted via ffmpeg, cached)."""
+    thumb_dir = DOWNLOAD_DIR / ".thumbs"
+    thumb_dir.mkdir(parents=True, exist_ok=True)
+
+    # Thumbnail filename: same base name but .jpg
+    base = Path(filename).stem
+    thumb_name = f"{base}.jpg"
+    thumb_path = thumb_dir / thumb_name
+
+    # Return cached thumbnail if it exists
+    if thumb_path.exists():
+        return send_from_directory(str(thumb_dir), thumb_name, mimetype="image/jpeg")
+
+    # Source video must exist
+    video_path = DOWNLOAD_DIR / filename
+    if not video_path.exists():
+        return "Video not found", 404
+
+    # Extract first frame using ffmpeg
+    try:
+        import subprocess
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", str(video_path),
+                "-vframes", "1",
+                "-ss", "0.1",
+                "-vf", "scale='min(480,iw)':-1",
+                "-q:v", "6",
+                str(thumb_path),
+            ],
+            capture_output=True,
+            timeout=15,
+        )
+        if result.returncode != 0 or not thumb_path.exists():
+            logger.warning("ffmpeg thumbnail failed for {}: {}", filename, result.stderr[:200])
+            return "Thumbnail generation failed", 500
+    except Exception as exc:
+        logger.error("Thumbnail generation error for {}: {}", filename, exc)
+        return "Thumbnail generation failed", 500
+
+    return send_from_directory(str(thumb_dir), thumb_name, mimetype="image/jpeg")
+
+
 # ---------------------------------------------------------------------------
 # Meme Editor
 # ---------------------------------------------------------------------------

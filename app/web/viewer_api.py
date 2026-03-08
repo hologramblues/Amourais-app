@@ -138,6 +138,11 @@ def list_media():
                 filename = item.local_path.split("/")[-1] if "/" in item.local_path else item.local_path
                 file_url = f"/media/file/{filename}"
 
+            # Build thumbnail URL for videos (server-side ffmpeg extraction)
+            thumb_url = None
+            if item.media_type == "video" and file_url:
+                thumb_url = file_url.replace("/media/file/", "/media/thumb/")
+
             rating_data = avg_ratings.get(item.id, {"avg": 0, "count": 0})
             result.append({
                 "id": item.id,
@@ -146,6 +151,7 @@ def list_media():
                 "media_type": item.media_type,
                 "media_url": item.media_url,
                 "file_url": file_url,
+                "thumb_url": thumb_url,
                 "caption": item.caption,
                 "platform": item.platform,
                 "profile_id": item.profile_id,
