@@ -203,12 +203,13 @@ body {
   border-radius: 4px;
   cursor: pointer;
   background: #f7f7f7;
+  will-change: transform;
   transition: transform 0.15s ease;
+  contain: layout style paint;
 }
 
 .media-card:hover {
   transform: scale(1.02);
-  z-index: 2;
 }
 
 .media-card img,
@@ -230,11 +231,13 @@ body {
   align-items: center;
   justify-content: space-between;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity 0.15s;
+  pointer-events: none;
 }
 
 .media-card:hover .card-overlay {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .card-overlay .stars {
@@ -320,15 +323,10 @@ body {
   border-radius: 4px;
 }
 
-/* Lazy loading placeholder */
+/* Lazy loading placeholder — static bg, no animation (avoids 60+ repaints) */
 .media-card.loading {
-  background: #f0f0f0;
-  animation: pulse 1.5s ease infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
+  background: linear-gradient(135deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
+  background-size: 200% 200%;
 }
 
 /* ========== WEEK SEPARATORS ========== */

@@ -126,7 +126,7 @@
 
     const params = new URLSearchParams({
       page: currentPage,
-      per_page: 60,
+      per_page: 36,
       sort: filterSort.value,
     });
 
@@ -256,25 +256,19 @@
       }
     };
 
-    // Determine thumbnail source
-    const src = item.file_url || item.media_url || "";
+    // Always use server-side thumbnail for grid cards (small JPEG, fast load)
+    const thumbSrc = item.thumb_url || item.file_url || item.media_url || "";
+
+    const img = document.createElement("img");
+    img.dataset.src = thumbSrc;
+    img.alt = item.caption || (item.media_type === "video" ? "Video" : "Image");
+    card.appendChild(img);
 
     if (item.media_type === "video") {
-      // Use server-side thumbnail (ffmpeg JPEG) instead of loading the video
-      const img = document.createElement("img");
-      img.dataset.src = item.thumb_url || src;
-      img.alt = item.caption || "Video";
-      card.appendChild(img);
-
       const play = document.createElement("div");
       play.className = "play-icon";
       play.textContent = "\u25B6";
       card.appendChild(play);
-    } else {
-      const img = document.createElement("img");
-      img.dataset.src = src;
-      img.alt = item.caption || "Image";
-      card.appendChild(img);
     }
 
     // Rating badge
@@ -540,10 +534,11 @@
     const item = mediaItems[currentIndex];
     if (!item) return;
 
-    // Media
+    // Media — use full-res file for lightbox
     const src = item.file_url || item.media_url || "";
+    const poster = item.thumb_url || "";
     if (item.media_type === "video") {
-      lbMedia.innerHTML = `<video src="${escHtml(src)}" controls autoplay playsinline style="max-width:100%;max-height:100vh;"></video>`;
+      lbMedia.innerHTML = `<video src="${escHtml(src)}" ${poster ? `poster="${escHtml(poster)}"` : ""} controls autoplay playsinline preload="metadata" style="max-width:100%;max-height:100vh;"></video>`;
     } else {
       lbMedia.innerHTML = `<img src="${escHtml(src)}" alt="${escHtml(item.caption || "")}" style="max-width:100%;max-height:100vh;">`;
     }

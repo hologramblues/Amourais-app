@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from flask import Blueprint, redirect, render_template, request, send_from_directory
+from flask import Blueprint, make_response, redirect, render_template, request, send_from_directory
 from loguru import logger
 from sqlalchemy import func
 
@@ -226,54 +226,80 @@ def viewer_page():
 
 @pages_bp.route("/media/file/<path:filename>")
 def serve_media_file(filename):
-    """Serve downloaded media files from the local storage directory."""
-    return send_from_directory(str(DOWNLOAD_DIR), filename)
+    """Serve downloaded media files with caching and Range request support."""
+    # conditional_response=True enables HTTP 304 (ETag/Last-Modified) + Range (206)
+    resp = send_from_directory(
+        str(DOWNLOAD_DIR), filename, conditional=True,
+    )
+    # Cache for 7 days — files don't change once downloaded
+    resp.headers["Cache-Control"] = "public, max-age=604800, immutable"
+    return resp
 
 
 @pages_bp.route("/media/thumb/<path:filename>")
-def serve_video_thumbnail(filename):
-    """Serve a JPEG thumbnail for a video file (extracted via ffmpeg, cached)."""
+def serve_media_thumbnail(filename):
+    """Serve a JPEG thumbnail for any media file (video or image), cached on disk.
+
+    For videos: extracts first frame via ffmpeg.
+    For images: resizes to 480px wide via ffmpeg (faster than Pillow for large files).
+    """
+    import subprocess
+
     thumb_dir = DOWNLOAD_DIR / ".thumbs"
     thumb_dir.mkdir(parents=True, exist_ok=True)
 
-    # Thumbnail filename: same base name but .jpg
     base = Path(filename).stem
     thumb_name = f"{base}.jpg"
     thumb_path = thumb_dir / thumb_name
 
-    # Return cached thumbnail if it exists
+    # Return cached thumbnail
     if thumb_path.exists():
-        return send_from_directory(str(thumb_dir), thumb_name, mimetype="image/jpeg")
+        resp = send_from_directory(str(thumb_dir), thumb_name, mimetype="image/jpeg")
+        resp.headers["Cache-Control"] = "public, max-age=2592000, immutable"
+        return resp
 
-    # Source video must exist
-    video_path = DOWNLOAD_DIR / filename
-    if not video_path.exists():
-        return "Video not found", 404
+    source_path = DOWNLOAD_DIR / filename
+    if not source_path.exists():
+        return "File not found", 404
 
-    # Extract first frame using ffmpeg
+    # Detect if video or image by extension
+    ext = source_path.suffix.lower()
+    is_video = ext in (".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v")
+
     try:
-        import subprocess
-        result = subprocess.run(
-            [
+        if is_video:
+            # -ss before -i = fast input seeking (no decode from start)
+            cmd = [
                 "ffmpeg", "-y",
-                "-i", str(video_path),
-                "-vframes", "1",
                 "-ss", "0.1",
+                "-i", str(source_path),
+                "-vframes", "1",
                 "-vf", "scale='min(480,iw)':-1",
-                "-q:v", "6",
+                "-q:v", "5",
                 str(thumb_path),
-            ],
-            capture_output=True,
-            timeout=15,
-        )
+            ]
+        else:
+            # Image: resize to 480px max width
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", str(source_path),
+                "-vf", "scale='min(480,iw)':-1",
+                "-q:v", "5",
+                str(thumb_path),
+            ]
+
+        result = subprocess.run(cmd, capture_output=True, timeout=15)
         if result.returncode != 0 or not thumb_path.exists():
-            logger.warning("ffmpeg thumbnail failed for {}: {}", filename, result.stderr[:200])
+            logger.warning("Thumbnail generation failed for {}: {}", filename,
+                           result.stderr[:300] if result.stderr else "unknown error")
             return "Thumbnail generation failed", 500
     except Exception as exc:
-        logger.error("Thumbnail generation error for {}: {}", filename, exc)
+        logger.error("Thumbnail error for {}: {}", filename, exc)
         return "Thumbnail generation failed", 500
 
-    return send_from_directory(str(thumb_dir), thumb_name, mimetype="image/jpeg")
+    resp = send_from_directory(str(thumb_dir), thumb_name, mimetype="image/jpeg")
+    resp.headers["Cache-Control"] = "public, max-age=2592000, immutable"
+    return resp
 
 
 # ---------------------------------------------------------------------------
