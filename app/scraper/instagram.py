@@ -426,7 +426,6 @@ class InstagramExtractor(PlatformExtractor):
         try:
             fetch_kwargs = dict(
                 headless=True,
-                network_idle=True,
                 page_action=page_action,
             )
             if opts.proxy:
@@ -495,7 +494,7 @@ class InstagramExtractor(PlatformExtractor):
         # aren't always chronological (pinned posts, API ordering).  Instead
         # stop after seeing several consecutive known posts.
         consecutive_known = 0
-        DAILY_KNOWN_THRESHOLD = 3  # stop after 3 consecutive known posts
+        DAILY_KNOWN_THRESHOLD = 8  # stop after 8 consecutive known posts (IG reorders)
 
         for node in all_nodes:
             if stop_early:

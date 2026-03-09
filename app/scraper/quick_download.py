@@ -133,12 +133,13 @@ def _extract_instagram(url: str, post_id: str) -> list[MediaItemData]:
         if pw_cookies:
             page.context.add_cookies(pw_cookies)
 
-        # Always reload to trigger API requests while listener is active
-        page.reload(wait_until="networkidle")
-        page.wait_for_timeout(3000)
+        # Use "load" — Instagram has constant background requests (analytics, tracking)
+        # that prevent networkidle from ever being reached, causing timeouts.
+        page.reload(wait_until="load")
+        page.wait_for_timeout(4000)
 
     try:
-        fetch_kwargs = dict(headless=True, network_idle=True, page_action=page_action)
+        fetch_kwargs = dict(headless=True, page_action=page_action)
         proxy = get_proxy_for_platform("instagram")
         if proxy:
             fetch_kwargs["proxy"] = proxy
@@ -329,11 +330,11 @@ def _extract_tiktok(url: str, post_id: str) -> list[MediaItemData]:
             page.context.add_cookies(pw_cookies)
 
         # Always reload to trigger API requests while listener is active
-        page.reload(wait_until="networkidle")
+        page.reload(wait_until="load")
         page.wait_for_timeout(3000)
 
     try:
-        fetch_kwargs = dict(headless=True, network_idle=True, page_action=page_action)
+        fetch_kwargs = dict(headless=True, page_action=page_action)
         proxy = get_proxy_for_platform("tiktok")
         if proxy:
             fetch_kwargs["proxy"] = proxy
@@ -613,13 +614,13 @@ def _extract_twitter(url: str, post_id: str) -> list[MediaItemData]:
             page.context.add_cookies(pw_cookies)
 
         # Always reload to trigger fresh GraphQL requests while listener is active
-        page.reload(wait_until="networkidle")
+        page.reload(wait_until="load")
         page.wait_for_timeout(3000)
 
     # Normalize URL to x.com
     normalized = re.sub(r"twitter\.com", "x.com", url)
     try:
-        fetch_kwargs = dict(headless=True, network_idle=True, page_action=page_action)
+        fetch_kwargs = dict(headless=True, page_action=page_action)
         proxy = get_proxy_for_platform("twitter")
         if proxy:
             fetch_kwargs["proxy"] = proxy
@@ -770,11 +771,11 @@ def _extract_reddit(url: str, post_id: str) -> list[MediaItemData]:
             page.context.add_cookies(pw_cookies)
 
         # Always reload to trigger API requests while listener is active
-        page.reload(wait_until="networkidle")
+        page.reload(wait_until="load")
         page.wait_for_timeout(3000)
 
     try:
-        fetch_kwargs = dict(headless=True, network_idle=True, page_action=page_action)
+        fetch_kwargs = dict(headless=True, page_action=page_action)
         proxy = get_proxy_for_platform("reddit")
         if proxy:
             fetch_kwargs["proxy"] = proxy
