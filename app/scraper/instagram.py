@@ -45,16 +45,40 @@ _BACKFILL_MAX_AGE_SECONDS = 2 * 365 * 24 * 3600  # ~2 years
 
 
 def _load_cookies_raw(path: Path) -> list[dict]:
-    """Load Cookie Editor JSON and return raw list."""
-    if not path.exists():
-        logger.warning("Cookie file not found: {}", path)
-        return []
-    with open(path, "r", encoding="utf-8") as fh:
-        data = json.load(fh)
-    if not isinstance(data, list):
-        logger.error("Expected a JSON array in {}", path)
-        return []
-    return data
+    """Load Cookie Editor JSON — file first, then DB backup.
+
+    If the file is missing but a DB backup exists, restore the file
+    automatically so future loads are fast.
+    """
+    # 1. Try file
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, list) and data:
+            return data
+
+    # 2. Fallback: load from DB backup and restore the file
+    logger.warning("Cookie file not found: {} — checking DB backup", path)
+    try:
+        from app.db import SessionCookie, SessionLocal
+        db = SessionLocal()
+        try:
+            row = db.query(SessionCookie).filter_by(platform="instagram").first()
+            if row and row.cookies_json:
+                data = json.loads(row.cookies_json)
+                if isinstance(data, list) and data:
+                    # Restore the file so it doesn't happen again
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(row.cookies_json, encoding="utf-8")
+                    logger.info("Restored cookie file from DB backup ({} cookies)", len(data))
+                    return data
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("DB cookie backup lookup failed: {}", exc)
+
+    logger.error("No Instagram cookies found (file or DB) — scraping will fail")
+    return []
 
 
 def _to_playwright_cookies(raw: list[dict]) -> list[dict]:
@@ -295,6 +319,8 @@ class InstagramExtractor(PlatformExtractor):
         seen_ids: set[str] = set()
         intercepted_responses: list[dict] = []
         raw_cookies = _load_cookies_raw(_COOKIE_FILE)
+        if not raw_cookies:
+            raise RuntimeError("No Instagram cookies available — upload cookies via Settings")
         pw_cookies = _to_playwright_cookies(raw_cookies)
 
         now_ts = time.time()

@@ -212,6 +212,16 @@ class ScheduledPost(Base):
     )
 
 
+class SessionCookie(Base):
+    """Backup of session cookies in DB so they survive file deletion."""
+    __tablename__ = "session_cookies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    platform = Column(Text, nullable=False, unique=True)  # instagram | tiktok | twitter | reddit
+    cookies_json = Column(Text, nullable=False)  # full JSON array as string
+    updated_at = Column(Integer, nullable=False, default=lambda: int(datetime.now().timestamp()))
+
+
 class SavedMeme(Base):
     """Memes created in the editor and saved to the viewer gallery."""
     __tablename__ = "saved_memes"
