@@ -121,7 +121,6 @@ def process_video(
 
     cmd = [
         "ffmpeg", "-y",
-        "-threads", "2",
         "-ss", str(trim_start),
         "-t", str(duration),
         "-i", video_path,
@@ -134,7 +133,6 @@ def process_video(
         "-c:v", "libx264",
         "-preset", "fast",
         "-crf", "23",
-        "-threads", "2",
         "-c:a", "aac",
         "-b:a", "128k",
         "-ar", "44100",
