@@ -584,24 +584,7 @@ def upload_session():
         dest = SESSIONS_DIR / f"{platform}.json"
         dest.write_text(content, encoding="utf-8")
 
-        # Backup cookies in DB so they survive accidental file deletion
-        from app.db import SessionCookie, SessionLocal as _SL
-        _db = _SL()
-        try:
-            existing = _db.query(SessionCookie).filter_by(platform=platform).first()
-            if existing:
-                existing.cookies_json = content
-                existing.updated_at = int(datetime.now().timestamp())
-            else:
-                _db.add(SessionCookie(platform=platform, cookies_json=content))
-            _db.commit()
-        except Exception as db_exc:
-            logger.warning("Failed to backup cookies in DB: {}", db_exc)
-            _db.rollback()
-        finally:
-            _db.close()
-
-        logger.info("Session cookies uploaded for {} (file + DB backup)", platform)
+        logger.info("Session cookies uploaded for {}", platform)
 
         now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
         return f'<small style="color:green;">Cookies OK ({now_str})</small>'
