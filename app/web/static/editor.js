@@ -6,20 +6,20 @@
                 width: 1080,
                 height: 1080,
                 frame: {
-                    x: 54,          // 5% padding
+                    x: 108,         // 10% padding — bigger so Instagram Reels 9:16 crop doesn't eat content
                     y: 195,         // ~18% from top
-                    width: 972,     // 90% width
+                    width: 864,     // 80% width (1080 - 2*108)
                     height: 810,    // 75% height
                     radius: 27      // 2.5% corner radius
                 },
                 textArea: {
-                    x: 54,
+                    x: 108,
                     y: 40,
-                    width: 972,
+                    width: 864,
                     maxY: 180       // Don't go below this
                 },
                 watermark: {
-                    x: 1010,
+                    x: 956,         // shifted left to match new margin (1010 - 54)
                     y: 1040
                 }
             },
