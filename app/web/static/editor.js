@@ -6,20 +6,20 @@
                 width: 1080,
                 height: 1080,
                 frame: {
-                    x: 108,         // 10% padding — bigger so Instagram Reels 9:16 crop doesn't eat content
+                    x: 54,          // 5% padding
                     y: 195,         // ~18% from top
-                    width: 864,     // 80% width (1080 - 2*108)
+                    width: 972,     // 90% width
                     height: 810,    // 75% height
                     radius: 27      // 2.5% corner radius
                 },
                 textArea: {
-                    x: 108,
+                    x: 54,
                     y: 40,
-                    width: 864,
+                    width: 972,
                     maxY: 180       // Don't go below this
                 },
                 watermark: {
-                    x: 956,         // shifted left to match new margin (1010 - 54)
+                    x: 1010,
                     y: 1040
                 }
             },
@@ -48,20 +48,20 @@
                 width: 1080,
                 height: 1920,
                 frame: {
-                    x: 54,
+                    x: 108,         // 10% padding — bigger so Instagram Reels crop doesn't eat content
                     y: 350,
-                    width: 972,
+                    width: 864,     // 80% width (1080 - 2*108)
                     height: 1300,
                     radius: 27
                 },
                 textArea: {
-                    x: 54,
+                    x: 108,
                     y: 280,
-                    width: 972,
+                    width: 864,
                     maxY: 330
                 },
                 watermark: {
-                    x: 1010,
+                    x: 956,         // shifted left to match new margin
                     y: 1700
                 }
             }
