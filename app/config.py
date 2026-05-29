@@ -50,6 +50,10 @@ BACKFILL_MAX_SCROLLS = int(os.getenv("BACKFILL_MAX_SCROLLS", "200"))
 DAILY_MAX_SCROLLS = int(os.getenv("DAILY_MAX_SCROLLS", "40"))
 DAILY_SCRAPE_INTERVAL_MINUTES = int(os.getenv("DAILY_SCRAPE_INTERVAL_MINUTES", "360"))
 DELAY_BETWEEN_PROFILES_MS = int(os.getenv("DELAY_BETWEEN_PROFILES_MS", "10000"))
+# Global cap on simultaneously-running scrape jobs (each spawns a headless
+# browser). Prevents memory exhaustion / OOM kills on small containers when
+# many profiles fall due at once. Default 2.
+MAX_CONCURRENT_SCRAPES = int(os.getenv("MAX_CONCURRENT_SCRAPES", "2"))
 
 # Paths (all derived from DATA_DIR)
 DOWNLOAD_DIR = DATA_DIR / "downloads"

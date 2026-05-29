@@ -22,6 +22,7 @@ from loguru import logger
 from app.config import (
     DELAY_BETWEEN_PROFILES_MS,
     DOWNLOAD_DIR,
+    MAX_CONCURRENT_SCRAPES,
 )
 from app.db import MediaItem, Profile, ScheduledPost, ScrapeJob, SessionLocal
 
@@ -43,6 +44,12 @@ scheduler = BackgroundScheduler(
 # Tracks profile IDs that currently have a running job to prevent duplicates.
 _running_profiles: set[int] = set()
 _running_lock = threading.Lock()
+
+# Global cap on simultaneously-running scrape jobs (each spawns a headless
+# browser). A job thread blocks on this semaphore before invoking the pipeline,
+# so at most MAX_CONCURRENT_SCRAPES browsers run at once regardless of how many
+# profiles fall due together. Guards against OOM kills on small containers.
+_scrape_semaphore = threading.Semaphore(max(1, MAX_CONCURRENT_SCRAPES))
 
 
 def _acquire_profile(profile_id: int) -> bool:
@@ -80,7 +87,12 @@ def _run_job_safe(job_id: int, profile_id: int) -> None:
         )
         return
 
+    sem_acquired = False
     try:
+        # Block until a global scrape slot is free (caps concurrent browsers).
+        _scrape_semaphore.acquire()
+        sem_acquired = True
+
         # Import here to avoid circular imports at module level
         from app.scraper.pipeline import run_scrape_job
 
@@ -101,6 +113,8 @@ def _run_job_safe(job_id: int, profile_id: int) -> None:
         finally:
             db.close()
     finally:
+        if sem_acquired:
+            _scrape_semaphore.release()
         _release_profile(profile_id)
 
 

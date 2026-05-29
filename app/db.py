@@ -238,6 +238,23 @@ engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
 SessionLocal = sessionmaker(bind=engine)
 
 
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragma(dbapi_conn, _connection_record):
+    """Enable WAL + a busy timeout on every SQLite connection.
+
+    WAL lets readers and a writer work concurrently (the web app reads while
+    scrape threads write), and busy_timeout makes other connections wait for a
+    lock instead of failing immediately with "database is locked".
+    """
+    cursor = dbapi_conn.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=15000")  # 15s
+        cursor.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        cursor.close()
+
+
 def _migrate_add_columns():
     """Add new columns to existing tables (SQLite ALTER TABLE).
 
