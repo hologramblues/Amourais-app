@@ -23,6 +23,14 @@ load_dotenv(SETTINGS_ENV, override=True)
 PORT = int(os.getenv("PORT", "8080"))
 DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
 
+# App authentication (HTTP Basic).
+# Auth is ENABLED only when APP_PASSWORD is set (non-empty).
+# This avoids locking out local dev / breaking the Railway healthcheck if unset.
+APP_USERNAME = os.getenv("APP_USERNAME", "admin")
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")
+# Flask session signing key — read from env, fall back to a stable dev default.
+FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "samourais-scrapper-secret-key")
+
 # Google Drive OAuth2
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
