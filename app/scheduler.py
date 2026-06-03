@@ -238,6 +238,7 @@ def retry_failed_media() -> None:
         for mi in download_failures:
             mi.status = "pending"
             mi.error_message = None
+            mi.retry_count = (mi.retry_count or 0) + 1
             logger.debug(
                 "Reset media {} (post {}) for download retry (attempt {})",
                 mi.id,
@@ -258,6 +259,7 @@ def retry_failed_media() -> None:
         for mi in upload_failures:
             mi.status = "downloaded"
             mi.error_message = None
+            mi.retry_count = (mi.retry_count or 0) + 1
             logger.debug(
                 "Reset media {} (post {}) for upload retry (attempt {})",
                 mi.id,
