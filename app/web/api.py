@@ -10,8 +10,11 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import re
+
 from flask import Blueprint, jsonify, render_template, request
 from loguru import logger
+from markupsafe import escape
 from sqlalchemy import func, desc
 
 from app.config import PLATFORM_URLS, SESSIONS_DIR, BASE_DIR, DATA_DIR, DB_PATH, DOWNLOAD_DIR, SETTINGS_ENV
@@ -19,6 +22,25 @@ from app.db import MediaItem, Profile, ScrapeJob, SessionLocal
 from app.scheduler import enqueue_manual_scrape
 
 api_bp = Blueprint("api", __name__)
+
+# Keys the Settings UI is allowed to write to the persistent .env.
+# Anything else in the POST body is ignored (prevents arbitrary env injection).
+ALLOWED_ENV_KEYS = frozenset({
+    # Google Drive
+    "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI",
+    "GOOGLE_REFRESH_TOKEN", "GDRIVE_ROOT_FOLDER_NAME", "STORAGE_MODE",
+    # Instagram Graph API
+    "FB_APP_ID", "FB_APP_SECRET", "IG_ACCESS_TOKEN", "IG_USER_ID",
+    # Scraper tuning
+    "DEFAULT_SCRAPE_INTERVAL_MINUTES", "BROWSER_POOL_SIZE", "SCROLL_PAUSE_MS",
+    "MAX_SCROLLS", "DELAY_BETWEEN_PROFILES_MS", "BACKFILL_MAX_SCROLLS",
+    "DAILY_MAX_SCROLLS", "DAILY_SCRAPE_INTERVAL_MINUTES", "MAX_CONCURRENT_SCRAPES",
+    # Proxies
+    "PROXY_URL", "PROXY_INSTAGRAM", "PROXY_TIKTOK", "PROXY_TWITTER", "PROXY_REDDIT",
+    # App / server
+    "PORT", "LOG_LEVEL", "EDITOR_MAX_FILE_SIZE_MB",
+    "APP_USERNAME", "APP_PASSWORD", "FLASK_SECRET_KEY",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +140,11 @@ def add_profile():
 
         if not username or platform not in ("instagram", "reddit", "tiktok", "twitter"):
             return '<small style="color:red;">Plateforme et username requis</small>', 400
+
+        # Validate username charset (defense-in-depth against stored XSS / Drive
+        # query injection). Platform handles allow letters, digits, '.', '_', '-'.
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,30}", username):
+            return '<small style="color:red;">Username invalide (lettres, chiffres, . _ - uniquement)</small>', 400
 
         url_builder = PLATFORM_URLS.get(platform)
         profile_url = url_builder(username) if url_builder else ""
@@ -248,6 +275,7 @@ def _status_color(status: str) -> str:
         "running": "blue",
         "failed": "red",
         "partial": "orange",
+        "empty": "orange",
         "queued": "gray",
     }.get(status, "gray")
 
@@ -278,7 +306,7 @@ def jobs_recent():
 
         html_rows = ""
         for job, profile in rows:
-            username = profile.username if profile else "N/A"
+            username = escape(profile.username) if profile else "N/A"
             color = _status_color(job.status)
             date_str = _format_ts(job.created_at)
             html_rows += (
@@ -320,7 +348,7 @@ def jobs_list():
 
         html = ""
         for job, profile in rows:
-            username = profile.username if profile else "N/A"
+            username = escape(profile.username) if profile else "N/A"
             color = _status_color(job.status)
             date_str = _format_ts(job.created_at)
             retry_btn = ""
@@ -470,12 +498,20 @@ def debug_volume():
 def save_env():
     try:
         updates: dict[str, str] = {}
+        rejected: list[str] = []
         for key, value in request.form.items():
-            if isinstance(value, str):
+            if not isinstance(value, str):
+                continue
+            if key in ALLOWED_ENV_KEYS:
                 updates[key] = value
+            else:
+                rejected.append(key)
+
+        if rejected:
+            logger.warning("save_env ignored non-whitelisted keys: {}", rejected)
 
         if not updates:
-            return '<small style="color:red;">Aucun champ a sauvegarder</small>', 400
+            return '<small style="color:red;">Aucun champ valide a sauvegarder</small>', 400
 
         _write_env_file(updates)
         return '<small style="color:green;">Sauvegarde OK</small>'
@@ -572,13 +608,22 @@ def upload_session():
         if not file or not file.filename:
             return '<small style="color:red;">Aucun fichier selectionne</small>', 400
 
-        content = file.read().decode("utf-8")
-
-        # Validate JSON
+        raw = file.read()
+        # Cap size (cookie files are small; reject anything absurd)
+        if len(raw) > 1 * 1024 * 1024:  # 1 MB
+            return '<small style="color:red;">Fichier trop volumineux</small>', 400
         try:
-            json.loads(content)
+            content = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return '<small style="color:red;">Encodage invalide (UTF-8 attendu)</small>', 400
+
+        # Validate JSON shape: must be a list of cookie objects.
+        try:
+            parsed = json.loads(content)
         except json.JSONDecodeError:
             return '<small style="color:red;">Fichier JSON invalide</small>', 400
+        if not isinstance(parsed, list) or not all(isinstance(c, dict) for c in parsed):
+            return '<small style="color:red;">Format attendu : tableau de cookies</small>', 400
 
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         dest = SESSIONS_DIR / f"{platform}.json"

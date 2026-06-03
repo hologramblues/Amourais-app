@@ -153,8 +153,10 @@ def get_gdrive_service():
 # ---------------------------------------------------------------------------
 def _find_folder(service, name: str, parent_id: Optional[str] = None) -> Optional[str]:
     """Search for a folder by name under an optional parent. Returns folder ID or None."""
+    # Escape single quotes/backslashes to prevent Drive query injection.
+    safe_name = name.replace("\\", "\\\\").replace("'", "\\'")
     query_parts = [
-        f"name = '{name}'",
+        f"name = '{safe_name}'",
         "mimeType = 'application/vnd.google-apps.folder'",
         "trashed = false",
     ]
