@@ -197,6 +197,7 @@ def _download_hls(url: str) -> DownloadResult:
         "-y",
         "-hide_banner",
         "-loglevel", "warning",
+        "-threads", "2",  # cap CPU threads — avoids "Resource temporarily unavailable" on small containers
         "-user_agent", _USER_AGENT,
         "-i", url,
         "-c", "copy",

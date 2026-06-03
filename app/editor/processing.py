@@ -121,6 +121,7 @@ def process_video(
 
     cmd = [
         "ffmpeg", "-y",
+        "-threads", "2",  # cap CPU threads — avoids "Resource temporarily unavailable" on small containers
         "-ss", str(trim_start),
         "-t", str(duration),
         "-i", video_path,
