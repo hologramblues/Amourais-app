@@ -335,12 +335,14 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
                 continue
 
             try:
+                import mimetypes
+                guessed_mime = mimetypes.guess_type(mi.local_path)[0] or "application/octet-stream"
                 gdrive = upload_to_gdrive(
                     local_path=mi.local_path,
                     platform=profile.platform,
                     username=profile.username,
                     post_id=mi.post_id,
-                    mime_type=mi.mime_type if hasattr(mi, "mime_type") and mi.mime_type else "application/octet-stream",
+                    mime_type=guessed_mime,
                 )
                 mi.gdrive_file_id = gdrive["file_id"]
                 mi.gdrive_url = gdrive["web_view_link"]
@@ -412,9 +414,14 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
     job.media_downloaded = media_downloaded
     job.media_uploaded = media_uploaded
 
-    final_status = "completed"
-    if media_downloaded < len(pending_items) or media_uploaded < len(downloaded_items):
+    if media_found == 0:
+        # Nothing discovered at all — almost always expired/missing cookies or a
+        # block, NOT a success. Flag it distinctly so it doesn't look "completed".
+        final_status = "empty"
+    elif media_downloaded < len(pending_items) or media_uploaded < len(downloaded_items):
         final_status = "partial"
+    else:
+        final_status = "completed"
 
     _mark_job(db, job, final_status)
 
