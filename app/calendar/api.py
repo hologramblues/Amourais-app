@@ -20,12 +20,14 @@ from flask import Blueprint, jsonify, request, send_file
 from loguru import logger
 from nanoid import generate as nanoid
 
-from app.config import BASE_DIR
+from app.config import CALENDAR_DIR
 from app.db import ScheduledPost, SessionLocal
 
 calendar_api_bp = Blueprint("calendar_api", __name__)
 
-CALENDAR_MEDIA_DIR = BASE_DIR / "data" / "calendar" / "media"
+# Persistent volume on Railway (DATA_DIR/calendar/media) so scheduled-post
+# media survives redeploys. Previously used BASE_DIR (ephemeral container FS).
+CALENDAR_MEDIA_DIR = CALENDAR_DIR / "media"
 
 
 def _now_ts() -> int:
