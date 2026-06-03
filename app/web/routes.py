@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from flask import Blueprint, make_response, redirect, render_template, request, send_from_directory
+from werkzeug.utils import safe_join
 from loguru import logger
 from sqlalchemy import func
 
@@ -204,16 +205,18 @@ def auth_google_callback():
         )
     try:
         refresh_token = exchange_code(code)
+        # Persist the token directly to the persistent .env instead of echoing
+        # it back in the HTTP response (avoids leaking the long-lived secret).
+        from app.web.api import _write_env_file
+        _write_env_file({"GOOGLE_REFRESH_TOKEN": refresh_token})
         return (
             "<h1>Google Drive connecte !</h1>"
-            "<p>Ajoutez ce refresh token dans votre fichier <code>.env</code> :</p>"
-            f"<pre>GOOGLE_REFRESH_TOKEN={refresh_token}</pre>"
-            "<p>Puis relancez l'application.</p>"
+            "<p>Le refresh token a ete enregistre automatiquement.</p>"
             '<a href="/settings">Retour aux settings</a>'
         )
     except Exception as exc:
         logger.error("OAuth callback error: {}", exc)
-        return f'<h1>Erreur</h1><p>{exc}</p><a href="/settings">Retour</a>'
+        return "<h1>Erreur</h1><p>Echec de la connexion Google Drive.</p><a href=\"/settings\">Retour</a>"
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +261,11 @@ def serve_media_thumbnail(filename):
         resp.headers["Cache-Control"] = "public, max-age=2592000, immutable"
         return resp
 
-    source_path = DOWNLOAD_DIR / filename
+    # safe_join rejects path traversal (../) and absolute paths -> returns None
+    safe_source = safe_join(str(DOWNLOAD_DIR), filename)
+    if safe_source is None:
+        return "Invalid path", 400
+    source_path = Path(safe_source)
     if not source_path.exists():
         return "File not found", 404
 
