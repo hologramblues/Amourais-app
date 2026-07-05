@@ -2028,8 +2028,8 @@
                     frameHeightSlider.value = 100;
                     frameHeightValue.textContent = '100%';
                     
-                    // Show frame height slider only for story format
-                    frameHeightSection.style.display = (state.currentTemplate === 'story') ? 'block' : 'none';
+                    // Frame height slider available for all formats (1:1, 4:5, 9:16)
+                    frameHeightSection.style.display = 'block';
                     
                     updateCanvasSize();
                     createElements();
