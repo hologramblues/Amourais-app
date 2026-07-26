@@ -430,6 +430,39 @@ def cleanup_temp_files() -> None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+def _recover_stale_jobs() -> None:
+    """Fail jobs left in 'queued'/'running' by a previous process.
+
+    After a container restart, no thread exists to process those jobs, yet
+    check_due_profiles skips any profile that has a queued/running job — so
+    a single stale job blocks its profile from ever being scraped again.
+    Runs once at boot, before any new job threads are spawned.
+    """
+    db = SessionLocal()
+    try:
+        stale = (
+            db.query(ScrapeJob)
+            .filter(ScrapeJob.status.in_(["queued", "running"]))
+            .all()
+        )
+        for job in stale:
+            job.status = "failed"
+            job.error_message = "Interrupted by server restart"
+            job.completed_at = _now_ts()
+        if stale:
+            db.commit()
+            logger.warning(
+                "Recovered {} stale job(s) left over from a previous run: {}",
+                len(stale),
+                [j.id for j in stale],
+            )
+    except Exception as exc:
+        db.rollback()
+        logger.error("Failed to recover stale jobs: {}", exc)
+    finally:
+        db.close()
+
+
 def start_scheduler() -> None:
     """
     Register recurring jobs and start the APScheduler background scheduler.
@@ -437,6 +470,10 @@ def start_scheduler() -> None:
     if scheduler.running:
         logger.warning("Scheduler is already running")
         return
+
+    # Unblock profiles whose jobs were orphaned by the previous process
+    # (must run before initial_check creates new jobs).
+    _recover_stale_jobs()
 
     # Job 1: Check due profiles every 30 minutes
     scheduler.add_job(
