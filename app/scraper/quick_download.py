@@ -96,7 +96,12 @@ def _load_cookies(platform: str) -> list[dict]:
             if "httpOnly" in c:
                 cookie["httpOnly"] = bool(c["httpOnly"])
             if "expirationDate" in c and c["expirationDate"]:
-                cookie["expires"] = float(c["expirationDate"])
+                expires = float(c["expirationDate"])
+                # A past expiry makes Playwright drop the cookie entirely.
+                # Send it as a session cookie instead — Instagram pairs
+                # sessionid with ds_user_id, so losing one breaks the login.
+                if expires > time.time():
+                    cookie["expires"] = expires
             if "sameSite" in c:
                 val = str(c["sameSite"]).capitalize()
                 if val in ("Strict", "Lax", "None"):
@@ -111,9 +116,85 @@ def _load_cookies(platform: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Instagram single post
 # ---------------------------------------------------------------------------
+def _try_instagram_embed(post_id: str, post_url: str) -> list[MediaItemData]:
+    """
+    Try the public Instagram /embed/ page to fetch post media.
+    Works without login for public posts — no browser needed.
+    """
+    import httpx
+
+    embed_url = f"https://www.instagram.com/p/{post_id}/embed/captioned/"
+    try:
+        resp = httpx.get(
+            embed_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                "Accept": "text/html",
+            },
+            timeout=20,
+            follow_redirects=True,
+        )
+        if resp.status_code != 200:
+            logger.debug("Instagram embed page returned {}", resp.status_code)
+            return []
+        raw = resp.text
+    except Exception as exc:
+        logger.debug("Instagram embed fetch failed: {}", exc)
+        return []
+
+    def _unescape_url(u: str) -> str:
+        u = re.sub(r"\\+/", "/", u)
+        return u.encode("ascii", "ignore").decode("unicode_escape")
+
+    caption = ""
+    cap_match = re.search(r'class="Caption"[^>]*>(.*?)</div>', raw, re.DOTALL)
+    if cap_match:
+        caption = unescape(re.sub(r"<[^>]+>", " ", cap_match.group(1))).strip()[:500]
+
+    # The embed page carries the post JSON double-escaped in a script blob.
+    video_match = re.search(r'video_url\\+":\\+"(.*?)\\+"', raw)
+    if video_match:
+        media_url = _unescape_url(video_match.group(1))
+        if media_url.startswith("https://"):
+            logger.info("Instagram embed: found video for {}", post_id)
+            return [MediaItemData(
+                post_id=post_id,
+                post_url=post_url,
+                media_type="video",
+                media_url=media_url,
+                caption=caption,
+            )]
+
+    # Image posts: the embed page renders the image directly.
+    img_match = (
+        re.search(r'class="EmbeddedMediaImage"[^>]*src="([^"]+)"', raw)
+        or re.search(r'display_url\\+":\\+"(.*?)\\+"', raw)
+    )
+    if img_match:
+        media_url = unescape(_unescape_url(img_match.group(1)))
+        if media_url.startswith("https://"):
+            logger.info("Instagram embed: found image for {}", post_id)
+            return [MediaItemData(
+                post_id=post_id,
+                post_url=post_url,
+                media_type="image",
+                media_url=media_url,
+                caption=caption,
+            )]
+
+    logger.debug("Instagram embed page had no usable media for {}", post_id)
+    return []
+
+
 def _extract_instagram(url: str, post_id: str) -> list[MediaItemData]:
     """Extract media from a single Instagram post/reel."""
+    # Fast path: the public embed page needs no browser and no cookies.
+    items = _try_instagram_embed(post_id, url)
+    if items:
+        return items
+
     intercepted: list[dict] = []
+    final_url: list[str] = []
     pw_cookies = _load_cookies("instagram")
 
     def page_action(page):
@@ -133,10 +214,14 @@ def _extract_instagram(url: str, post_id: str) -> list[MediaItemData]:
         if pw_cookies:
             page.context.add_cookies(pw_cookies)
 
+        # The first (cookie-less) load gets redirected to the homepage/login
+        # for anonymous visitors — reload() would just reload THAT page.
+        # Navigate back to the post now that cookies are set.
         # Use "load" — Instagram has constant background requests (analytics, tracking)
         # that prevent networkidle from ever being reached, causing timeouts.
-        page.reload(wait_until="load")
+        page.goto(url, wait_until="load")
         page.wait_for_timeout(4000)
+        final_url.append(page.url)
 
     try:
         fetch_kwargs = dict(headless=True, page_action=page_action)
@@ -177,6 +262,15 @@ def _extract_instagram(url: str, post_id: str) -> list[MediaItemData]:
 
     # Fallback: try to extract from meta tags
     if not items:
+        # Only trust og tags if we actually landed on the post page — after a
+        # redirect to the homepage/login they point at Instagram's own logo.
+        landed = final_url[0] if final_url else ""
+        if post_id not in landed:
+            logger.warning(
+                "Instagram redirected away from post {} (landed on {}) — "
+                "cookies missing or expired?", post_id, landed or "?",
+            )
+            return []
         try:
             og_video = adaptor.css('meta[property="og:video"]')
             og_image = adaptor.css('meta[property="og:image"]')
