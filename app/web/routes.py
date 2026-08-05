@@ -230,9 +230,11 @@ def viewer_page():
 @pages_bp.route("/media/file/<path:filename>")
 def serve_media_file(filename):
     """Serve downloaded media files with caching and Range request support."""
+    # ?dl=1 forces a download (Content-Disposition: attachment)
     # conditional_response=True enables HTTP 304 (ETag/Last-Modified) + Range (206)
     resp = send_from_directory(
         str(DOWNLOAD_DIR), filename, conditional=True,
+        as_attachment=request.args.get("dl") == "1",
     )
     # Cache for 7 days — files don't change once downloaded
     resp.headers["Cache-Control"] = "public, max-age=604800, immutable"

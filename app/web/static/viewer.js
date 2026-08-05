@@ -368,9 +368,11 @@
     lbPostLink.setAttribute("download", `meme_${item.id}.png`);
     lbPostLink.style.display = "";
 
-    // Remove edit button if exists
+    // Remove edit/download buttons if they exist (memes have their own link)
     const editBtn = document.getElementById("lb-edit-btn");
     if (editBtn) editBtn.style.display = "none";
+    const dlBtn = document.getElementById("lb-download-btn");
+    if (dlBtn) dlBtn.style.display = "none";
 
     // Hide rating and comments for memes
     document.querySelector(".rating-section").style.display = "none";
@@ -572,6 +574,27 @@
     editBtn.href = `/editor?media_id=${item.id}`;
     editBtn.textContent = "\uD83C\uDFA8 Editer dans le Meme Editor";
     editBtn.style.display = "";
+
+    // Download button
+    let dlBtn = document.getElementById("lb-download-btn");
+    if (!dlBtn) {
+      dlBtn = document.createElement("a");
+      dlBtn.id = "lb-download-btn";
+      dlBtn.className = "post-link";
+      dlBtn.style.cssText = "display: inline-block; margin-top: 6px; margin-left: 8px; background: #2b2d42; color: #fff; padding: 6px 14px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;";
+      editBtn.parentNode.insertBefore(dlBtn, editBtn.nextSibling);
+    }
+    if (item.file_url) {
+      const ext = ((item.file_url.split("/").pop() || "").split(".").pop() || "").split("?")[0];
+      const fallbackExt = item.media_type === "video" ? "mp4" : "jpg";
+      const fname = `${item.platform}_${item.post_id}.${ext || fallbackExt}`;
+      dlBtn.href = `${item.file_url}?dl=1`;
+      dlBtn.setAttribute("download", fname);
+      dlBtn.textContent = "\u2B07 Telecharger";
+      dlBtn.style.display = "";
+    } else {
+      dlBtn.style.display = "none";
+    }
 
     // Load full details (comments + ratings)
     await loadMediaDetail(item.id);
