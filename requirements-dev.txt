@@ -1,0 +1,28 @@
+# =============================================================================
+# Dépendances de DÉVELOPPEMENT / TEST — SAMOURAIS SCRAPPER
+# =============================================================================
+# NE PAS fusionner dans requirements.txt : ce dernier part dans l'image Docker
+# (Dockerfile:16-18) et ne doit contenir que le strict nécessaire à la
+# production.
+#
+# Installation :
+#     ./venv/bin/pip install -r requirements-dev.txt
+#
+# Exécution :
+#     ./venv/bin/python -m pytest
+# =============================================================================
+
+# Dépendances applicatives (les tests importent app.*)
+-r requirements.txt
+
+# Lanceur de tests
+pytest>=8.0
+
+# Coupe-circuit de durée — rend mécanique la LOI n°5 (« suite < 60 s ») :
+# un test qui pend sur un réseau, un thread ou un ffmpeg est tué à 30 s
+# au lieu de figer la CI. Utilisé via addopts=--timeout=30 dans pytest.ini.
+pytest-timeout>=2.3
+
+# Gel de l'horloge — nécessaire aux tests de fuseau/date sans dépendre de
+# l'heure murale (AUDIT.md §7.4, test T19 sur risque #46).
+freezegun>=1.5

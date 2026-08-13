@@ -7,20 +7,20 @@
   <table>
     <thead>
       <tr>
-        <th>ID</th>
+        <th class="num">ID</th>
         <th>Profil</th>
-        <th>Status</th>
-        <th>Trigger</th>
-        <th>Trouve</th>
-        <th>Nouveau</th>
-        <th>Download</th>
-        <th>Upload</th>
+        <th>État</th>
+        <th>Déclencheur</th>
+        <th class="num">Trouvés</th>
+        <th class="num">Nouveaux</th>
+        <th class="num">Téléchargés</th>
+        <th class="num">Envoyés</th>
         <th>Date</th>
         <th>Actions</th>
       </tr>
     </thead>
     <tbody hx-get="/api/jobs/list" hx-trigger="load, every 10s" hx-swap="innerHTML">
-      <tr><td colspan="10" class="text-muted">Chargement...</td></tr>
+      <tr><td colspan="10" class="text-muted">Chargement…</td></tr>
     </tbody>
   </table>
 </div>

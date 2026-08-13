@@ -1,0 +1,70 @@
+# =============================================================================
+# .dockerignore — SAMOURAIS SCRAPPER (lot 1.8, risque #36 d'AUDIT.md)
+# =============================================================================
+# Le Dockerfile fait « COPY . . » : sans ce fichier, le contexte de build
+# embarque venv/, node_modules/, .git/, data/ (base + médias de PRODUCTION) et
+# surtout .env — les secrets se retrouvent alors figés dans une couche d'image.
+#
+# RÈGLE DE PRUDENCE : on n'exclut que ce dont l'application n'a PAS besoin à
+# l'exécution. Sont donc conservés : app/, run.py, requirements.txt,
+# railway.toml, .env.example.
+# =============================================================================
+
+# --- Secrets et environnement local -----------------------------------------
+# En production, les variables viennent de Railway ; le .env de développement
+# n'a rien à faire dans une couche d'image.
+.env
+.env.*
+!.env.example
+
+# --- Données de PRODUCTION ---------------------------------------------------
+# Le conteneur lit DATA_DIR=/data, monté comme volume Railway : le data/ local
+# (base SQLite + médias du propriétaire) ne doit jamais entrer dans l'image.
+data/
+
+# --- Contrôle de version -----------------------------------------------------
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# --- Environnements virtuels et caches Python --------------------------------
+venv/
+.venv/
+**/__pycache__/
+**/*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Node (héritage : aucun code Python ne le référence) ---------------------
+node_modules/
+dist/
+
+# --- Tests et outillage de développement (non exécutés dans l'image) ---------
+tests/
+pytest.ini
+requirements-dev.txt
+
+# --- Documentation et rapports locaux ----------------------------------------
+README.md
+AUDIT.md
+DOCUMENTATION.md
+REFERENCES.md
+progress.html
+**/*.log
+
+# --- Bruit d'éditeur et de système -------------------------------------------
+.claude/
+.vscode/
+.idea/
+*.code-workspace
+**/.DS_Store
+Thumbs.db
+**/*.swp
+**/*.swo
+*~

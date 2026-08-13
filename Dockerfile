@@ -28,8 +28,12 @@ ENV DATA_DIR=/data
 # Railway injects PORT env var; fallback 8080
 EXPOSE 8080
 
-# Health check
+# Health check — /health is public by design (route `_health` + son exemption
+# dans `_require_auth`, app/web/app.py),
+# alors que "/" repasse par l'authentification Basic : le sonder rendait le
+# healthcheck unhealthy en permanence dès qu'APP_PASSWORD est posé, et, quand
+# il est vide, faisait rendre tout le dashboard (8 requêtes SQL) toutes les 30 s.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8080}/ || exit 1
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 CMD ["python", "run.py"]

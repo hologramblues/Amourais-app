@@ -109,7 +109,7 @@ def _extract_caption(node: dict) -> str | None:
     # GraphQL format
     edges = (
         node.get("edge_media_to_caption", {}).get("edges")
-        or node.get("caption", {}).get("edges") if isinstance(node.get("caption"), dict) else None
+        or (node.get("caption", {}).get("edges") if isinstance(node.get("caption"), dict) else None)
     )
     if edges and isinstance(edges, list) and len(edges) > 0:
         text = edges[0].get("node", {}).get("text")
@@ -131,7 +131,11 @@ def _media_items_from_node(node: dict) -> list[dict]:
     """
     items: list[dict] = []
     shortcode = node.get("shortcode") or node.get("code") or ""
-    post_id = node.get("pk") or node.get("id") or shortcode
+    # Le `shortcode` est l'espace d'identifiants UNIQUE d'Instagram : `_dom_fallback`
+    # (:614) n'en connaît pas d'autre. Utiliser `pk`/`id` ici créait un second espace,
+    # rendant `known_post_ids` et la contrainte (profile_id, post_id, media_url)
+    # inopérants entre les deux chemins (risque #45, §4.17, lot 1.5b).
+    post_id = shortcode or node.get("pk") or node.get("id")
     if not post_id:
         return items
 
@@ -436,6 +440,11 @@ class InstagramExtractor(PlatformExtractor):
             adaptor = StealthyFetcher.fetch(profile_url, **fetch_kwargs)
         except Exception as exc:
             logger.error("StealthyFetcher failed for Instagram: {}", exc)
+            # risque #53 / §4.20 — la plateforme n'a PAS été atteinte : on porte la
+            # cause dans le résultat pour que le pipeline conclue `failed` et non
+            # `empty` (lot 1.4b). `ExtractorResult` étant défini dans base.py, le
+            # champ est posé dynamiquement.
+            result.fetch_error = f"Instagram fetch failed: {exc}"
             return result
 
         # -- Debug: log page status ------------------------------------------

@@ -45,6 +45,10 @@ class ExtractorResult:
     profile_info: ProfileInfo = field(default_factory=ProfileInfo)
     media: list[MediaItemData] = field(default_factory=list)
     total_seen: int = 0  # total posts found on page (including already-known / skipped)
+    # Set by the 4 extractors when StealthyFetcher.fetch raises: the platform was
+    # never reached. Consumed by pipeline._plateforme_non_atteinte to mark the job
+    # `failed` instead of `empty` (risque #53, AUDIT.md §4.20 / lot 1.4b).
+    fetch_error: Optional[str] = None
 
 
 class PlatformExtractor:

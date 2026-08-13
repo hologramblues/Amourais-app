@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from loguru import logger
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -19,9 +20,30 @@ DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
 SETTINGS_ENV = DATA_DIR / ".env"
 load_dotenv(SETTINGS_ENV, override=True)
 
+
+def _env_int(key: str, default: int) -> int:
+    """Read an integer setting, falling back to `default` when unusable.
+
+    Settings are persisted on the data volume (`DATA_DIR/.env`) and survive
+    redeploys. A single non-numeric value used to raise `ValueError` at import
+    time and brick the whole application — including the Settings UI, the only
+    way to fix it (risque #41 / AUDIT.md §4.14). We log and fall back instead.
+    """
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    try:
+        return int(raw.strip())
+    except (TypeError, ValueError):
+        logger.warning(
+            "Valeur non entiere pour {} ({!r}) — repli sur {}", key, raw, default
+        )
+        return default
+
+
 # Server
-PORT = int(os.getenv("PORT", "8080"))
-DEBUG = os.getenv("FLASK_DEBUG", "1") == "1"
+PORT = _env_int("PORT", 8080)
+DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
 
 # App authentication (HTTP Basic).
 # Auth is ENABLED only when APP_PASSWORD is set (non-empty).
@@ -42,18 +64,18 @@ GDRIVE_ROOT_FOLDER_NAME = os.getenv("GDRIVE_ROOT_FOLDER_NAME", "SAMOURAIS SCRAPP
 STORAGE_MODE = os.getenv("STORAGE_MODE", "local")
 
 # Scraper
-BROWSER_POOL_SIZE = int(os.getenv("BROWSER_POOL_SIZE", "2"))
-DEFAULT_SCRAPE_INTERVAL_MINUTES = int(os.getenv("DEFAULT_SCRAPE_INTERVAL_MINUTES", "360"))
-SCROLL_PAUSE_MS = int(os.getenv("SCROLL_PAUSE_MS", "3000"))
-MAX_SCROLLS = int(os.getenv("MAX_SCROLLS", "30"))
-BACKFILL_MAX_SCROLLS = int(os.getenv("BACKFILL_MAX_SCROLLS", "200"))
-DAILY_MAX_SCROLLS = int(os.getenv("DAILY_MAX_SCROLLS", "40"))
-DAILY_SCRAPE_INTERVAL_MINUTES = int(os.getenv("DAILY_SCRAPE_INTERVAL_MINUTES", "360"))
-DELAY_BETWEEN_PROFILES_MS = int(os.getenv("DELAY_BETWEEN_PROFILES_MS", "10000"))
+BROWSER_POOL_SIZE = _env_int("BROWSER_POOL_SIZE", 2)
+DEFAULT_SCRAPE_INTERVAL_MINUTES = _env_int("DEFAULT_SCRAPE_INTERVAL_MINUTES", 360)
+SCROLL_PAUSE_MS = _env_int("SCROLL_PAUSE_MS", 3000)
+MAX_SCROLLS = _env_int("MAX_SCROLLS", 30)
+BACKFILL_MAX_SCROLLS = _env_int("BACKFILL_MAX_SCROLLS", 200)
+DAILY_MAX_SCROLLS = _env_int("DAILY_MAX_SCROLLS", 40)
+DAILY_SCRAPE_INTERVAL_MINUTES = _env_int("DAILY_SCRAPE_INTERVAL_MINUTES", 360)
+DELAY_BETWEEN_PROFILES_MS = _env_int("DELAY_BETWEEN_PROFILES_MS", 10000)
 # Global cap on simultaneously-running scrape jobs (each spawns a headless
 # browser). Prevents memory exhaustion / OOM kills on small containers when
 # many profiles fall due at once. Default 2.
-MAX_CONCURRENT_SCRAPES = int(os.getenv("MAX_CONCURRENT_SCRAPES", "2"))
+MAX_CONCURRENT_SCRAPES = _env_int("MAX_CONCURRENT_SCRAPES", 2)
 
 # Paths (all derived from DATA_DIR)
 DOWNLOAD_DIR = DATA_DIR / "downloads"
@@ -65,7 +87,7 @@ CALENDAR_DIR = DATA_DIR / "calendar"
 # Editor
 EDITOR_UPLOAD_DIR = DATA_DIR / "editor" / "uploads"
 EDITOR_OUTPUT_DIR = DATA_DIR / "editor" / "outputs"
-EDITOR_MAX_FILE_SIZE_MB = int(os.getenv("EDITOR_MAX_FILE_SIZE_MB", "100"))
+EDITOR_MAX_FILE_SIZE_MB = _env_int("EDITOR_MAX_FILE_SIZE_MB", 100)
 
 # Proxy — format: http://username:password@host:port
 # Can be set globally or per-platform (platform-specific takes priority)

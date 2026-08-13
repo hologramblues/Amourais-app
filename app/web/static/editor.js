@@ -1,4 +1,24 @@
         // ============================================
+        // MESSAGES — plus aucune boîte système
+        // --------------------------------------------
+        // Cet écran portait les 8 derniers alert() de l'application :
+        // le Viewer et le Calendrier avaient déjà remplacé les leurs
+        // par un dialogue local. Une boîte système vole le focus, ne
+        // se style pas, et bloque le fil pendant un export FFmpeg.
+        //
+        // `note()` passe par l'implémentation partagée de
+        // samourais-app.js (role=status, non bloquante, aux couleurs
+        // du thème). Le repli console garantit qu'aucun message n'est
+        // perdu si la couche partagée n'a pas encore été analysée.
+        // ============================================
+        function note(message, kind) {
+            if (window.samourais && window.samourais.notify) {
+                return window.samourais.notify(message, kind || 'error');
+            }
+            console.warn('[editor]', message);
+        }
+
+        // ============================================
         // TEMPLATES DEFINITION
         // ============================================
         const TEMPLATES = {
@@ -97,7 +117,29 @@
             // Frame customization (for story template)
             frameHeightPercent: 100,
             // Canvas state
-            scale: 1
+            scale: 1,
+            // ---- Retouche image (LOT C) ----
+            // Tout est appliqué par Fabric côté client : rien ne part au
+            // serveur, donc aucun fichier temporaire à nettoyer et aucun
+            // échec silencieux possible sur ces opérations.
+            cropRatio: null,      // null = image entière, sinon largeur/hauteur
+            rotation: 0,          // 0 | 90 | 180 | 270 (degrés, sens horaire)
+            flipX: false,
+            flipY: false,
+            brightness: 0,        // -100..100 → filtre Fabric -1..1
+            contrast: 0,          // -100..100
+            saturation: 0,        // -100..100
+            // ---- Fichier de sortie (LOT C) ----
+            exportFormat: 'png',  // 'png' | 'jpeg'
+            exportQuality: 90,    // 50..100, JPEG uniquement
+            exportScale: 1        // multiplicateur de la taille du template
+        };
+
+        // Valeurs de départ des réglages de retouche — sert au bouton
+        // « Annuler » et au chargement d'une nouvelle image.
+        const IMAGE_EDIT_DEFAULTS = {
+            cropRatio: null, rotation: 0, flipX: false, flipY: false,
+            brightness: 0, contrast: 0, saturation: 0
         };
 
         // ============================================
@@ -154,6 +196,31 @@
         const btnPreview = document.getElementById('btn-preview');
         const videoSource = document.getElementById('video-source');
 
+        // ---- Retouche image + fichier de sortie (LOT C) ----
+        const imageTools = document.getElementById('image-tools');
+        const imageResetBtn = document.getElementById('image-reset-btn');
+        const cropGroup = document.getElementById('crop-group');
+        const cropReadout = document.getElementById('crop-readout');
+        const orientReadout = document.getElementById('orient-readout');
+        const rotateLeftBtn = document.getElementById('rotate-left');
+        const rotateRightBtn = document.getElementById('rotate-right');
+        const flipHBtn = document.getElementById('flip-h');
+        const flipVBtn = document.getElementById('flip-v');
+        const adjBrightness = document.getElementById('adj-brightness');
+        const adjBrightnessValue = document.getElementById('adj-brightness-value');
+        const adjContrast = document.getElementById('adj-contrast');
+        const adjContrastValue = document.getElementById('adj-contrast-value');
+        const adjSaturation = document.getElementById('adj-saturation');
+        const adjSaturationValue = document.getElementById('adj-saturation-value');
+        const outputTools = document.getElementById('output-tools');
+        const imgFormatGroup = document.getElementById('imgformat-group');
+        const qualityCtl = document.getElementById('quality-ctl');
+        const exportQuality = document.getElementById('export-quality');
+        const exportQualityValue = document.getElementById('export-quality-value');
+        const sizeGroup = document.getElementById('size-group');
+        const exportDims = document.getElementById('export-dims');
+        const exportFormatLabel = document.getElementById('export-format-label');
+
         // ============================================
         // FABRIC CANVAS
         // ============================================
@@ -164,9 +231,33 @@
         // Canvas padding to show controls outside template - needs to be large enough for scaled images
         const CANVAS_PADDING = 350;
 
+        // ============================================
+        // FOND DU PLAN DE TRAVAIL — suit le thème
+        // --------------------------------------------
+        // Fabric peint son fond lui-même, en JS : il ne voit pas le CSS.
+        // La valeur était écrite en dur ('#2a2a2a'), si bien qu'en thème
+        // CLAIR cet écran affichait un pavé quasi noir de 712x712 px au
+        // milieu d'une page à rgb(244,245,247) — le seul écran de
+        // l'application dans ce cas.
+        //
+        // On lit le jeton --bg-2 (la « zone en creux » du socle), qui est
+        // défini dans les DEUX thèmes, et on repeint à chaque bascule.
+        // ============================================
+        function artboardBackdrop() {
+            const v = getComputedStyle(document.documentElement)
+                .getPropertyValue('--bg-2').trim();
+            return v || '#2a2a2a';   // repli : l'ancien fond
+        }
+
+        function repaintBackdrop() {
+            if (!canvas) return;
+            canvas.backgroundColor = artboardBackdrop();
+            canvas.requestRenderAll();
+        }
+
         function initCanvas() {
             canvas = new fabric.Canvas('meme-canvas', {
-                backgroundColor: '#2a2a2a', // Lighter dark background to distinguish from page
+                backgroundColor: artboardBackdrop(),
                 selection: true,
                 preserveObjectStacking: true,
                 perPixelTargetFind: false // Click on bounding box, not just visible pixels
@@ -354,7 +445,7 @@
 
         function createElements() {
             canvas.clear();
-            canvas.backgroundColor = '#2a2a2a'; // Lighter dark area outside template
+            canvas.backgroundColor = artboardBackdrop();
 
             const template = TEMPLATES[state.currentTemplate];
             const frame = template.frame;
@@ -527,10 +618,15 @@
                 state.imageScale = 100;
                 state.imageOffsetX = 0;
                 state.imageOffsetY = 0;
-                
+                // LOT C — une nouvelle image repart d'une retouche vierge :
+                // garder le recadrage de la précédente n'aurait aucun sens.
+                Object.assign(state, IMAGE_EDIT_DEFAULTS);
+                syncImageEditControls();
+                updateMediaToolsVisibility();
+
                 // Hide video timeline
                 timelineContainer.style.display = 'none';
-                
+
                 updateUploadZone();
                 addImageToCanvas(e.target.result);
                 
@@ -554,7 +650,12 @@
             state.imageScale = 100;
             state.imageOffsetX = 0;
             state.imageOffsetY = 0;
-            
+            // LOT C — la retouche et le format image ne s'appliquent pas à
+            // une vidéo : on remet à zéro et on masque les deux blocs.
+            Object.assign(state, IMAGE_EDIT_DEFAULTS);
+            syncImageEditControls();
+            updateMediaToolsVisibility();
+
             // Show loading state
             uploadZone.classList.add('has-file');
             uploadZone.innerHTML = `
@@ -860,8 +961,44 @@
             playVideo();
         }
 
+        /**
+         * Le fichier choisi n'est pas décodable comme image : on retire ce
+         * qui restait sur le plan de travail, on REVERROUILLE les actions de
+         * sortie (rien de bon ne peut en sortir) et on le dit à l'écran.
+         */
+        function rejectUnusableImage() {
+            if (imageObj) {
+                canvas.remove(imageObj);
+                imageObj = null;
+            }
+            state.imageSrc = null;
+            canvas.requestRenderAll();
+            updateImageEditReadouts();
+
+            // La vidéo ne passe ici que par une capture de frame déjà rendue
+            // par un canvas : on ne touche pas à son bouton d'export.
+            if (state.mediaType !== 'video') {
+                if (exportBtn) exportBtn.disabled = true;
+                if (scheduleBtn) scheduleBtn.disabled = true;
+                if (saveMemeBtn) saveMemeBtn.disabled = true;
+            }
+
+            note('Ce fichier n’est pas une image exploitable : rien n’a pu être décodé. Choisis un PNG, un JPEG ou un WebP valide.', 'error');
+        }
+
         function addImageToCanvas(src) {
-            fabric.Image.fromURL(src, (img) => {
+            // Fabric 5 passe `isError` en second argument et rend malgré tout
+            // un objet Image — de dimensions 0×0. Sans ce contrôle, un fichier
+            // qui n'est pas une image (extension trompeuse, média tronqué)
+            // produisait un plan de travail VIDE, sans un mot à l'écran, puis
+            // un export « réussi » ne contenant que le gabarit. L'échec doit
+            // se voir : c'est le défaut que l'audit reproche déjà à FFmpeg.
+            fabric.Image.fromURL(src, (img, isError) => {
+                if (isError || !img || !img.width || !img.height) {
+                    rejectUnusableImage();
+                    return;
+                }
+
                 if (imageObj) {
                     canvas.remove(imageObj);
                 }
@@ -870,9 +1007,19 @@
                 const frame = template.frame;
                 const offset = CANVAS_PADDING;
 
+                // LOT C — dimensions naturelles mémorisées AVANT tout
+                // recadrage : width/height deviennent ensuite la fenêtre
+                // de recadrage, plus la taille de la source.
+                img._natW = img.width;
+                img._natH = img.height;
+                applyCropToImage(img, state.cropRatio);
+
                 // Calculate scale to cover the frame
-                const scaleX = frame.width / img.width;
-                const scaleY = frame.height / img.height;
+                // Une rotation d'un quart de tour échange largeur et hauteur :
+                // sans ça l'image cesse de couvrir le cadre après rotation.
+                const quarterTurn = (state.rotation % 180) !== 0;
+                const scaleX = frame.width / (quarterTurn ? img.height : img.width);
+                const scaleY = frame.height / (quarterTurn ? img.width : img.height);
                 const baseScale = Math.max(scaleX, scaleY);
                 const finalScale = baseScale * (state.imageScale / 100);
 
@@ -887,6 +1034,11 @@
                     originY: 'center',
                     scaleX: finalScale,
                     scaleY: finalScale,
+                    // LOT C — rotation / retournement conservés d'un
+                    // changement de format à l'autre.
+                    angle: state.rotation,
+                    flipX: state.flipX,
+                    flipY: state.flipY,
                     hasControls: true,
                     hasBorders: true,
                     cornerSize: 18,
@@ -919,6 +1071,11 @@
                 if (overlayTextObj) {
                     canvas.bringToFront(overlayTextObj);
                 }
+
+                // LOT C — réglages (luminosité / contraste / saturation)
+                // réappliqués : ils survivent au changement de format.
+                applyImageFilters();
+                updateImageEditReadouts();
 
                 // Track image movement
                 imageObj.on('moving', function() {
@@ -1221,7 +1378,7 @@
                     driveLoading.style.display = 'none';
                     driveConnect.style.display = 'block';
                     console.error('Auth error:', authResult?.error);
-                    alert('Erreur de connexion à Google Drive. Vérifie tes identifiants.');
+                    note('Connexion à Google Drive impossible. Vérifie les identifiants dans les Réglages, puis réessaie.', 'error');
                 }
             });
         }
@@ -1286,7 +1443,7 @@
                 
             } catch (error) {
                 console.error('Error loading from Drive:', error);
-                alert('Erreur lors du chargement du fichier depuis Drive');
+                note('Le fichier n\u2019a pas pu être chargé depuis Google Drive. Réessaie ; si l\u2019erreur persiste, reconnecte le compte dans les Réglages.', 'error');
                 driveLoading.style.display = 'none';
                 driveConnect.style.display = 'block';
             }
@@ -1341,9 +1498,310 @@
                 // Reload to apply
                 location.reload();
             } else {
-                alert('Remplis les deux champs');
+                note('Les deux champs sont obligatoires.', 'warning');
             }
         };
+
+        // ============================================
+        // RETOUCHE IMAGE (LOT C)
+        // --------------------------------------------
+        // Recadrage au ratio, rotation, retournement et réglages de base.
+        // Tout passe par Fabric : cropX/cropY/width/height pour le
+        // recadrage (le fichier source n'est jamais réécrit), `angle`
+        // pour la rotation, flipX/flipY pour le miroir, et les filtres
+        // intégrés Brightness / Contrast / Saturation pour les réglages.
+        //
+        // Conséquence voulue : ZÉRO aller-retour serveur. Pas d'upload,
+        // pas de fichier temporaire à nettoyer, pas de worker bloqué, et
+        // aucun échec qui pourrait disparaître sans que l'utilisateur le
+        // voie — le seul échec possible (filtre WebGL) est capturé et
+        // remonté par `note()`.
+        // ============================================
+
+        // Ratios proposés, en largeur/hauteur.
+        const CROP_RATIOS = {
+            '1': 1, '0.8': 0.8, '0.5625': 0.5625, '1.7777778': 16 / 9
+        };
+
+        /**
+         * Recadre l'objet Fabric au ratio demandé, centré sur la source.
+         * `ratio` null remet l'image entière. Les dimensions naturelles
+         * sont mémorisées sur l'objet (_natW/_natH) au premier ajout :
+         * width/height sont ensuite la FENÊTRE de recadrage, pas la source.
+         */
+        function applyCropToImage(img, ratio) {
+            const natW = img._natW || img.width;
+            const natH = img._natH || img.height;
+
+            if (!ratio || !isFinite(ratio) || ratio <= 0) {
+                img.set({ cropX: 0, cropY: 0, width: natW, height: natH });
+                return;
+            }
+
+            let cw, ch;
+            if (natW / natH > ratio) {
+                ch = natH;
+                cw = Math.round(natH * ratio);
+            } else {
+                cw = natW;
+                ch = Math.round(natW / ratio);
+            }
+            cw = Math.max(1, Math.min(natW, cw));
+            ch = Math.max(1, Math.min(natH, ch));
+
+            img.set({
+                cropX: Math.round((natW - cw) / 2),
+                cropY: Math.round((natH - ch) / 2),
+                width: cw,
+                height: ch
+            });
+        }
+
+        /**
+         * Recalcule l'échelle de couverture du cadre et repositionne
+         * l'image après un recadrage ou une rotation. Une rotation de
+         * 90°/270° échange largeur et hauteur : sans ça l'image cesse de
+         * couvrir le cadre et laisse apparaître le fond gris.
+         */
+        function reapplyImageTransforms() {
+            if (!imageObj) return;
+
+            const template = TEMPLATES[state.currentTemplate];
+            const frame = template.frame;
+            const offset = CANVAS_PADDING;
+
+            applyCropToImage(imageObj, state.cropRatio);
+
+            const quarterTurn = (state.rotation % 180) !== 0;
+            const srcW = quarterTurn ? imageObj.height : imageObj.width;
+            const srcH = quarterTurn ? imageObj.width : imageObj.height;
+
+            const baseScale = Math.max(frame.width / srcW, frame.height / srcH);
+            imageObj._baseScale = baseScale;
+
+            const finalScale = baseScale * (state.imageScale / 100);
+            const centerX = frame.x + frame.width / 2 + offset;
+            const centerY = frame.y + frame.height / 2 + offset;
+
+            imageObj.set({
+                angle: state.rotation,
+                flipX: state.flipX,
+                flipY: state.flipY,
+                scaleX: finalScale,
+                scaleY: finalScale,
+                left: centerX + state.imageOffsetX,
+                top: centerY + state.imageOffsetY
+            });
+            imageObj.setCoords();
+            canvas.requestRenderAll();
+            updateImageEditReadouts();
+        }
+
+        // Les filtres sont recalculés sur toute l'image : sur un slider
+        // qui émet à chaque pixel de course, on ne garde que la dernière
+        // valeur de chaque frame.
+        let filterFrame = null;
+
+        function applyImageFiltersNow() {
+            filterFrame = null;
+            if (!imageObj) return;
+
+            const filters = [];
+            if (state.brightness) {
+                filters.push(new fabric.Image.filters.Brightness({
+                    brightness: state.brightness / 100
+                }));
+            }
+            if (state.contrast) {
+                filters.push(new fabric.Image.filters.Contrast({
+                    contrast: state.contrast / 100
+                }));
+            }
+            if (state.saturation) {
+                filters.push(new fabric.Image.filters.Saturation({
+                    saturation: state.saturation / 100
+                }));
+            }
+
+            imageObj.filters = filters;
+            try {
+                imageObj.applyFilters();
+            } catch (err) {
+                // Un échec de filtre est VISIBLE : on revient à l'image
+                // nue et on le dit, au lieu de laisser un canvas figé
+                // sans explication.
+                console.error('[editor] application des filtres impossible', err);
+                note('Les réglages n’ont pas pu être appliqués à cette image. L’image d’origine est conservée.', 'error');
+                imageObj.filters = [];
+                try { imageObj.applyFilters(); } catch (e) { /* déjà signalé */ }
+            }
+            canvas.requestRenderAll();
+        }
+
+        function applyImageFilters() {
+            if (!imageObj) return;
+            if (filterFrame) cancelAnimationFrame(filterFrame);
+            filterFrame = requestAnimationFrame(applyImageFiltersNow);
+        }
+
+        /**
+         * Applique SANS ATTENDRE les réglages encore en file d'attente.
+         *
+         * Indispensable avant tout rendu : requestAnimationFrame ne
+         * garantit rien sur une frame donnée (et n'est même pas servi
+         * quand l'onglet est en arrière-plan). Sans ce vidage, une image
+         * exportée juste après un mouvement de slider partait SANS le
+         * réglage que l'utilisateur venait de voir à l'écran — un écart
+         * silencieux entre l'aperçu et le fichier produit.
+         */
+        function flushImageFilters() {
+            if (filterFrame === null) return;
+            cancelAnimationFrame(filterFrame);
+            applyImageFiltersNow();
+        }
+
+        /** Dimensions annoncées : source, fenêtre de recadrage, rotation. */
+        function updateImageEditReadouts() {
+            if (!cropReadout || !orientReadout) return;
+
+            if (!imageObj) {
+                cropReadout.textContent = 'Source : —';
+                orientReadout.innerHTML = 'Rotation : <strong>0°</strong>';
+                return;
+            }
+
+            const natW = imageObj._natW || imageObj.width;
+            const natH = imageObj._natH || imageObj.height;
+            const cw = Math.round(imageObj.width);
+            const ch = Math.round(imageObj.height);
+
+            cropReadout.textContent = (cw === natW && ch === natH)
+                ? `Source : ${natW}×${natH} px — image entière`
+                : `Source : ${natW}×${natH} px — recadrée à ${cw}×${ch} px`;
+
+            const mirrors = [];
+            if (state.flipX) mirrors.push('miroir horizontal');
+            if (state.flipY) mirrors.push('miroir vertical');
+            orientReadout.innerHTML = `Rotation : <strong>${state.rotation}°</strong>`
+                + (mirrors.length ? ' — ' + mirrors.join(', ') : '');
+        }
+
+        /** Remet les boutons/sliders de retouche en accord avec `state`. */
+        function syncImageEditControls() {
+            if (cropGroup) {
+                const key = state.cropRatio === null ? 'free' : String(state.cropRatio);
+                cropGroup.querySelectorAll('.seg__btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.ratio === key);
+                });
+            }
+            if (flipHBtn) flipHBtn.setAttribute('aria-pressed', String(state.flipX));
+            if (flipVBtn) flipVBtn.setAttribute('aria-pressed', String(state.flipY));
+            if (adjBrightness) { adjBrightness.value = state.brightness; adjBrightnessValue.textContent = state.brightness; }
+            if (adjContrast) { adjContrast.value = state.contrast; adjContrastValue.textContent = state.contrast; }
+            if (adjSaturation) { adjSaturation.value = state.saturation; adjSaturationValue.textContent = state.saturation; }
+            updateImageEditReadouts();
+        }
+
+        /** Remet la retouche à zéro (sans recharger l'image). */
+        function resetImageEdits(silent) {
+            Object.assign(state, IMAGE_EDIT_DEFAULTS);
+            syncImageEditControls();
+            if (imageObj) {
+                reapplyImageTransforms();
+                applyImageFilters();
+            }
+            if (!silent) note('Retouche annulée : recadrage, rotation et réglages remis à zéro.', 'success');
+        }
+
+        // ============================================
+        // FICHIER DE SORTIE (LOT C)
+        // ============================================
+
+        /** Dimensions réelles du fichier produit, multiplicateur compris. */
+        function exportPixelSize() {
+            const template = TEMPLATES[state.currentTemplate];
+            return {
+                width: Math.round(template.width * state.exportScale),
+                height: Math.round(template.height * state.exportScale)
+            };
+        }
+
+        function updateExportReadout() {
+            if (!exportDims) return;
+            const size = exportPixelSize();
+            exportDims.textContent = `${size.width}×${size.height} px`;
+            if (exportFormatLabel) {
+                exportFormatLabel.textContent = state.exportFormat === 'jpeg'
+                    ? `JPEG, qualité ${state.exportQuality}%`
+                    : 'PNG';
+            }
+            if (qualityCtl) {
+                qualityCtl.style.display = state.exportFormat === 'jpeg' ? 'block' : 'none';
+            }
+        }
+
+        /**
+         * Rend le plan de travail en image, hors marge de manipulation.
+         * Zoom remis à 1, repères de cadre masqués, sélection annulée —
+         * puis tout est restauré, y compris si le rendu échoue.
+         */
+        function renderCanvasToDataURL(format, quality, multiplier) {
+            // Ce que l'utilisateur voit doit être ce qui sort du canvas :
+            // on vide d'abord les réglages en attente.
+            flushImageFilters();
+
+            const template = TEMPLATES[state.currentTemplate];
+            const originalZoom = canvas.getZoom();
+
+            frameBorder.set({ visible: false });
+            frameRect.set({ visible: false });
+            canvas.discardActiveObject();
+            canvas.setZoom(1);
+            canvas.setWidth(template.width + (CANVAS_PADDING * 2));
+            canvas.setHeight(template.height + (CANVAS_PADDING * 2));
+            canvas.renderAll();
+
+            try {
+                return canvas.toDataURL({
+                    format: format,
+                    quality: quality,
+                    multiplier: multiplier || 1,
+                    left: CANVAS_PADDING,
+                    top: CANVAS_PADDING,
+                    width: template.width,
+                    height: template.height
+                });
+            } finally {
+                canvas.setZoom(originalZoom);
+                updateCanvasSize();
+                frameBorder.set({ visible: true });
+                frameRect.set({ visible: true });
+                canvas.renderAll();
+            }
+        }
+
+        /** Poids d'une data URL base64, en octets. */
+        function dataURLBytes(dataURL) {
+            const base64 = dataURL.slice(dataURL.indexOf(',') + 1);
+            const padding = base64.endsWith('==') ? 2 : (base64.endsWith('=') ? 1 : 0);
+            return Math.max(0, Math.floor(base64.length * 3 / 4) - padding);
+        }
+
+        function formatBytes(bytes) {
+            if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
+            return Math.max(1, Math.round(bytes / 1024)) + ' Ko';
+        }
+
+        /** Révèle/masque les blocs qui n'ont de sens que pour une image. */
+        function updateMediaToolsVisibility() {
+            const isImage = state.mediaType === 'image';
+            if (imageTools) imageTools.style.display = isImage ? 'flex' : 'none';
+            // L'export vidéo est MP4 H.264 : ni format image, ni qualité,
+            // ni multiplicateur ne s'y appliquent. On ne montre pas des
+            // réglages qui n'auraient aucun effet.
+            if (outputTools) outputTools.style.display = (state.mediaType === 'video') ? 'none' : 'flex';
+            updateExportReadout();
+        }
 
         // ============================================
         // RESET & EXPORT
@@ -1355,9 +1813,14 @@
             
             imageScaleSlider.value = 100;
             imageScaleValue.textContent = '100%';
-            
+
+            // LOT C — « Réinitialiser » repart d'une composition vierge :
+            // la retouche de l'image en fait partie.
+            Object.assign(state, IMAGE_EDIT_DEFAULTS);
+            syncImageEditControls();
+
             createElements();
-            
+
             if (state.imageSrc) {
                 addImageToCanvas(state.imageSrc);
             }
@@ -1377,6 +1840,10 @@
         }
 
         function schedulePost() {
+            // LOT C — même règle que pour l'export : la vignette envoyée au
+            // Calendrier doit porter les réglages déjà visibles à l'écran.
+            flushImageFilters();
+
             // Capture current canvas state as image
             frameBorder.set({ visible: false });
             frameRect.set({ visible: false });
@@ -1435,7 +1902,7 @@
             })
             .catch(err => {
                 console.error('Schedule error:', err);
-                alert('Erreur lors de la planification. Le post a été sauvegardé en sessionStorage.');
+                note('La planification a échoué. Le post est conservé localement : rouvre le Calendrier pour le reprendre.', 'error');
                 // Fallback: save to sessionStorage
                 sessionStorage.setItem('samourais_pending_post', JSON.stringify({
                     mediaSrc: dataURL,
@@ -1450,39 +1917,28 @@
 
         function saveMemeToViewer() {
             if (state.mediaType === 'video') {
-                alert('La sauvegarde de memes video n\'est pas encore supportee. Utilisez "Telecharger" pour les videos.');
+                note('La sauvegarde vers le Viewer ne prend pas encore les vidéos. Utilise « Télécharger » pour récupérer le fichier.', 'warning');
                 return;
             }
 
-            // Capture canvas as image
-            frameBorder.set({ visible: false });
-            frameRect.set({ visible: false });
-            canvas.discardActiveObject();
-            canvas.renderAll();
+            // LOT C — la taille cible s'applique aussi à la copie Viewer.
+            // Le format reste PNG : /api/viewer/memes écrit toujours un
+            // fichier .png et le sert en image/png — y déposer du JPEG
+            // produirait un fichier mal nommé et mal typé.
+            const size = exportPixelSize();
+            let dataURL;
+            try {
+                dataURL = renderCanvasToDataURL('png', 1, state.exportScale);
+            } catch (err) {
+                console.error('[editor] rendu du meme impossible', err);
+                note('Le meme n’a pas pu être rendu. Réduis la taille cible et réessaie.', 'error');
+                return;
+            }
 
-            const template = TEMPLATES[state.currentTemplate];
-
-            const originalZoom = canvas.getZoom();
-            canvas.setZoom(1);
-            canvas.setWidth(template.width + (CANVAS_PADDING * 2));
-            canvas.setHeight(template.height + (CANVAS_PADDING * 2));
-            canvas.renderAll();
-
-            const dataURL = canvas.toDataURL({
-                format: 'png',
-                quality: 1,
-                left: CANVAS_PADDING,
-                top: CANVAS_PADDING,
-                width: template.width,
-                height: template.height
-            });
-
-            // Restore
-            canvas.setZoom(originalZoom);
-            updateCanvasSize();
-            frameBorder.set({ visible: true });
-            frameRect.set({ visible: true });
-            canvas.renderAll();
+            if (!dataURL || dataURL.length < 100) {
+                note('Le meme rendu est vide. Réduis la taille cible et réessaie.', 'error');
+                return;
+            }
 
             // Save to backend
             if (saveMemeBtn) {
@@ -1513,10 +1969,12 @@
                         saveMemeBtn.textContent = '💾 Sauvegarder dans Viewer';
                     }, 2000);
                 }
+                // LOT C — dimensions réellement enregistrées, pas un « OK » nu.
+                note(`Meme enregistré dans le Viewer : PNG ${size.width}×${size.height} px.`, 'success');
             })
             .catch(err => {
                 console.error('Save meme error:', err);
-                alert('Erreur lors de la sauvegarde du meme.');
+                note('Le meme n\u2019a pas pu être sauvegardé. Réessaie ; si l\u2019erreur persiste, télécharge le fichier pour ne rien perdre.', 'error');
                 if (saveMemeBtn) {
                     saveMemeBtn.disabled = false;
                     saveMemeBtn.textContent = '💾 Sauvegarder dans Viewer';
@@ -1525,48 +1983,38 @@
         }
 
         function exportImage() {
-            // Hide elements we don't want in export
-            frameBorder.set({ visible: false });
-            frameRect.set({ visible: false });
-            
-            // Deselect all
-            canvas.discardActiveObject();
-            canvas.renderAll();
+            // LOT C — format (PNG/JPEG), qualité et taille cible viennent
+            // du bloc « Fichier de sortie ». Tout est rendu par le canvas :
+            // pas d'upload, pas de fichier temporaire, retour immédiat.
+            const isJpeg = state.exportFormat === 'jpeg';
+            const size = exportPixelSize();
 
-            const template = TEMPLATES[state.currentTemplate];
-            
-            // Reset zoom temporarily for clean export
-            const originalZoom = canvas.getZoom();
-            canvas.setZoom(1);
-            canvas.setWidth(template.width + (CANVAS_PADDING * 2));
-            canvas.setHeight(template.height + (CANVAS_PADDING * 2));
-            canvas.renderAll();
-            
-            // Export only the template area (cropping out the padding)
-            const dataURL = canvas.toDataURL({
-                format: 'png',
-                quality: 1,
-                left: CANVAS_PADDING,
-                top: CANVAS_PADDING,
-                width: template.width,
-                height: template.height
-            });
+            let dataURL;
+            try {
+                dataURL = renderCanvasToDataURL(
+                    isJpeg ? 'jpeg' : 'png',
+                    isJpeg ? state.exportQuality / 100 : 1,
+                    state.exportScale
+                );
+            } catch (err) {
+                // Un export raté ne disparaît pas en silence : il se dit.
+                console.error('[editor] export image impossible', err);
+                note('L’image n’a pas pu être produite. Réduis la taille cible et réessaie.', 'error');
+                return;
+            }
 
-            // Restore zoom and size
-            canvas.setZoom(originalZoom);
-            updateCanvasSize();
-            
-            // Restore frame border
-            frameBorder.set({ visible: true });
-            frameRect.set({ visible: true });
-            canvas.renderAll();
+            if (!dataURL || dataURL.length < 100) {
+                note('L’image produite est vide. Réduis la taille cible et réessaie.', 'error');
+                return;
+            }
 
-            // Download
             const link = document.createElement('a');
             const timestamp = new Date().toISOString().slice(0, 10);
-            link.download = `samourais_meme_${state.currentTemplate}_${timestamp}.png`;
+            link.download = `samourais_meme_${state.currentTemplate}_${size.width}x${size.height}_${timestamp}.${isJpeg ? 'jpg' : 'png'}`;
             link.href = dataURL;
             link.click();
+
+            note(`Image téléchargée : ${size.width}×${size.height} px, ${isJpeg ? 'JPEG ' + state.exportQuality + '%' : 'PNG'}, ${formatBytes(dataURLBytes(dataURL))}.`, 'success');
         }
 
         async function exportVideo() {
@@ -1613,7 +2061,6 @@
                 watermarkOpacity: state.watermarkOpacity,
             };
 
-            console.log('Video export params:', exportParams);
             
             // Show processing modal
             showVideoExportModal(exportParams);
@@ -1688,7 +2135,6 @@
             fabric.Image.fromURL(LOGO_URL, (img) => {
                 if (img) {
                     logoImage = img;
-                    console.log('Logo loaded successfully');
                     // Refresh watermark if canvas already initialized
                     if (canvas && watermark) {
                         const template = TEMPLATES[state.currentTemplate];
@@ -1744,16 +2190,9 @@
             const textXPos = params.textX !== undefined ? params.textX : (textBox ? textBox.left - offset : template.textArea.x);
             const textYPos = params.textY !== undefined ? params.textY : (textBox ? textBox.top - offset : template.textArea.y);
             
-            console.log('generateTemplatePNG - textBox.text:', textBox ? textBox.text : 'no textBox');
-            console.log('generateTemplatePNG - params.text:', params.text);
-            console.log('generateTemplatePNG - state.text:', state.text);
-            console.log('generateTemplatePNG - textToRender:', textToRender);
-            console.log('generateTemplatePNG - textSize:', params.textSize, 'scale:', textBoxScale, 'effective:', textSizeToUse);
-            console.log('generateTemplatePNG - textPos:', textXPos, textYPos);
             
             // Attendre que les polices soient chargées
             await document.fonts.ready;
-            console.log('Fonts loaded:', [...document.fonts].map(f => f.family));
             
             // Créer un canvas temporaire à la taille du template (sans padding)
             const tempCanvas = document.createElement('canvas');
@@ -1779,7 +2218,6 @@
                 
                 // Utiliser les lignes réelles du textBox Fabric.js (word wrap inclus)
                 if (textBox && textBox._textLines) {
-                    console.log('Using textBox._textLines:', textBox._textLines);
                     let y = textYPos;
                     for (let i = 0; i < textBox._textLines.length; i++) {
                         const line = textBox._textLines[i].join(''); // _textLines est un array d'arrays de caractères
@@ -1913,7 +2351,6 @@
                     imageOffsetX: params.imageOffsetX,
                     imageOffsetY: params.imageOffsetY
                 };
-                console.log('Sending params to backend:', exportParams);
                 formData.append('params', JSON.stringify(exportParams));
                 
                 updateProgress(20, 'Upload de la vidéo et du template...');
@@ -2002,7 +2439,7 @@
                     </button>
                 `;
             } else {
-                alert(message);
+                note(message, 'error');
             }
         }
 
@@ -2030,7 +2467,11 @@
                     
                     // Frame height slider available for all formats (1:1, 4:5, 9:16)
                     frameHeightSection.style.display = 'block';
-                    
+
+                    // LOT C — les dimensions annoncées du fichier de sortie
+                    // suivent le format choisi.
+                    updateExportReadout();
+
                     updateCanvasSize();
                     createElements();
                     
@@ -2148,6 +2589,102 @@
                 updateWatermarkOpacity(parseInt(e.target.value));
             });
 
+            // ---- Retouche image (LOT C) ----
+            if (cropGroup) {
+                cropGroup.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.seg__btn');
+                    if (!btn) return;
+                    const key = btn.dataset.ratio;
+                    state.cropRatio = (key === 'free') ? null : (CROP_RATIOS[key] || null);
+                    cropGroup.querySelectorAll('.seg__btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    reapplyImageTransforms();
+                });
+            }
+
+            if (rotateLeftBtn) {
+                rotateLeftBtn.addEventListener('click', () => {
+                    state.rotation = (state.rotation + 270) % 360;
+                    reapplyImageTransforms();
+                });
+            }
+            if (rotateRightBtn) {
+                rotateRightBtn.addEventListener('click', () => {
+                    state.rotation = (state.rotation + 90) % 360;
+                    reapplyImageTransforms();
+                });
+            }
+            if (flipHBtn) {
+                flipHBtn.addEventListener('click', () => {
+                    state.flipX = !state.flipX;
+                    flipHBtn.setAttribute('aria-pressed', String(state.flipX));
+                    if (imageObj) { imageObj.set({ flipX: state.flipX }); canvas.requestRenderAll(); }
+                    updateImageEditReadouts();
+                });
+            }
+            if (flipVBtn) {
+                flipVBtn.addEventListener('click', () => {
+                    state.flipY = !state.flipY;
+                    flipVBtn.setAttribute('aria-pressed', String(state.flipY));
+                    if (imageObj) { imageObj.set({ flipY: state.flipY }); canvas.requestRenderAll(); }
+                    updateImageEditReadouts();
+                });
+            }
+
+            if (adjBrightness) {
+                adjBrightness.addEventListener('input', (e) => {
+                    state.brightness = parseInt(e.target.value, 10);
+                    adjBrightnessValue.textContent = state.brightness;
+                    applyImageFilters();
+                });
+            }
+            if (adjContrast) {
+                adjContrast.addEventListener('input', (e) => {
+                    state.contrast = parseInt(e.target.value, 10);
+                    adjContrastValue.textContent = state.contrast;
+                    applyImageFilters();
+                });
+            }
+            if (adjSaturation) {
+                adjSaturation.addEventListener('input', (e) => {
+                    state.saturation = parseInt(e.target.value, 10);
+                    adjSaturationValue.textContent = state.saturation;
+                    applyImageFilters();
+                });
+            }
+            if (imageResetBtn) {
+                imageResetBtn.addEventListener('click', () => resetImageEdits(false));
+            }
+
+            // ---- Fichier de sortie (LOT C) ----
+            if (imgFormatGroup) {
+                imgFormatGroup.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.seg__btn');
+                    if (!btn) return;
+                    state.exportFormat = btn.dataset.imgformat;
+                    imgFormatGroup.querySelectorAll('.seg__btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    updateExportReadout();
+                });
+            }
+            if (exportQuality) {
+                exportQuality.addEventListener('input', (e) => {
+                    state.exportQuality = parseInt(e.target.value, 10);
+                    exportQualityValue.textContent = state.exportQuality + '%';
+                    updateExportReadout();
+                });
+            }
+            if (sizeGroup) {
+                sizeGroup.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.seg__btn');
+                    if (!btn) return;
+                    state.exportScale = parseFloat(btn.dataset.scale) || 1;
+                    sizeGroup.querySelectorAll('.seg__btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    updateExportReadout();
+                });
+            }
+
             // Window resize
             window.addEventListener('resize', () => {
                 updateCanvasSize();
@@ -2196,6 +2733,21 @@
             try {
                 const url = `/api/editor/media/${item.id}`;
                 const response = await fetch(url);
+
+                // Sans ce contrôle, un média dont le fichier a disparu du
+                // disque répond 404 avec un corps JSON, et ce JSON était
+                // emballé dans un « library_N.jpg » puis passé au décodeur
+                // d'images : plan de travail vide, aucune explication.
+                if (!response.ok) {
+                    let detail = '';
+                    try { detail = (await response.json()).error || ''; } catch (e) { /* corps non JSON */ }
+                    console.error('[editor] média indisponible', response.status, detail);
+                    note(response.status === 404
+                        ? 'Ce média n’est plus disponible sur le disque : son fichier a été déplacé ou supprimé. Relance un téléchargement depuis les Médias.'
+                        : 'Ce média n’a pas pu être récupéré (erreur ' + response.status + '). Réessaie dans un instant.', 'error');
+                    return;
+                }
+
                 const blob = await response.blob();
                 const file = new File([blob], `library_${item.id}.${item.media_type === 'video' ? 'mp4' : 'jpg'}`, { type: blob.type });
 
@@ -2212,7 +2764,7 @@
                 document.getElementById('library-zone').style.display = 'none';
             } catch (e) {
                 console.error('Failed to load library item', e);
-                alert('Erreur lors du chargement du média');
+                note('Le média n\u2019a pas pu être chargé. Vérifie le fichier, puis réessaie.', 'error');
             }
         }
 
@@ -2233,7 +2785,25 @@
             initCanvas();
             setupEventListeners();
             setupTimelineInteraction();
+            // LOT C — les blocs de retouche et de sortie doivent refléter
+            // l'état AVANT tout chargement de média.
+            syncImageEditControls();
+            updateMediaToolsVisibility();
             checkMediaParam();
+
+            // Le fond du plan de travail est peint par Fabric, pas par le
+            // CSS : il faut le repeindre à la main à chaque bascule de
+            // thème. Trois sources, comme sur l'écran Analytics :
+            //   1. le choix explicite, posé sur <html data-theme>
+            new MutationObserver(repaintBackdrop).observe(document.documentElement, {
+                attributes: true, attributeFilter: ['data-theme']
+            });
+            //   2. l'évènement émis par la bascule partagée
+            document.addEventListener('samourais:themechange', repaintBackdrop);
+            //   3. la préférence système, quand aucun choix n'est stocké
+            const mq = window.matchMedia('(prefers-color-scheme: dark)');
+            if (mq.addEventListener) mq.addEventListener('change', repaintBackdrop);
+            else if (mq.addListener) mq.addListener(repaintBackdrop);
         }
 
         init();

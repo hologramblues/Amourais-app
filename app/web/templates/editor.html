@@ -3,226 +3,390 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SAMOURAIS - Meme Editor</title>
+    <meta name="color-scheme" content="light dark">
+    <title>SAMOURAIS — Éditeur</title>
+
+    {#- editor.html n'étend pas layout.html : sans ce bloc, l'écran est le
+        SEUL de l'application à ignorer le thème explicitement choisi par
+        l'utilisateur (localStorage 'theme') et à flasher au chargement.
+        Script SYNCHRONE, avant tout CSS, strictement identique à celui de
+        layout.html. -#}
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('theme');
+          if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+        } catch (e) { /* stockage indisponible : on suit le système */ }
+      })();
+    </script>
+    <style>
+      html { background: #f4f5f7; }
+      @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #0a0b0d; } }
+      html[data-theme="dark"] { background: #0a0b0d; }
+    </style>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;450;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <script src="https://apis.google.com/js/api.js"></script>
-    <link rel="stylesheet" href="/static/editor.css">
+    {# tokens.css AVANT editor.css : socle de couleurs + thème clair/sombre.
+       Il ne style aucun élément, il ne fait que déclarer des variables. #}
+    <link rel="stylesheet" href="/static/tokens.css?v={{ asset_version('tokens.css') }}">
+    <link rel="stylesheet" href="/static/editor.css?v={{ asset_version('editor.css') }}">
 </head>
 <body>
     {% set nav_active = 'editor' %}
     {% include "partials/nav.html" %}
 
     <div class="app">
-        <div class="sidebar">
-            <div class="logo">
-                <span>&#x2694;</span> SAMOURAIS Studio
-            </div>
+        <aside class="sidebar" aria-label="Outils de composition">
 
-            <!-- Format Selection -->
-            <div class="section">
-                <div class="section-title">Format</div>
-                <div class="format-selector">
-                    <button class="format-btn active" data-format="square" data-width="1080" data-height="1080">
-                        Feed
-                        <span class="ratio">1:1</span>
-                    </button>
-                    <button class="format-btn" data-format="portrait" data-width="1080" data-height="1350">
-                        Portrait
-                        <span class="ratio">4:5</span>
-                    </button>
-                    <button class="format-btn" data-format="story" data-width="1080" data-height="1920">
-                        Reel
-                        <span class="ratio">9:16</span>
-                    </button>
-                </div>
-            </div>
+            <!-- ============ Zone défilante : les outils ============ -->
+            <div class="sidebar__scroll">
 
-            <!-- Media Upload (Image or Video) -->
-            <div class="section">
-                <div class="section-title">
-                    M&eacute;dia
-                    <span class="media-type-badge image" id="media-type-badge" style="display: none;">Image</span>
-                </div>
-
-                <!-- Import Source Tabs -->
-                <div class="import-tabs">
-                    <button class="import-tab active" data-source="local">
-                        <span class="import-tab-icon">&#x1F4BB;</span>
-                        <span>Ordi</span>
-                    </button>
-                    <button class="import-tab" data-source="drive">
-                        <span class="import-tab-icon">&#x2601;</span>
-                        <span>Drive</span>
-                    </button>
-                    <button class="import-tab" data-source="library">
-                        <span class="import-tab-icon">&#x1F4DA;</span>
-                        <span>Biblioth&egrave;que</span>
+                <div class="side-head">
+                    <h1 class="side-title">Composition</h1>
+                    <button class="btn btn-ghost" id="reset-btn" type="button" title="Repartir d'une composition vide">
+                        R&eacute;initialiser
                     </button>
                 </div>
 
-                <!-- Local Upload Zone -->
-                <div class="upload-zone" id="upload-zone">
-                    <div class="upload-icon">&#x1F5BC;</div>
-                    <div class="upload-text"><strong>Clique</strong> ou glisse une image/vid&eacute;o</div>
-                </div>
+                <!-- ---------- Format de sortie ---------- -->
+                <section class="group" aria-labelledby="grp-format">
+                    <div class="group__head">
+                        <h2 class="group__title" id="grp-format">Format d'export</h2>
+                    </div>
+                    <div class="format-selector" role="group" aria-labelledby="grp-format">
+                        <button class="format-btn active" type="button" data-format="square" data-width="1080" data-height="1080">
+                            <span class="format-btn__name">Feed</span>
+                            <span class="ratio">1:1</span>
+                            <span class="format-btn__px">1080&#215;1080</span>
+                        </button>
+                        <button class="format-btn" type="button" data-format="portrait" data-width="1080" data-height="1350">
+                            <span class="format-btn__name">Portrait</span>
+                            <span class="ratio">4:5</span>
+                            <span class="format-btn__px">1080&#215;1350</span>
+                        </button>
+                        <button class="format-btn" type="button" data-format="story" data-width="1080" data-height="1920">
+                            <span class="format-btn__name">Reel</span>
+                            <span class="ratio">9:16</span>
+                            <span class="format-btn__px">1080&#215;1920</span>
+                        </button>
+                    </div>
+                    <p class="hint hint--limits">
+                        Import <strong>100&nbsp;Mo</strong> max &#8226; export vid&eacute;o MP4 H.264
+                    </p>
+                </section>
 
-                <!-- Google Drive Zone (hidden by default) -->
-                <div class="drive-zone" id="drive-zone" style="display: none;">
-                    <div class="drive-browser" id="drive-browser">
-                        <div class="drive-loading" id="drive-loading" style="display: none;">
-                            <div class="loading-spinner"></div>
-                            <span>Connexion &agrave; Google Drive...</span>
-                        </div>
-                        <div class="drive-connect" id="drive-connect">
-                            <div class="drive-icon">
-                                <svg width="40" height="40" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
-                                    <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
-                                    <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
-                                    <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
-                                    <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
-                                    <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
-                                </svg>
+                <!-- ---------- Média ---------- -->
+                <section class="group" aria-labelledby="grp-media">
+                    <div class="group__head">
+                        <h2 class="group__title" id="grp-media">M&eacute;dia</h2>
+                        <span class="media-type-badge image" id="media-type-badge" style="display: none;">Image</span>
+                    </div>
+
+                    <!-- Sources d'import -->
+                    <div class="import-tabs" role="group" aria-label="Source du m&eacute;dia">
+                        <button class="import-tab active" type="button" data-source="local">
+                            <span class="import-tab-icon" aria-hidden="true">&#x1F4BB;</span>
+                            <span>Ordi</span>
+                        </button>
+                        <button class="import-tab" type="button" data-source="drive">
+                            <span class="import-tab-icon" aria-hidden="true">&#x2601;</span>
+                            <span>Drive</span>
+                        </button>
+                        <button class="import-tab" type="button" data-source="library">
+                            <span class="import-tab-icon" aria-hidden="true">&#x1F4DA;</span>
+                            <span>Biblioth&egrave;que</span>
+                        </button>
+                    </div>
+
+                    <!-- Dépôt local -->
+                    <div class="upload-zone" id="upload-zone">
+                        <div class="upload-icon" aria-hidden="true">&#x1F5BC;</div>
+                        <div class="upload-text"><strong>Clique</strong> ou glisse une image/vid&eacute;o</div>
+                    </div>
+
+                    <!-- Google Drive -->
+                    <div class="drive-zone" id="drive-zone" style="display: none;">
+                        <div class="drive-browser" id="drive-browser">
+                            <div class="drive-loading" id="drive-loading" style="display: none;">
+                                <div class="loading-spinner" aria-hidden="true"></div>
+                                <span>Connexion &agrave; Google Drive...</span>
                             </div>
-                            <div class="drive-connect-text">Connecte-toi &agrave; Google Drive</div>
-                            <button class="btn btn-drive" id="connect-drive-btn">
-                                &#x2601; Ouvrir Google Drive
+                            <div class="drive-connect" id="drive-connect">
+                                <div class="drive-icon" aria-hidden="true">
+                                    <svg width="32" height="32" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+                                        <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
+                                        <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+                                        <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+                                        <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+                                        <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+                                    </svg>
+                                </div>
+                                <div class="drive-connect-text">Connecte-toi &agrave; Google Drive</div>
+                                <button class="btn btn-secondary" id="connect-drive-btn" type="button">
+                                    Ouvrir Google Drive
+                                </button>
+                                <div class="drive-hint">S&eacute;lectionne des images ou vid&eacute;os depuis ton Drive</div>
+                            </div>
+                            <div class="drive-files" id="drive-files" style="display: none;">
+                                <!-- Rempli dynamiquement -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bibliothèque scrappée -->
+                    <div class="drive-zone" id="library-zone" style="display: none;">
+                        <div class="drive-folder-select">
+                            <span class="drive-folder-name">M&eacute;dias scrapp&eacute;s</span>
+                            <button class="drive-refresh-btn" type="button" onclick="loadLibraryMedia()">Actualiser</button>
+                        </div>
+                        <div class="drive-files" id="library-grid">
+                            <!-- Rempli dynamiquement -->
+                        </div>
+                    </div>
+
+                    <input type="file" id="file-input" accept="image/*,video/*">
+                    <button class="btn btn-secondary" id="select-image-btn" type="button" style="display: none;">S&eacute;lectionner le m&eacute;dia</button>
+
+                    <!-- Timeline vidéo -->
+                    <div class="timeline-container" id="timeline-container" style="display: none;">
+                        <div class="timeline-header">
+                            <span>Trim vid&eacute;o</span>
+                            <span class="timeline-duration" id="trim-duration">0:00</span>
+                        </div>
+                        <div class="timeline-wrapper" id="timeline-wrapper">
+                            <div class="timeline-thumbnails" id="timeline-thumbnails"></div>
+                            <div class="timeline-selection" id="timeline-selection">
+                                <div class="timeline-handle start" id="handle-start"></div>
+                                <div class="timeline-handle end" id="handle-end"></div>
+                            </div>
+                            <div class="timeline-playhead" id="timeline-playhead"></div>
+                        </div>
+                        <div class="timeline-times">
+                            <span id="time-start">0:00</span>
+                            <span id="time-end">0:00</span>
+                        </div>
+                        <div class="video-controls">
+                            <button id="btn-play" type="button">Lecture</button>
+                            <button id="btn-preview" type="button">Aper&ccedil;u</button>
+                        </div>
+                    </div>
+
+                    <video id="video-source" muted playsinline></video>
+                </section>
+
+                {# ---------- Retouche image (LOT C) ----------
+                   Bloc RÉVÉLÉ par editor.js quand le média chargé est une
+                   image (`#image-tools`). Tout est appliqué par Fabric.js
+                   côté client : recadrage via cropX/cropY, rotation via
+                   `angle`, retournement via flipX/flipY, réglages via les
+                   filtres intégrés. Aucun aller-retour serveur, donc aucun
+                   fichier temporaire et aucun worker bloqué. #}
+                <section class="group" id="image-tools" aria-labelledby="grp-retouche" style="display: none;">
+                    <div class="group__head">
+                        <h2 class="group__title" id="grp-retouche">Retouche de l'image</h2>
+                        <button class="btn btn-ghost" id="image-reset-btn" type="button"
+                                title="Annuler recadrage, rotation, retournement et r&eacute;glages">
+                            Annuler
+                        </button>
+                    </div>
+
+                    <div class="ctl ctl--stack">
+                        <span class="ctl-label" id="lbl-crop">Recadrage au ratio</span>
+                        <div class="seg" role="group" aria-labelledby="lbl-crop" id="crop-group">
+                            <button class="seg__btn active" type="button" data-ratio="free">Libre</button>
+                            <button class="seg__btn" type="button" data-ratio="1">1:1</button>
+                            <button class="seg__btn" type="button" data-ratio="0.8">4:5</button>
+                            <button class="seg__btn" type="button" data-ratio="0.5625">9:16</button>
+                            <button class="seg__btn" type="button" data-ratio="1.7777778">16:9</button>
+                        </div>
+                        {# Les dimensions sont le seuil chiffré : on les affiche
+                           AVANT l'export, pas dans un message après coup. #}
+                        <p class="hint" id="crop-readout">Source&nbsp;: &#8212;</p>
+                    </div>
+
+                    <div class="ctl ctl--stack">
+                        <span class="ctl-label" id="lbl-orient">Rotation et retournement</span>
+                        <div class="seg" role="group" aria-labelledby="lbl-orient">
+                            <button class="seg__btn" type="button" id="rotate-left" title="Pivoter de 90&deg; vers la gauche">
+                                <span aria-hidden="true">&#8634;</span> 90&deg;
                             </button>
-                            <div class="drive-hint">S&eacute;lectionne des images ou vid&eacute;os depuis ton Drive</div>
+                            <button class="seg__btn" type="button" id="rotate-right" title="Pivoter de 90&deg; vers la droite">
+                                <span aria-hidden="true">&#8635;</span> 90&deg;
+                            </button>
+                            <button class="seg__btn" type="button" id="flip-h" aria-pressed="false" title="Retourner horizontalement">
+                                <span aria-hidden="true">&#8646;</span> Miroir
+                            </button>
+                            <button class="seg__btn" type="button" id="flip-v" aria-pressed="false" title="Retourner verticalement">
+                                <span aria-hidden="true">&#8645;</span> Miroir
+                            </button>
                         </div>
-                        <div class="drive-files" id="drive-files" style="display: none;">
-                            <!-- Files will be loaded here -->
+                        <p class="hint" id="orient-readout">Rotation&nbsp;: <strong>0&deg;</strong></p>
+                    </div>
+
+                    <div class="ctl">
+                        <div class="ctl-row">
+                            <label class="ctl-label" for="adj-brightness">Luminosit&eacute;</label>
+                            <input type="range" class="slider" id="adj-brightness" min="-100" max="100" value="0">
+                            <output class="slider-value" id="adj-brightness-value" for="adj-brightness">0</output>
                         </div>
                     </div>
-                </div>
 
-                <!-- Library Zone (hidden by default) -->
-                <div class="drive-zone" id="library-zone" style="display: none;">
-                    <div class="drive-folder-select">
-                        <span class="drive-folder-name">&#x1F4DA; M&eacute;dias scrapp&eacute;s</span>
-                        <button class="drive-refresh-btn" onclick="loadLibraryMedia()">&#x1F504; Actualiser</button>
-                    </div>
-                    <div class="drive-files" id="library-grid">
-                        <!-- Filled dynamically -->
-                    </div>
-                </div>
-
-                <input type="file" id="file-input" accept="image/*,video/*">
-                <div class="image-hint">
-                    <strong>Astuce :</strong> Clique sur le m&eacute;dia dans le canvas pour le d&eacute;placer et le redimensionner. La frame reste fixe.
-                </div>
-                <button class="btn btn-secondary" id="select-image-btn" style="display: none; margin-top: 8px;">&#x1F3AF; S&eacute;lectionner le m&eacute;dia</button>
-
-                <!-- Video Timeline (hidden by default) -->
-                <div class="timeline-container" id="timeline-container" style="display: none;">
-                    <div class="timeline-header">
-                        <span>&#x2702; Trim vid&eacute;o</span>
-                        <span class="timeline-duration" id="trim-duration">0:00</span>
-                    </div>
-                    <div class="timeline-wrapper" id="timeline-wrapper">
-                        <div class="timeline-thumbnails" id="timeline-thumbnails"></div>
-                        <div class="timeline-selection" id="timeline-selection">
-                            <div class="timeline-handle start" id="handle-start"></div>
-                            <div class="timeline-handle end" id="handle-end"></div>
+                    <div class="ctl">
+                        <div class="ctl-row">
+                            <label class="ctl-label" for="adj-contrast">Contraste</label>
+                            <input type="range" class="slider" id="adj-contrast" min="-100" max="100" value="0">
+                            <output class="slider-value" id="adj-contrast-value" for="adj-contrast">0</output>
                         </div>
-                        <div class="timeline-playhead" id="timeline-playhead"></div>
                     </div>
-                    <div class="timeline-times">
-                        <span id="time-start">0:00</span>
-                        <span id="time-end">0:00</span>
+
+                    <div class="ctl">
+                        <div class="ctl-row">
+                            <label class="ctl-label" for="adj-saturation">Saturation</label>
+                            <input type="range" class="slider" id="adj-saturation" min="-100" max="100" value="0">
+                            <output class="slider-value" id="adj-saturation-value" for="adj-saturation">0</output>
+                        </div>
                     </div>
-                    <div class="video-controls">
-                        <button id="btn-play">&#x25B6; Play</button>
-                        <button id="btn-preview">&#x1F441; Preview</button>
+                </section>
+
+                {# ---------- Fichier de sortie (LOT C) ----------
+                   Masqué quand le média est une vidéo : l'export vidéo reste
+                   MP4 H.264 et ne connaît ni PNG, ni qualité, ni multiplicateur. #}
+                <section class="group" id="output-tools" aria-labelledby="grp-sortie">
+                    <div class="group__head">
+                        <h2 class="group__title" id="grp-sortie">Fichier de sortie</h2>
                     </div>
+
+                    <div class="ctl ctl--stack">
+                        <span class="ctl-label" id="lbl-imgformat">Format</span>
+                        <div class="seg" role="group" aria-labelledby="lbl-imgformat" id="imgformat-group">
+                            <button class="seg__btn active" type="button" data-imgformat="png">PNG</button>
+                            <button class="seg__btn" type="button" data-imgformat="jpeg">JPEG</button>
+                        </div>
+                    </div>
+
+                    <div class="ctl" id="quality-ctl" style="display: none;">
+                        <div class="ctl-row">
+                            <label class="ctl-label" for="export-quality">Qualit&eacute; JPEG</label>
+                            <input type="range" class="slider" id="export-quality" min="50" max="100" value="90">
+                            <output class="slider-value" id="export-quality-value" for="export-quality">90%</output>
+                        </div>
+                    </div>
+
+                    <div class="ctl ctl--stack">
+                        <span class="ctl-label" id="lbl-size">Taille cible</span>
+                        <div class="seg" role="group" aria-labelledby="lbl-size" id="size-group">
+                            <button class="seg__btn" type="button" data-scale="0.5">&#215;0,5</button>
+                            <button class="seg__btn active" type="button" data-scale="1">&#215;1</button>
+                            <button class="seg__btn" type="button" data-scale="1.5">&#215;1,5</button>
+                            <button class="seg__btn" type="button" data-scale="2">&#215;2</button>
+                        </div>
+                        <p class="hint hint--limits">
+                            Image export&eacute;e&nbsp;: <strong id="export-dims">1080&#215;1080&nbsp;px</strong>
+                            <span id="export-format-label">PNG</span><br>
+                            La copie envoy&eacute;e au Viewer est toujours en <strong>PNG</strong>, &agrave; cette m&ecirc;me taille.
+                        </p>
+                    </div>
+                </section>
+
+                <!-- ---------- Texte ---------- -->
+                <section class="group" aria-labelledby="grp-texte">
+                    <div class="group__head">
+                        <h2 class="group__title" id="grp-texte">Texte du bandeau</h2>
+                    </div>
+                    <textarea class="text-input" id="meme-text" placeholder="Quand tu r&eacute;alises que..."></textarea>
+
+                    {# <button> et pas <div> : editor.js n'écoute que `click`,
+                       et seul un vrai bouton déclenche `click` à Entrée/Espace.
+                       Le rendre opérable au clavier ne coûte donc aucune ligne
+                       de JS. #}
+                    <button class="toggle-row" id="overlay-toggle" type="button">
+                        <span>Texte sur l'image</span>
+                        <span class="toggle-switch" id="overlay-switch" aria-hidden="true"></span>
+                    </button>
+                    <input type="text" class="text-input text-input--single" id="overlay-text" placeholder="Texte overlay..." style="display: none;">
+                </section>
+
+                <!-- ---------- Réglages fins ---------- -->
+                <section class="group" aria-labelledby="grp-reglages">
+                    <div class="group__head">
+                        <h2 class="group__title" id="grp-reglages">R&eacute;glages</h2>
+                    </div>
+
+                    <div class="ctl">
+                        <div class="ctl-row">
+                            <label class="ctl-label" for="text-size">Taille du texte</label>
+                            <input type="range" class="slider" id="text-size" min="24" max="72" value="42">
+                            <output class="slider-value" id="text-size-value" for="text-size">42px</output>
+                        </div>
+                    </div>
+
+                    <div class="ctl">
+                        <div class="ctl-row">
+                            <label class="ctl-label" for="line-height">Interlignage</label>
+                            <input type="range" class="slider" id="line-height" min="80" max="200" value="120" step="5">
+                            <output class="slider-value" id="line-height-value" for="line-height">1.2</output>
+                        </div>
+                    </div>
+
+                    <div class="ctl" id="image-scale-section" style="display: none;">
+                        <div class="ctl-row">
+                            <label class="ctl-label" for="image-scale">Zoom image</label>
+                            <input type="range" class="slider" id="image-scale" min="50" max="200" value="100">
+                            <output class="slider-value" id="image-scale-value" for="image-scale">100%</output>
+                        </div>
+                    </div>
+
+                    <div class="ctl" id="frame-height-section">
+                        <div class="ctl-row">
+                            <label class="ctl-label" for="frame-height">Hauteur du cadre</label>
+                            <input type="range" class="slider" id="frame-height" min="30" max="100" value="100">
+                            <output class="slider-value" id="frame-height-value" for="frame-height">100%</output>
+                        </div>
+                    </div>
+
+                    <div class="ctl">
+                        <div class="ctl-row">
+                            <label class="ctl-label" for="watermark-opacity">Opacit&eacute; du logo</label>
+                            <input type="range" class="slider" id="watermark-opacity" min="0" max="100" value="100">
+                            <output class="slider-value" id="watermark-opacity-value" for="watermark-opacity">100%</output>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- ============ Pied fixe : les actions ============ -->
+            <div class="sidebar__actions">
+                {# Avertissement honnête : l'export vidéo est traité par FFmpeg
+                   pendant la requête HTTP (app/editor/api.py). Rien ne le rend
+                   annulable côté client — on le dit AVANT le clic. #}
+                <p class="hint hint--warning" id="export-notice">
+                    <strong>Export vid&eacute;o</strong>&nbsp;: FFmpeg tourne pendant la requ&ecirc;te &#8212;
+                    plusieurs minutes possibles, sans interruption ni fermeture d'onglet.
+                </p>
+                <button class="btn btn-primary" id="export-btn" type="button" disabled>T&eacute;l&eacute;charger le meme</button>
+                <div class="actions-row">
+                    <button class="btn btn-secondary" id="save-meme-btn" type="button" disabled>Sauvegarder dans Viewer</button>
+                    <button class="btn btn-secondary" id="schedule-btn" type="button" disabled>Planifier</button>
                 </div>
-
-                <!-- Hidden video element for processing -->
-                <video id="video-source" muted playsinline></video>
             </div>
+        </aside>
 
-            <!-- Top Text -->
-            <div class="section">
-                <div class="section-title">Texte du meme</div>
-                <textarea class="text-input" id="meme-text" placeholder="Quand tu r&eacute;alises que..."></textarea>
-            </div>
-
-            <!-- Text Size -->
-            <div class="section">
-                <div class="section-title">Taille du texte</div>
-                <div class="slider-container">
-                    <input type="range" class="slider" id="text-size" min="24" max="72" value="42">
-                    <span class="slider-value" id="text-size-value">42px</span>
-                </div>
-            </div>
-
-            <!-- Line Height -->
-            <div class="section">
-                <div class="section-title">Interlignage</div>
-                <div class="slider-container">
-                    <input type="range" class="slider" id="line-height" min="80" max="200" value="120" step="5">
-                    <span class="slider-value" id="line-height-value">1.2</span>
-                </div>
-            </div>
-
-            <!-- Image Scale -->
-            <div class="section" id="image-scale-section" style="display: none;">
-                <div class="section-title">Zoom image</div>
-                <div class="slider-container">
-                    <input type="range" class="slider" id="image-scale" min="50" max="200" value="100">
-                    <span class="slider-value" id="image-scale-value">100%</span>
-                </div>
-            </div>
-
-            <!-- Frame Height (all formats) -->
-            <div class="section" id="frame-height-section">
-                <div class="section-title">Hauteur du cadre</div>
-                <div class="slider-container">
-                    <input type="range" class="slider" id="frame-height" min="30" max="100" value="100">
-                    <span class="slider-value" id="frame-height-value">100%</span>
-                </div>
-            </div>
-
-            <!-- Overlay Text Toggle -->
-            <div class="section">
-                <div class="toggle-row" id="overlay-toggle">
-                    <span>Texte sur l'image</span>
-                    <div class="toggle-switch" id="overlay-switch"></div>
-                </div>
-                <input type="text" class="text-input" id="overlay-text" placeholder="Texte overlay..." style="display: none; min-height: auto; padding: 12px;">
-            </div>
-
-            <!-- Watermark Opacity -->
-            <div class="section">
-                <div class="section-title">Opacit&eacute; du logo</div>
-                <div class="slider-container">
-                    <input type="range" class="slider" id="watermark-opacity" min="0" max="100" value="100">
-                    <span class="slider-value" id="watermark-opacity-value">100%</span>
-                </div>
-            </div>
-
-            <div class="spacer"></div>
-
-            <!-- Actions -->
-            <button class="btn btn-secondary" id="reset-btn">&#x1F504; R&eacute;initialiser</button>
-            <button class="btn btn-primary" id="export-btn" disabled>&#x1F4E5; T&eacute;l&eacute;charger le meme</button>
-            <button class="btn btn-save-meme" id="save-meme-btn" disabled>&#x1F4BE; Sauvegarder dans Viewer</button>
-            <button class="btn btn-schedule" id="schedule-btn" disabled>&#x1F4C5; Planifier</button>
-        </div>
-
-        <div class="preview-area">
+        <main class="preview-area">
             <div class="canvas-container">
                 <canvas id="meme-canvas"></canvas>
             </div>
-            <div class="help-text">
-                Frame fixe &#x2022; Glisse l'image pour la repositionner &#x2022; Zoom avec le slider ou les poign&eacute;es
-            </div>
-        </div>
+            <p class="help-text">
+                Cadre fixe &#8226; glisse l'image pour la repositionner &#8226; zoom au slider ou aux poign&eacute;es
+            </p>
+        </main>
     </div>
 
-    <script src="/static/editor.js"></script>
+    <script src="/static/editor.js?v={{ asset_version('editor.js') }}"></script>
 </body>
 </html>

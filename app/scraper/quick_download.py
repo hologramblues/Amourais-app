@@ -10,6 +10,7 @@ Supports: Instagram, TikTok, Twitter/X, Reddit.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 import time
@@ -17,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from html import unescape
 from typing import Any
+from urllib.parse import urlsplit
 
 from loguru import logger
 from scrapling.fetchers import StealthyFetcher
@@ -67,6 +69,151 @@ def detect_platform(url: str) -> tuple[str, str] | None:
         m = pattern.search(url)
         if m:
             return platform, m.group(1)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# URL safety — SSRF (lot 2.4)
+# ---------------------------------------------------------------------------
+# The URL comes from the user and is opened by a HEADLESS BROWSER running on
+# the server, inside the private network of the platform. `detect_platform`
+# is NOT a filter: its patterns use `search`, so
+# `http://169.254.169.254/x#instagram.com/p/aaa` matches "instagram" while
+# pointing at the cloud metadata endpoint.
+_ALLOWED_URL_SCHEMES = frozenset({"http", "https"})
+
+# Host names that always designate the machine itself.
+_BLOCKED_HOSTNAMES = frozenset({
+    "localhost",
+    "ip6-localhost",
+    "ip6-loopback",
+    # Cloud metadata services, reachable by name inside the VPC.
+    "metadata",
+    "metadata.google.internal",
+    "metadata.goog",
+    "instance-data",
+})
+
+
+# The browser does NOT read a host the way `ipaddress` does. Per the WHATWG URL
+# standard — which Chromium implements — these three code points are all valid
+# label separators, and `http://127。0。0。1/` reaches the loopback.
+_DOT_CODEPOINTS = ("。", "．", "｡")
+
+
+def _parse_ipv4_relaxed(host: str) -> str | None:
+    """Canonical dotted quad for the SHORTHAND forms a browser accepts.
+
+    `ipaddress.ip_address` only understands the strict dotted quad, so
+    `2130706433`, `0x7f000001`, `0177.0.0.1` and `127.1` all slipped through
+    the guard while Chromium resolves every one of them to `127.0.0.1`.
+    This mirrors the WHATWG IPv4 parser: 1 to 4 parts, each decimal, octal
+    (`0` prefix) or hexadecimal (`0x` prefix), the last part filling all the
+    remaining bytes. Returns None when the host is not an IPv4 address at all.
+    """
+    parts = host.split(".")
+    if len(parts) > 4:
+        return None
+
+    nombres: list[int] = []
+    for part in parts:
+        if not part:
+            return None
+        try:
+            if part[:2] in ("0x", "0X"):
+                n = int(part[2:] or "0", 16)
+            elif part[0] == "0" and len(part) > 1:
+                n = int(part[1:], 8)
+            else:
+                n = int(part, 10)
+        except ValueError:
+            return None  # a label with a letter → domain name, not an IPv4
+        if n < 0:
+            return None
+        nombres.append(n)
+
+    # Every part but the last must fit in one byte; the last fills the rest.
+    if any(n > 255 for n in nombres[:-1]):
+        return None
+    if nombres[-1] >= 256 ** (4 - (len(nombres) - 1)):
+        return None
+
+    valeur = nombres[-1]
+    for i, n in enumerate(nombres[:-1]):
+        valeur += n * 256 ** (3 - i)
+    return str(ipaddress.IPv4Address(valeur))
+
+
+def _host_is_internal(hostname: str) -> bool:
+    """True for loopback / private / link-local / reserved destinations.
+
+    No DNS resolution is attempted: only literal IPs and well-known names are
+    judged (a name lookup here would be a second, TOCTOU-prone network call).
+    """
+    host = hostname.strip().lower()
+    for point in _DOT_CODEPOINTS:
+        host = host.replace(point, ".")
+    host = host.strip(".")
+    if not host:
+        return True
+    if host in _BLOCKED_HOSTNAMES or host.endswith(".localhost"):
+        return True
+
+    # Bracketed IPv6 literal: [::1]
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        # Not a strict literal — try the shorthand IPv4 forms the browser
+        # still resolves before concluding "domain name".
+        quad = _parse_ipv4_relaxed(host)
+        if quad is None:
+            return False  # a regular domain name
+        ip = ipaddress.ip_address(quad)
+
+    # 127.0.0.0/8, ::1, 10/8, 172.16/12, 192.168/16, 169.254/16, 0.0.0.0, …
+    if (
+        ip.is_loopback
+        or ip.is_private
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    ):
+        return True
+    # IPv4 mapped / 6to4 wrappers around a private v4 address.
+    mapped = getattr(ip, "ipv4_mapped", None) or getattr(ip, "sixtofour", None)
+    if mapped is not None:
+        return _host_is_internal(str(mapped))
+    return False
+
+
+def validate_public_url(url: str) -> str | None:
+    """Return an error message when `url` must NOT be fetched, else None."""
+    if not isinstance(url, str) or not url.strip():
+        return "URL requise"
+
+    try:
+        parts = urlsplit(url.strip())
+    except ValueError:
+        return "URL invalide"
+
+    if parts.scheme.lower() not in _ALLOWED_URL_SCHEMES:
+        return "URL invalide : seuls les schemas http et https sont acceptes"
+
+    try:
+        hostname = parts.hostname  # lower-cased, brackets stripped, port removed
+    except ValueError:  # malformed IPv6 literal
+        return "URL invalide : hote illisible"
+
+    if not hostname:
+        return "URL invalide : hote manquant"
+
+    if _host_is_internal(hostname):
+        return "URL refusee : cette adresse designe le reseau interne du serveur"
+
     return None
 
 
@@ -1046,6 +1193,15 @@ def quick_download(url: str) -> QuickDownloadResult:
             error="URL non reconnue. Plateformes supportées: Instagram, TikTok, Twitter/X, Reddit",
         )
 
+    # Second gate (lot 2.4): the patterns above only `search` the string, so a
+    # recognised URL can still point at the server's own network.
+    faute = validate_public_url(url)
+    if faute:
+        logger.warning("Quick download refused for {}: {}", url[:120], faute)
+        return QuickDownloadResult(
+            platform=detection[0], post_id=detection[1], post_url=url, error=faute,
+        )
+
     platform, post_id = detection
     logger.info("Quick download: platform={}, post_id={}, url={}", platform, post_id, url)
 
@@ -1063,7 +1219,9 @@ def quick_download(url: str) -> QuickDownloadResult:
         logger.exception("Quick download extraction failed: {}", exc)
         return QuickDownloadResult(
             platform=platform, post_id=post_id, post_url=url,
-            error=f"Erreur d'extraction: {exc}",
+            # Generic on purpose (lot 2.4b): the exception text can carry
+            # absolute volume paths or full SQL statements.
+            error="Erreur d'extraction (voir les logs serveur)",
         )
 
     if not media_items:
@@ -1098,7 +1256,10 @@ def quick_download(url: str) -> QuickDownloadResult:
                 "post_url": item.post_url,
                 "media_type": item.media_type,
                 "media_url": item.media_url,
-                "error": str(exc),
+                # Never the raw exception text: an OSError carries the absolute
+                # path of the volume, a SQLAlchemy error the whole statement
+                # (lot 2.4b). The detail stays in the log line above.
+                "error": "Telechargement impossible (voir les logs serveur)",
             })
 
     return QuickDownloadResult(

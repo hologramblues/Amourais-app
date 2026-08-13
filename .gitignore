@@ -1,7 +1,5 @@
 # === Data (media, DB, sessions — user-specific) ===
-data/samourais.db
-data/samourais.db-journal
-data/samourais.db-wal
+data/samourais.db*
 data/downloads/*
 data/sessions/*
 data/cookies/*

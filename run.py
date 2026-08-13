@@ -92,4 +92,7 @@ if __name__ == "__main__":
     init_db()
     start_scheduler()
     app = create_app()
-    app.run(host="0.0.0.0", port=PORT, debug=DEBUG)
+    # use_reloader=False: the Werkzeug reloader re-executes this module in a
+    # child process, which would start a SECOND scheduler whose in-memory locks
+    # are invisible to the first one (AUDIT.md §2.1 / §4.21, risque #8).
+    app.run(host="0.0.0.0", port=PORT, debug=DEBUG, use_reloader=False)

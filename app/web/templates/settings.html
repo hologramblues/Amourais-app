@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<h1>Settings</h1>
+<h1>Réglages</h1>
 
 <div id="save-banner" style="display:none;" class="save-banner">
   Sauvegarde effectuee. Relancez l'app pour appliquer les changements.
@@ -83,7 +83,7 @@
       <summary>Comment connecter l'API Instagram ?</summary>
       <div style="padding-top: 0.5rem;">
         <p><strong>L'API Graph donne les vraies stats de ton compte (reach, impressions, demographics).</strong></p>
-        <ol style="padding-left: 1.2rem; color: var(--s-text-secondary); font-size: 0.87rem; line-height: 2;">
+        <ol style="padding-left: var(--sp-6); color: var(--s-text-secondary); font-size: var(--text-small); line-height: 2;">
           <li>Passe @samourais_ en compte <strong>Creator</strong> ou <strong>Business</strong> (Settings &gt; Account type)</li>
           <li>Cree une <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener">Facebook App</a> (type Business)</li>
           <li>Ajoute le produit <strong>Instagram Graph API</strong></li>
@@ -91,7 +91,7 @@
           <li>Dans Graph API Explorer, genere un token avec les permissions: <code>instagram_basic</code>, <code>instagram_manage_insights</code>, <code>pages_show_list</code>, <code>pages_read_engagement</code></li>
           <li>Colle le token ci-dessous et clique <strong>Configurer</strong></li>
         </ol>
-        <p style="color: var(--s-text-secondary); font-size: 0.87rem;">
+        <p style="color: var(--s-text-secondary); font-size: var(--text-small);">
           <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Graph API Explorer</a> &mdash;
           <a href="https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/get-started" target="_blank" rel="noopener">Documentation</a>
         </p>
@@ -116,7 +116,7 @@
       <label>
         Access Token (short-lived ou long-lived)
         <div class="password-wrapper">
-          <input type="password" id="ig-access-token" value="{{ env.get('IG_ACCESS_TOKEN', '') }}" placeholder="EAAxxxxxxx..." class="secret-field" style="font-family: monospace; font-size: 0.85rem;">
+          <input type="password" id="ig-access-token" value="{{ env.get('IG_ACCESS_TOKEN', '') }}" placeholder="EAAxxxxxxx..." class="secret-field" style="font-family: var(--font-mono); font-size: var(--text-mini);">
           <button type="button" class="s-btn-sm s-btn-ghost toggle-secret" onclick="toggleSecret(this)">Voir</button>
         </div>
         <small>Le token sera automatiquement echange pour un token long-duree (~60 jours)</small>
@@ -226,14 +226,14 @@
       <summary>Pourquoi utiliser un proxy ?</summary>
       <div style="padding-top: 0.5rem;">
         <p><strong>Instagram et TikTok bloquent les IP de serveurs cloud (comme Railway).</strong></p>
-        <p style="color: var(--s-text-secondary); font-size: 0.87rem;">
+        <p style="color: var(--s-text-secondary); font-size: var(--text-small);">
           Un proxy residentiel fait croire que la requete vient d'une vraie connexion internet.
           <br>Services recommandes :
           <a href="https://www.webshare.io/" target="_blank" rel="noopener">Webshare</a>,
           <a href="https://smartproxy.com/" target="_blank" rel="noopener">Smartproxy</a>,
           <a href="https://brightdata.com/" target="_blank" rel="noopener">Bright Data</a>
         </p>
-        <p style="color: var(--s-text-secondary); font-size: 0.87rem;">
+        <p style="color: var(--s-text-secondary); font-size: var(--text-small);">
           Format: <code>http://username:password@host:port</code>
         </p>
       </div>
@@ -292,7 +292,7 @@
       <summary>Comment recuperer ses cookies ?</summary>
       <div style="padding-top: 0.5rem;">
         <p><strong>Les cookies permettent au scraper de se connecter comme toi sur les plateformes.</strong></p>
-        <ol style="padding-left: 1.2rem; color: var(--s-text-secondary); font-size: 0.87rem; line-height: 1.8;">
+        <ol style="padding-left: var(--sp-6); color: var(--s-text-secondary); font-size: var(--text-small); line-height: 1.8;">
           <li>Installe <a href="https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm" target="_blank" rel="noopener">Cookie Editor</a> (Chrome)</li>
           <li>Connecte-toi sur la plateforme (ex: <code>instagram.com</code>)</li>
           <li>Ouvre Cookie Editor &rarr; Export &rarr; JSON</li>
@@ -380,9 +380,15 @@
 
     <form hx-post="/api/settings/env" hx-target="#advanced-status" hx-swap="innerHTML">
       <div class="grid">
+        {# PORT n'est plus modifiable ici (lot 2.1) : le `.env` du volume est
+           chargé avec override=True et masquerait le port injecté par Railway,
+           ce qui ferait écouter le conteneur sur le mauvais port. Le champ
+           reste affiché — en lecture seule et sans `name`, donc jamais envoyé —
+           parce que connaître le port reste utile au propriétaire. #}
         <label>
           Port du serveur
-          <input type="number" name="PORT" value="{{ env.get('PORT', '3000') }}" min="1000" max="65535">
+          <input type="number" value="{{ env.get('PORT', '3000') }}" readonly disabled>
+          <small class="field-hint">Défini par la plateforme d'hébergement, non modifiable ici.</small>
         </label>
         <label>
           Niveau de log
@@ -423,11 +429,26 @@ function toggleSecret(btn) {
 }
 
 document.body.addEventListener('htmx:afterRequest', function(evt) {
-  if (evt.detail.pathInfo.requestPath === '/api/settings/env') {
-    var banner = document.getElementById('save-banner');
-    banner.style.display = 'block';
-    setTimeout(function() { banner.style.display = 'none'; }, 8000);
+  if (evt.detail.pathInfo.requestPath !== '/api/settings/env') return;
+
+  var banner = document.getElementById('save-banner');
+  var xhr = evt.detail.xhr;
+  var ok = evt.detail.successful && xhr && xhr.status >= 200 && xhr.status < 300;
+
+  if (ok) {
+    banner.textContent = "Sauvegarde effectuee. Relancez l'app pour appliquer les changements.";
+    banner.classList.remove('save-banner-error');
+  } else {
+    var detail = '';
+    try { detail = (JSON.parse(xhr.responseText) || {}).error || ''; } catch (e) { /* corps non JSON */ }
+    banner.textContent = detail
+      ? 'Echec de la sauvegarde : ' + detail
+      : 'Echec de la sauvegarde. Aucun reglage n\'a ete modifie.';
+    banner.classList.add('save-banner-error');
   }
+
+  banner.style.display = 'block';
+  setTimeout(function() { banner.style.display = 'none'; }, 8000);
 });
 
 /* ── Instagram Graph API setup ── */
@@ -441,7 +462,7 @@ document.body.addEventListener('htmx:afterRequest', function(evt) {
     var btn = igForm.querySelector('button[type="submit"]');
     btn.disabled = true;
     btn.textContent = 'Configuration...';
-    statusEl.innerHTML = '<small style="color:#888;">Sauvegarde et verification en cours...</small>';
+    statusEl.innerHTML = '<small class="text-muted">Sauvegarde et verification en cours...</small>';
 
     var payload = {
       FB_APP_ID: document.getElementById('ig-fb-app-id').value.trim(),
@@ -460,19 +481,19 @@ document.body.addEventListener('htmx:afterRequest', function(evt) {
       btn.disabled = false;
       btn.textContent = 'Configurer';
       if (data.ok) {
-        statusEl.innerHTML = '<small style="color:green;">' + (data.message || 'Configure !') + '</small>';
+        statusEl.innerHTML = '<small class="text-success">' + (data.message || 'Configure !') + '</small>';
         if (data.ig_user_id) {
           document.getElementById('ig-user-id').value = data.ig_user_id;
         }
         setTimeout(function() { location.reload(); }, 2000);
       } else {
-        statusEl.innerHTML = '<small style="color:red;">Erreur: ' + (data.error || 'Inconnue') + '</small>';
+        statusEl.innerHTML = '<small class="text-error">Erreur: ' + (data.error || 'Inconnue') + '</small>';
       }
     })
     .catch(function(err) {
       btn.disabled = false;
       btn.textContent = 'Configurer';
-      statusEl.innerHTML = '<small style="color:red;">Erreur: ' + err.message + '</small>';
+      statusEl.innerHTML = '<small class="text-error">Erreur: ' + err.message + '</small>';
     });
   });
 
@@ -487,7 +508,7 @@ document.body.addEventListener('htmx:afterRequest', function(evt) {
         collectBtn.disabled = false;
         collectBtn.textContent = 'Collecter maintenant';
         var statusEl = document.getElementById('ig-api-status');
-        statusEl.innerHTML = '<small style="color:green;">' + (d.message || 'Lance !') + '</small>';
+        statusEl.innerHTML = '<small class="text-success">' + (d.message || 'Lance !') + '</small>';
       })
       .catch(function() {
         collectBtn.disabled = false;
@@ -512,7 +533,7 @@ document.querySelectorAll('.s-cookie-grid form').forEach(function(form) {
     var fileInput = form.querySelector('input[type="file"]');
 
     if (!fileInput || !fileInput.files.length) {
-      if (statusEl) statusEl.innerHTML = '<small style="color:red;">Selectionne un fichier d\'abord</small>';
+      if (statusEl) statusEl.innerHTML = '<small class="text-error">Selectionne un fichier d\'abord</small>';
       return;
     }
 
@@ -531,7 +552,7 @@ document.querySelectorAll('.s-cookie-grid form').forEach(function(form) {
       btn.textContent = 'Upload';
     })
     .catch(function(err) {
-      if (statusEl) statusEl.innerHTML = '<small style="color:red;">Erreur: ' + err.message + '</small>';
+      if (statusEl) statusEl.innerHTML = '<small class="text-error">Erreur: ' + err.message + '</small>';
       btn.disabled = false;
       btn.textContent = 'Upload';
     });

@@ -28,6 +28,34 @@ pages_bp = Blueprint("pages", __name__)
 
 
 # ---------------------------------------------------------------------------
+# Favicon
+# ---------------------------------------------------------------------------
+# `GET /favicon.ico 404` était la SEULE ligne d'erreur de la console,
+# sur les 8 écrans, une occurrence par chargement de page. Les critics
+# du viewer et du calendrier l'ont tous deux relevée sans pouvoir la
+# corriger : elle est au niveau application, hors de tout lot d'écran.
+#
+# Le glyphe est le même que la marque de la nav (⚔), dessiné en SVG
+# inline : aucun fichier binaire à servir, aucune couleur brute hors
+# de l'aplat d'accent, et le fond transparent laisse l'onglet du
+# navigateur suivre son propre thème.
+_FAVICON_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+    '<rect width="32" height="32" rx="7" fill="#2f6fe0"/>'
+    '<text x="16" y="23" font-size="19" text-anchor="middle" fill="#ffffff">'
+    "⚔</text></svg>"
+)
+
+
+@pages_bp.route("/favicon.ico")
+def favicon():
+    resp = make_response(_FAVICON_SVG)
+    resp.headers["Content-Type"] = "image/svg+xml"
+    resp.headers["Cache-Control"] = "public, max-age=604800"
+    return resp
+
+
+# ---------------------------------------------------------------------------
 # Helper: read current .env values for settings form
 # ---------------------------------------------------------------------------
 def _read_env_file() -> dict[str, str]:
@@ -96,6 +124,7 @@ def dashboard():
         return render_template(
             "dashboard.html",
             page="dashboard",
+            title="Dashboard",
             profiles=profiles_list,
             storage_mode=STORAGE_MODE,
             data_dir=str(DATA_DIR),
@@ -134,6 +163,9 @@ def profiles_page():
         return render_template(
             "profiles.html",
             page="profiles",
+            # Sans `title`, layout.html rend « SAMOURAIS » tout court :
+            # quatre onglets du navigateur portaient le même nom.
+            title="Profils",
             profiles=profiles_with_counts,
         )
     finally:
@@ -145,7 +177,7 @@ def profiles_page():
 # ---------------------------------------------------------------------------
 @pages_bp.route("/jobs")
 def jobs_page():
-    return render_template("jobs.html", page="jobs")
+    return render_template("jobs.html", page="jobs", title="Jobs")
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +205,7 @@ def settings_page():
     return render_template(
         "settings.html",
         page="settings",
+        title="Réglages",
         gdrive_connected=gdrive_connected,
         sessions=sessions,
         env=env_values,

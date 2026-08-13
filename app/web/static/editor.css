@@ -1,806 +1,1298 @@
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #f7f7f7;
-            color: #222;
-            min-height: 100vh;
-        }
-
-        /* Navigation Tabs — handled by shared nav partial */
-        .nav-tabs { display: none; }
-
-        .app {
-            display: flex;
-            height: calc(100vh - 64px);
-        }
-
-        /* Sidebar */
-        .sidebar {
-            width: 360px;
-            background: #ffffff;
-            border-right: 1px solid #e0e0e0;
-            padding: 20px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .logo {
-            font-size: 22px;
-            font-weight: 700;
-            color: #222;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .logo span {
-            color: #E21B3C;
-        }
-
-        .section {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .section-title {
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #717171;
-        }
-
-        /* Format selector */
-        .format-selector {
-            display: flex;
-            gap: 6px;
-        }
-
-        .format-btn {
-            flex: 1;
-            padding: 10px 6px;
-            background: #f7f7f7;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            color: #717171;
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 2px;
-        }
-
-        .format-btn:hover {
-            border-color: #bbb;
-            color: #222;
-        }
-
-        .format-btn.active {
-            border-color: #E21B3C;
-            background: rgba(226, 27, 60, 0.06);
-            color: #222;
-        }
-
-        .format-btn .ratio {
-            font-size: 10px;
-            color: #717171;
-        }
-
-        .format-btn.active .ratio {
-            color: #E21B3C;
-        }
-
-        /* Import Tabs */
-        .import-tabs {
-            display: flex;
-            gap: 6px;
-            margin-bottom: 10px;
-        }
-
-        .import-tab {
-            flex: 1;
-            padding: 10px 12px;
-            background: #f7f7f7;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            color: #717171;
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-
-        .import-tab:hover {
-            border-color: #bbb;
-            color: #222;
-        }
-
-        .import-tab.active {
-            border-color: #E21B3C;
-            background: rgba(226, 27, 60, 0.06);
-            color: #222;
-        }
-
-        .import-tab-icon {
-            font-size: 16px;
-        }
-
-        /* Upload zone */
-        .upload-zone {
-            border: 2px dashed #d0d0d0;
-            border-radius: 10px;
-            padding: 24px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: #fafafa;
-        }
-
-        .upload-zone:hover {
-            border-color: #E21B3C;
-            background: rgba(226, 27, 60, 0.03);
-        }
-
-        .upload-zone.has-file {
-            border-style: solid;
-            border-color: #e0e0e0;
-            padding: 10px;
-            background: #fff;
-        }
-
-        .upload-icon {
-            font-size: 28px;
-            margin-bottom: 6px;
-        }
-
-        .upload-text {
-            font-size: 13px;
-            color: #717171;
-        }
-
-        .upload-text strong {
-            color: #E21B3C;
-        }
-
-        /* Google Drive Zone */
-        .drive-zone {
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            overflow: hidden;
-            background: #fff;
-        }
-
-        .drive-browser {
-            min-height: 120px;
-        }
-
-        .drive-connect {
-            padding: 24px;
-            text-align: center;
-        }
-
-        .drive-icon {
-            margin-bottom: 12px;
-        }
-
-        .drive-connect-text {
-            font-size: 14px;
-            font-weight: 500;
-            margin-bottom: 12px;
-            color: #222;
-        }
-
-        .btn-drive {
-            padding: 10px 20px;
-            background: #1a73e8;
-            border: none;
-            border-radius: 8px;
-            color: #fff;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-drive:hover {
-            background: #1557b0;
-        }
-
-        .drive-hint {
-            font-size: 11px;
-            color: #717171;
-            margin-top: 10px;
-        }
-
-        .drive-loading {
-            padding: 32px;
-            text-align: center;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-            color: #717171;
-            font-size: 13px;
-        }
-
-        .drive-files {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-            padding: 12px;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .drive-file {
-            aspect-ratio: 1;
-            background: #f7f7f7;
-            border-radius: 8px;
-            overflow: hidden;
-            cursor: pointer;
-            position: relative;
-            transition: all 0.2s;
-            border: 2px solid transparent;
-        }
-
-        .drive-file:hover {
-            border-color: #E21B3C;
-            transform: scale(1.02);
-        }
-
-        .drive-file img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .drive-file-video::after {
-            content: '🎬';
-            position: absolute;
-            bottom: 4px;
-            right: 4px;
-            font-size: 14px;
-            background: rgba(0,0,0,0.7);
-            border-radius: 4px;
-            padding: 2px 4px;
-        }
-
-        .drive-folder-select {
-            padding: 10px 12px;
-            background: #f7f7f7;
-            border-bottom: 1px solid #e0e0e0;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .drive-folder-name {
-            font-size: 12px;
-            color: #717171;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .drive-refresh-btn {
-            padding: 4px 8px;
-            background: #e0e0e0;
-            border: none;
-            border-radius: 4px;
-            color: #717171;
-            font-size: 11px;
-            cursor: pointer;
-        }
-
-        .drive-refresh-btn:hover {
-            background: #d0d0d0;
-            color: #222;
-        }
-
-        .file-preview {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .file-preview img {
-            width: 56px;
-            height: 56px;
-            object-fit: cover;
-            border-radius: 6px;
-        }
-
-        .file-info {
-            flex: 1;
-            text-align: left;
-        }
-
-        .file-name {
-            font-size: 13px;
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 160px;
-            color: #222;
-        }
-
-        .file-size {
-            font-size: 11px;
-            color: #717171;
-        }
-
-        .remove-file {
-            padding: 6px;
-            background: none;
-            border: none;
-            color: #717171;
-            cursor: pointer;
-            font-size: 16px;
-        }
-
-        .remove-file:hover {
-            color: #E21B3C;
-        }
-
-        /* Video loading spinner */
-        .video-loading {
-            width: 56px;
-            height: 56px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #f7f7f7;
-            border-radius: 6px;
-        }
-
-        .loading-spinner {
-            width: 24px;
-            height: 24px;
-            border: 3px solid #e0e0e0;
-            border-top-color: #E21B3C;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Text input */
-        .text-input {
-            width: 100%;
-            background: #f7f7f7;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 14px;
-            color: #222;
-            font-size: 15px;
-            font-family: inherit;
-            resize: vertical;
-            min-height: 80px;
-            transition: border-color 0.2s;
-        }
-
-        .text-input:focus {
-            outline: none;
-            border-color: #E21B3C;
-        }
-
-        .text-input::placeholder {
-            color: #a0a0a0;
-        }
-
-        /* Slider */
-        .slider-container {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .slider {
-            flex: 1;
-            -webkit-appearance: none;
-            appearance: none;
-            height: 6px;
-            background: #e0e0e0;
-            border-radius: 3px;
-            outline: none;
-        }
-
-        .slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 18px;
-            height: 18px;
-            background: #E21B3C;
-            border-radius: 50%;
-            cursor: pointer;
-            transition: transform 0.1s;
-        }
-
-        .slider::-webkit-slider-thumb:hover {
-            transform: scale(1.1);
-        }
-
-        .slider-value {
-            font-size: 13px;
-            color: #717171;
-            min-width: 45px;
-            text-align: right;
-        }
-
-        /* Checkbox toggle */
-        .toggle-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px;
-            background: #f7f7f7;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-
-        .toggle-row span {
-            font-size: 13px;
-            color: #222;
-        }
-
-        .toggle-switch {
-            width: 40px;
-            height: 22px;
-            background: #d0d0d0;
-            border-radius: 11px;
-            position: relative;
-            transition: background 0.2s;
-        }
-
-        .toggle-switch.active {
-            background: #E21B3C;
-        }
-
-        .toggle-switch::after {
-            content: '';
-            position: absolute;
-            width: 18px;
-            height: 18px;
-            background: #fff;
-            border-radius: 50%;
-            top: 2px;
-            left: 2px;
-            transition: transform 0.2s;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-        }
-
-        .toggle-switch.active::after {
-            transform: translateX(18px);
-        }
-
-        /* Buttons */
-        .btn {
-            width: 100%;
-            padding: 14px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-
-        .btn-primary {
-            background: #E21B3C;
-            color: #fff;
-        }
-
-        .btn-primary:hover {
-            background: #c4162f;
-        }
-
-        .btn-primary:disabled {
-            background: #e0e0e0;
-            color: #a0a0a0;
-            cursor: not-allowed;
-        }
-
-        .btn-secondary {
-            background: #f7f7f7;
-            color: #222;
-            border: 2px solid #e0e0e0;
-        }
-
-        .btn-secondary:hover {
-            border-color: #E21B3C;
-        }
-
-        .btn-schedule {
-            background: #fff;
-            color: #f59e0b;
-            border: 2px solid #f59e0b;
-        }
-
-        .btn-schedule:hover {
-            background: rgba(245, 158, 11, 0.06);
-        }
-
-        .btn-schedule:disabled {
-            background: #f7f7f7;
-            color: #a0a0a0;
-            border-color: #e0e0e0;
-            cursor: not-allowed;
-        }
-
-        .btn-save-meme {
-            background: #fff;
-            color: #008a05;
-            border: 2px solid #008a05;
-        }
-
-        .btn-save-meme:hover {
-            background: rgba(0, 138, 5, 0.06);
-        }
-
-        .btn-save-meme:disabled {
-            background: #f7f7f7;
-            color: #a0a0a0;
-            border-color: #e0e0e0;
-            cursor: not-allowed;
-        }
-
-        .spacer {
-            flex: 1;
-        }
-
-        /* Preview area */
-        .preview-area {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 30px;
-            background: #f0f0f0;
-            position: relative;
-        }
-
-        .canvas-container {
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
-            border-radius: 4px;
-            overflow: visible !important;
-            border: 1px solid #e0e0e0;
-        }
-
-        /* Fabric.js creates its own wrapper div with class canvas-container - override it */
-        .preview-area .canvas-container {
-            overflow: visible !important;
-        }
-
-        .preview-area canvas {
-            display: block;
-        }
-
-        .help-text {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 12px;
-            color: #717171;
-            text-align: center;
-        }
-
-        /* Hidden file input */
-        #file-input {
-            display: none;
-        }
-
-        /* Image controls hint */
-        .image-hint {
-            background: #f7f7f7;
-            border-radius: 8px;
-            padding: 12px;
-            font-size: 12px;
-            color: #717171;
-            line-height: 1.5;
-        }
-
-        .image-hint strong {
-            color: #E21B3C;
-        }
-
-        /* Video Timeline */
-        .timeline-container {
-            background: #f7f7f7;
-            border-radius: 8px;
-            padding: 12px;
-            margin-top: 10px;
-        }
-
-        .timeline-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .timeline-header span {
-            font-size: 12px;
-            color: #717171;
-        }
-
-        .timeline-duration {
-            font-size: 11px;
-            color: #E21B3C;
-            font-family: monospace;
-        }
-
-        .timeline-wrapper {
-            position: relative;
-            height: 50px;
-            background: #e8e8e8;
-            border-radius: 6px;
-            overflow: hidden;
-        }
-
-        .timeline-thumbnails {
-            display: flex;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-        }
-
-        .timeline-thumbnails canvas {
-            height: 100%;
-            flex-shrink: 0;
-        }
-
-        .timeline-selection {
-            position: absolute;
-            top: 0;
-            height: 100%;
-            background: rgba(226, 27, 60, 0.15);
-            border-left: 3px solid #E21B3C;
-            border-right: 3px solid #E21B3C;
-            cursor: move;
-        }
-
-        .timeline-handle {
-            position: absolute;
-            top: 0;
-            width: 20px;
-            height: 100%;
-            background: #E21B3C;
-            cursor: ew-resize;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10;
-        }
-
-        .timeline-handle::after {
-            content: '';
-            width: 4px;
-            height: 20px;
-            background: rgba(255,255,255,0.9);
-            border-radius: 2px;
-        }
-
-        .timeline-handle.start {
-            left: 0;
-            border-radius: 4px 0 0 4px;
-        }
-
-        .timeline-handle.end {
-            right: 0;
-            border-radius: 0 4px 4px 0;
-        }
-
-        .timeline-playhead {
-            position: absolute;
-            top: 0;
-            width: 2px;
-            height: 100%;
-            background: #222;
-            pointer-events: none;
-            z-index: 5;
-        }
-
-        .timeline-times {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 6px;
-            font-size: 10px;
-            color: #717171;
-            font-family: monospace;
-        }
-
-        .video-controls {
-            display: flex;
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .video-controls button {
-            flex: 1;
-            padding: 8px;
-            background: #e0e0e0;
-            border: none;
-            border-radius: 6px;
-            color: #222;
-            font-size: 14px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .video-controls button:hover {
-            background: #d0d0d0;
-        }
-
-        .video-controls button.active {
-            background: #E21B3C;
-            color: #fff;
-        }
-
-        /* Hidden video element */
-        #video-source {
-            display: none;
-        }
-
-        /* Media type indicator */
-        .media-type-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 10px;
-            font-weight: 600;
-            text-transform: uppercase;
-            margin-left: 8px;
-        }
-
-        .media-type-badge.image {
-            background: #008a05;
-            color: #fff;
-        }
-
-        .media-type-badge.video {
-            background: #E21B3C;
-            color: #fff;
-        }
-
-        /* Responsive */
-        @media (max-width: 900px) {
-            .app {
-                flex-direction: column;
-            }
-            .sidebar {
-                width: 100%;
-                height: auto;
-                max-height: 50vh;
-                border-right: none;
-                border-bottom: 1px solid #e0e0e0;
-            }
-            .preview-area {
-                padding: 20px;
-            }
-        }
+/* ============================================================
+   SAMOURAIS SCRAPPER — ÉCRAN ÉDITEUR
+   ------------------------------------------------------------
+   Référence : Buffer pour le composer, Linear pour le cadre.
+   Socle : tokens.css (chargé AVANT ce fichier par editor.html).
+   RÈGLE : aucune couleur brute ici. Toute couleur passe par un
+   jeton, donc les deux thèmes suivent sans bloc dupliqué.
+   ------------------------------------------------------------
+   Contrainte : editor.js (2239 lignes, Fabric.js) est HORS
+   PÉRIMÈTRE. Il pose des styles inline sur certains éléments et
+   force `style.display = 'block'` sur d'autres. Les règles
+   ci-dessous sont écrites pour rester correctes dans ce cas :
+   aucun conteneur piloté par JS ne dépend d'un `display: flex`.
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-ui);
+    font-size: var(--text-small);
+    font-weight: var(--weight-normal);
+    line-height: var(--lh-ui);
+    letter-spacing: var(--ls-normal);
+    background: var(--bg-canvas);
+    color: var(--fg-1);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Normalisation des contrôles natifs.
+   Cet écran ne charge pas samourais.css : sans cette règle, tout
+   contrôle non stylé explicitement retombe sur la police de l'agent
+   utilisateur (Arial 13,333 px) au milieu d'un écran en Inter. */
+:where(button, input, select, textarea) { font: inherit; letter-spacing: inherit; }
+
+::selection {
+    background: var(--selection-bg);
+    color: var(--selection-fg);
+}
+
+:where(a, button, input, textarea, [tabindex]):focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-offset);
+    border-radius: var(--radius-control);
+}
+
+/* Barre de défilement discrète, même grammaire que le reste de l'app. */
+.sidebar__scroll,
+.drive-files {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-color) transparent;
+}
+.sidebar__scroll::-webkit-scrollbar,
+.drive-files::-webkit-scrollbar {
+    width: var(--scrollbar-track);
+}
+.sidebar__scroll::-webkit-scrollbar-thumb,
+.drive-files::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-color);
+    border: var(--sp-2) solid transparent;
+    background-clip: content-box;
+    border-radius: var(--radius-pill);
+}
+.sidebar__scroll::-webkit-scrollbar-thumb:hover,
+.drive-files::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-color-hover);
+    background-clip: content-box;
+}
+
+/* ============================================================
+   1. CADRE — sidebar d'outils + aire de prévisualisation
+   ============================================================ */
+
+.app {
+    display: flex;
+    height: calc(100vh - var(--header-h));
+    min-height: 0;
+}
+
+.sidebar {
+    flex: 0 0 var(--inspector-w);
+    width: var(--inspector-w);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-1);
+    border-right: var(--border-w) solid var(--border-1);
+}
+
+/* La zone d'outils défile ; les actions ne défilent jamais. */
+.sidebar__scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--sp-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-5);
+}
+
+.side-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    min-height: var(--btn-h);
+}
+
+.side-title {
+    font-size: var(--text-large);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--ls-tight);
+    line-height: var(--lh-tight);
+    color: var(--fg-1);
+}
+
+/* ---- Groupes d'outils : un filet, jamais une ombre ---- */
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    padding-top: var(--sp-4);
+    border-top: var(--border-w) solid var(--border-1);
+}
+
+.group__head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    min-height: var(--chip-h);
+}
+
+.group__title {
+    font-size: var(--text-micro);
+    font-weight: var(--weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-caps);
+    color: var(--fg-3);
+}
+
+/* Texte d'appoint : contrainte chiffrée, avertissement, astuce. */
+.hint {
+    font-size: var(--text-micro);
+    line-height: var(--lh-text);
+    color: var(--fg-3);
+}
+.hint strong {
+    color: var(--fg-2);
+    font-weight: var(--weight-medium);
+    font-variant-numeric: var(--numeric);
+}
+.hint--limits {
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--bg-2);
+    border-radius: var(--radius-control);
+}
+/* Avertissement permanent : il informe, il n'alarme pas. Le rôle
+   sémantique est porté par le filet et par le mot, pas par un aplat
+   ambre plein qui hurlerait en continu sur un écran d'outils. */
+.hint--warning {
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--bg-2);
+    border-left: var(--sp-1) solid var(--warning);
+    border-radius: var(--radius-control);
+    color: var(--fg-3);
+}
+.hint--warning strong {
+    color: var(--warning);
+    font-weight: var(--weight-semibold);
+}
+
+.field-label,
+.ctl-label {
+    font-size: var(--text-mini);
+    font-weight: var(--weight-medium);
+    color: var(--fg-2);
+}
+
+/* ============================================================
+   2. SÉLECTEUR DE FORMAT — ratio d'export visible et chiffré
+   ============================================================ */
+
+.format-selector {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--sp-2);
+}
+
+.format-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: var(--sp-3) var(--sp-2);
+    background: var(--bg-2);
+    border: var(--border-w) solid var(--border-1);
+    border-radius: var(--radius-block);
+    color: var(--fg-2);
+    font-family: inherit;
+    font-size: var(--text-mini);
+    font-weight: var(--weight-medium);
+    cursor: pointer;
+    transition: background var(--t-quick) var(--ease),
+                border-color var(--t-quick) var(--ease),
+                color var(--t-quick) var(--ease);
+}
+
+.format-btn__name { line-height: var(--lh-tight); }
+
+.format-btn .ratio {
+    font-size: var(--text-micro);
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: var(--numeric);
+    color: var(--fg-3);
+}
+
+/* --fg-4 est la teinte du DÉSACTIVÉ (2,35:1 en clair, 3,08:1 en sombre).
+   Ces dimensions en pixels sont le seuil chiffré que l'utilisateur doit
+   pouvoir lire AVANT de valider : elles passent en --fg-3 (≥ 4,5:1). */
+.format-btn__px {
+    font-size: var(--text-micro);
+    font-variant-numeric: var(--numeric);
+    color: var(--fg-3);
+}
+
+@media (any-hover: hover) and (any-pointer: fine) {
+    .format-btn:hover {
+        border-color: var(--border-3);
+        color: var(--fg-1);
+    }
+    .format-btn:hover .ratio { color: var(--fg-2); }
+}
+
+/* Actif = aplat + filet + teinte : trois signaux, pas la couleur seule. */
+.format-btn.active {
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+    color: var(--accent);
+}
+.format-btn.active .ratio,
+.format-btn.active .format-btn__px { color: var(--accent); }
+
+/* ============================================================
+   3. IMPORT DU MÉDIA
+   ============================================================ */
+
+.import-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--sp-2);
+}
+
+.import-tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    height: var(--btn-h);
+    padding: 0 var(--sp-3);
+    background: var(--bg-2);
+    border: var(--border-w) solid var(--border-1);
+    border-radius: var(--radius-control);
+    color: var(--fg-2);
+    font-family: inherit;
+    font-size: var(--text-mini);
+    font-weight: var(--weight-medium);
+    cursor: pointer;
+    transition: background var(--t-quick) var(--ease),
+                border-color var(--t-quick) var(--ease),
+                color var(--t-quick) var(--ease);
+}
+
+.import-tab-icon { font-size: var(--text-mini); }
+
+@media (any-hover: hover) and (any-pointer: fine) {
+    .import-tab:hover {
+        border-color: var(--border-3);
+        color: var(--fg-1);
+    }
+}
+
+.import-tab.active {
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+    color: var(--accent);
+}
+
+/* ---- Zone de dépôt ----
+   `display` est piloté par editor.js (block / none) : on ne met
+   donc AUCUN display de mise en page ici. */
+.upload-zone {
+    padding: var(--sp-6);
+    text-align: center;
+    background: var(--bg-inset);
+    border: var(--border-w) dashed var(--border-2);
+    border-radius: var(--radius-block);
+    cursor: pointer;
+    transition: background var(--t-quick) var(--ease),
+                border-color var(--t-quick) var(--ease);
+}
+
+@media (any-hover: hover) and (any-pointer: fine) {
+    .upload-zone:hover {
+        border-color: var(--accent-border);
+        background: var(--accent-soft);
+    }
+}
+
+.upload-zone.has-file {
+    padding: var(--sp-4);
+    border-style: solid;
+    border-color: var(--border-1);
+    background: var(--bg-2);
+    text-align: left;
+}
+
+.upload-icon {
+    font-size: var(--text-large);
+    line-height: 1;
+    margin-bottom: var(--sp-3);
+}
+
+.upload-text {
+    font-size: var(--text-mini);
+    color: var(--fg-3);
+}
+.upload-text strong {
+    color: var(--accent);
+    font-weight: var(--weight-medium);
+}
+
+/* ---- Fichier chargé (markup injecté par editor.js) ---- */
+.file-preview {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+}
+
+.file-preview img {
+    width: var(--sp-9);
+    height: var(--sp-9);
+    object-fit: cover;
+    border-radius: var(--radius-control);
+    background: var(--bg-3);
+}
+
+.file-info {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+}
+
+.file-name {
+    font-size: var(--text-mini);
+    font-weight: var(--weight-medium);
+    color: var(--fg-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-size {
+    font-size: var(--text-micro);
+    font-variant-numeric: var(--numeric);
+    color: var(--fg-3);
+}
+
+.remove-file {
+    flex-shrink: 0;
+    width: var(--sp-7);
+    height: var(--sp-7);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 0;
+    border-radius: var(--radius-control);
+    color: var(--fg-3);
+    font-family: inherit;
+    font-size: var(--text-small);
+    cursor: pointer;
+    transition: background var(--t-quick) var(--ease),
+                color var(--t-quick) var(--ease);
+}
+.remove-file:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.video-loading {
+    width: var(--sp-9);
+    height: var(--sp-9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-3);
+    border-radius: var(--radius-control);
+}
+
+.loading-spinner {
+    width: var(--sp-7);
+    height: var(--sp-7);
+    border: var(--sp-1) solid var(--border-2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ---- Drive / Bibliothèque ----
+   `display` piloté par editor.js : pas de display de mise en page. */
+.drive-zone {
+    background: var(--bg-1);
+    border: var(--border-w) solid var(--border-1);
+    border-radius: var(--radius-block);
+    overflow: hidden;
+}
+
+.drive-browser { min-height: calc(var(--sp-9) * 2); }
+
+.drive-connect {
+    padding: var(--sp-6);
+    text-align: center;
+}
+
+.drive-icon { margin-bottom: var(--sp-4); }
+
+.drive-connect-text {
+    font-size: var(--text-mini);
+    font-weight: var(--weight-medium);
+    color: var(--fg-1);
+    margin-bottom: var(--sp-4);
+}
+
+.drive-hint {
+    font-size: var(--text-micro);
+    color: var(--fg-3);
+    margin-top: var(--sp-4);
+}
+
+.drive-loading {
+    padding: var(--sp-8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-5);
+    font-size: var(--text-mini);
+    color: var(--fg-3);
+    text-align: center;
+}
+
+.drive-files {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--grid-gap);
+    padding: var(--sp-4);
+    max-height: calc(var(--thumb-md) + var(--sp-8));
+    overflow-y: auto;
+}
+
+.drive-file {
+    aspect-ratio: 1;
+    background: var(--bg-3);
+    border: var(--border-w) solid transparent;
+    border-radius: var(--radius-control);
+    overflow: hidden;
+    position: relative;
+    cursor: pointer;
+    transition: border-color var(--t-quick) var(--ease);
+}
+.drive-file:hover { border-color: var(--accent); }
+
+.drive-file img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* Vignette introuvable : editor.js met la légende du média en `alt`
+       (souvent une URL). On la contient dans la tuile au lieu de la
+       laisser déformer la grille. */
+    overflow: hidden;
+    font-size: var(--text-micro);
+    line-height: var(--lh-ui);
+    color: var(--fg-4);
+    word-break: break-all;
+}
+
+/* Pastille « vidéo » : un mot court, jamais la seule couleur. */
+.drive-file-video::after {
+    content: 'VID';
+    position: absolute;
+    right: var(--sp-2);
+    bottom: var(--sp-2);
+    padding: 0 var(--sp-2);
+    border-radius: var(--radius-control);
+    background: var(--bg-1);
+    color: var(--fg-2);
+    font-size: var(--text-micro);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--ls-wide);
+}
+
+.drive-folder-select {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    min-height: var(--menu-row-h);
+    padding: var(--sp-2) var(--sp-4);
+    background: var(--bg-2);
+    border-bottom: var(--border-w) solid var(--border-1);
+}
+
+.drive-folder-name {
+    font-size: var(--text-micro);
+    font-weight: var(--weight-medium);
+    color: var(--fg-3);
+}
+
+.drive-refresh-btn {
+    height: var(--control-h);
+    padding: 0 var(--sp-4);
+    background: var(--bg-3);
+    border: 0;
+    border-radius: var(--radius-control);
+    color: var(--fg-2);
+    font-family: inherit;
+    font-size: var(--text-micro);
+    font-weight: var(--weight-medium);
+    cursor: pointer;
+    transition: background var(--t-quick) var(--ease),
+                color var(--t-quick) var(--ease);
+}
+.drive-refresh-btn:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+#file-input { display: none; font: inherit; }
+
+/* ============================================================
+   4. CHAMPS DE SAISIE
+   ============================================================ */
+
+.text-input {
+    width: 100%;
+    padding: var(--sp-4);
+    background: var(--bg-inset);
+    border: var(--border-w) solid var(--border-2);
+    border-radius: var(--radius-control);
+    color: var(--fg-1);
+    font-family: inherit;
+    font-size: var(--text-regular);
+    line-height: var(--lh-text);
+    resize: vertical;
+    min-height: calc(var(--sp-9) + var(--sp-7));
+    transition: border-color var(--t-quick) var(--ease);
+}
+
+.text-input--single {
+    min-height: 0;
+    height: var(--btn-h);
+    padding: 0 var(--sp-4);
+    font-size: var(--text-small);
+    resize: none;
+}
+
+.text-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 var(--border-w) var(--accent);
+}
+
+.text-input::placeholder { color: var(--fg-4); }
+
+/* ---- Rangée de contrôle : label / piste / valeur ----
+   Le conteneur `.ctl` reste en display par défaut (block) parce
+   qu'editor.js lui impose `display: block` quand il le révèle. */
+.ctl-row {
+    display: grid;
+    grid-template-columns: 1fr minmax(80px, 1.1fr) auto;
+    align-items: center;
+    gap: var(--sp-4);
+    min-height: var(--menu-row-h);
+}
+
+/* ---- Contrôle empilé : libellé au-dessus, contrôle en dessous ----
+   Pour les groupes de boutons (recadrage, orientation, format, taille)
+   qui ne tiennent pas dans la grille label/piste/valeur.
+   `.ctl--stack` seulement : `.ctl` nu reste en block, editor.js lui
+   impose `display: block` quand il le révèle. */
+.ctl--stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+}
+
+/* ---- Groupe segmenté (LOT C) ----
+   Mêmes aplats, filets et teinte active que `.import-tab` et
+   `.format-btn` : trois signaux pour l'état actif (fond, filet,
+   couleur), jamais la couleur seule. Les jetons sont définis dans
+   les DEUX thèmes, donc le contour reste visible sur fond clair
+   comme sur fond sombre. */
+.seg {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+}
+
+.seg__btn {
+    flex: 1 1 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-1);
+    min-width: var(--sp-9);
+    height: var(--btn-h);
+    padding: 0 var(--sp-3);
+    background: var(--bg-2);
+    border: var(--border-w) solid var(--border-1);
+    border-radius: var(--radius-control);
+    color: var(--fg-2);
+    font-family: inherit;
+    font-size: var(--text-mini);
+    font-weight: var(--weight-medium);
+    font-variant-numeric: var(--numeric);
+    line-height: var(--lh-tight);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background var(--t-quick) var(--ease),
+                border-color var(--t-quick) var(--ease),
+                color var(--t-quick) var(--ease);
+}
+
+@media (any-hover: hover) and (any-pointer: fine) {
+    .seg__btn:hover {
+        border-color: var(--border-3);
+        color: var(--fg-1);
+    }
+}
+
+.seg__btn:active { background: var(--bg-3); }
+
+.seg__btn.active,
+.seg__btn[aria-pressed="true"] {
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+    color: var(--accent);
+}
+
+.seg__btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: var(--sp-7);
+    background: transparent;
+    /* Sans cette ligne l'UA impose 13.333px : une 6e taille de police
+       fantôme dans un écran qui n'en autorise que 5. */
+    font: inherit;
+    cursor: pointer;
+}
+
+.slider::-webkit-slider-runnable-track {
+    height: var(--sp-3);
+    background: var(--bg-3);
+    border-radius: var(--radius-pill);
+}
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: var(--icon-md);
+    height: var(--icon-md);
+    margin-top: -5px; /* (piste 6px - pouce 16px) / 2 */
+    background: var(--accent-solid);
+    border: var(--border-w) solid var(--bg-1);
+    border-radius: 50%;
+    transition: background var(--t-quick) var(--ease);
+}
+.slider::-moz-range-track {
+    height: var(--sp-3);
+    background: var(--bg-3);
+    border-radius: var(--radius-pill);
+}
+.slider::-moz-range-thumb {
+    width: var(--icon-md);
+    height: var(--icon-md);
+    background: var(--accent-solid);
+    border: var(--border-w) solid var(--bg-1);
+    border-radius: 50%;
+}
+.slider:hover::-webkit-slider-thumb { background: var(--accent-solid-hover); }
+.slider:hover::-moz-range-thumb { background: var(--accent-solid-hover); }
+
+.slider-value {
+    min-width: calc(var(--sp-9) - var(--sp-1));
+    text-align: right;
+    font-size: var(--text-mini);
+    font-variant-numeric: var(--numeric);
+    color: var(--fg-2);
+}
+
+/* ---- Interrupteur ---- */
+.toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    width: 100%;
+    min-height: var(--tap-min);
+    padding: 0 var(--sp-4);
+    background: var(--bg-2);
+    border: var(--border-w) solid transparent;
+    border-radius: var(--radius-control);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--t-quick) var(--ease);
+}
+.toggle-row:hover { background: var(--bg-3); }
+
+.toggle-row span:first-child {
+    font-size: var(--text-small);
+    color: var(--fg-1);
+}
+
+.toggle-switch {
+    display: block;
+    flex-shrink: 0;
+    position: relative;
+    width: calc(var(--sp-9) - var(--sp-4));
+    height: var(--control-h);
+    background: var(--border-3);
+    border-radius: var(--radius-pill);
+    transition: background var(--t-quick) var(--ease);
+}
+.toggle-switch.active { background: var(--accent-solid); }
+
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: var(--sp-1);
+    left: var(--sp-1);
+    width: calc(var(--control-h) - var(--sp-2) * 2);
+    height: calc(var(--control-h) - var(--sp-2) * 2);
+    background: var(--fg-on-accent);
+    border-radius: 50%;
+    transition: transform var(--t-quick) var(--ease);
+}
+.toggle-switch.active::after {
+    transform: translateX(calc(var(--sp-9) - var(--sp-4) - var(--control-h)));
+}
+
+/* ============================================================
+   5. BOUTONS
+   ------------------------------------------------------------
+   `display: block` volontaire : editor.js force
+   `style.display = 'block'` sur #select-image-btn. Un `flex`
+   serait écrasé et le libellé décentré.
+   ============================================================ */
+
+.btn {
+    display: block;
+    width: 100%;
+    height: var(--btn-h);
+    min-width: var(--btn-min-w);
+    padding: 0 var(--sp-5);
+    border: var(--border-w) solid transparent;
+    border-radius: var(--radius-control);
+    font-family: inherit;
+    font-size: var(--text-small);
+    font-weight: var(--weight-medium);
+    line-height: calc(var(--btn-h) - var(--border-w) * 2);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    transition: background var(--t-quick) var(--ease),
+                border-color var(--t-quick) var(--ease),
+                color var(--t-quick) var(--ease);
+}
+
+.btn-primary {
+    background: var(--accent-solid);
+    color: var(--fg-on-accent);
+}
+.btn-primary:hover:not(:disabled) { background: var(--accent-solid-hover); }
+.btn-primary:active:not(:disabled) { background: var(--accent-solid-active); }
+
+.btn-secondary {
+    background: var(--bg-2);
+    border-color: var(--border-2);
+    color: var(--fg-1);
+}
+.btn-secondary:hover:not(:disabled) {
+    background: var(--bg-3);
+    border-color: var(--border-3);
+}
+
+.btn-ghost {
+    width: auto;
+    min-width: 0;
+    height: var(--menu-row-h);
+    line-height: calc(var(--menu-row-h) - var(--border-w) * 2);
+    padding: 0 var(--sp-4);
+    background: transparent;
+    color: var(--fg-3);
+    font-size: var(--text-mini);
+}
+.btn-ghost:hover:not(:disabled) {
+    background: var(--bg-2);
+    color: var(--fg-1);
+}
+
+.btn:disabled {
+    background: var(--bg-2);
+    border-color: var(--border-1);
+    color: var(--fg-4);
+    cursor: not-allowed;
+}
+
+/* ---- Pied d'actions : toujours visible, ne défile pas ---- */
+.sidebar__actions {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    padding: var(--sp-5);
+    background: var(--bg-1);
+    border-top: var(--border-w) solid var(--border-1);
+}
+
+.actions-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-4);
+}
+
+/* Deux actions secondaires côte à côte dans 300px : le libellé passe
+   sur deux lignes plutôt que d'être tronqué. editor.js réécrit le
+   texte de #save-meme-btn (« Sauvegarder dans Viewer ») après un
+   enregistrement : il doit tenir sans points de suspension. */
+.actions-row .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--tap-min);
+    padding: 0 var(--sp-3);
+    font-size: var(--text-mini);
+    line-height: var(--lh-tight);
+    text-align: center;
+    white-space: normal;
+    overflow: visible;
+}
+
+/* ============================================================
+   6. TIMELINE VIDÉO
+   ============================================================ */
+
+.timeline-container {
+    padding: var(--sp-4);
+    background: var(--bg-2);
+    border: var(--border-w) solid var(--border-1);
+    border-radius: var(--radius-block);
+}
+
+.timeline-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-4);
+}
+
+.timeline-header > span:first-child {
+    font-size: var(--text-micro);
+    font-weight: var(--weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-caps);
+    color: var(--fg-3);
+}
+
+.timeline-duration {
+    font-family: var(--font-mono);
+    font-size: var(--text-micro);
+    font-variant-numeric: var(--numeric);
+    color: var(--accent);
+}
+
+.timeline-wrapper {
+    position: relative;
+    height: var(--sp-9);
+    background: var(--bg-3);
+    border-radius: var(--radius-control);
+    overflow: hidden;
+}
+
+.timeline-thumbnails {
+    display: flex;
+    position: absolute;
+    inset: 0;
+    height: 100%;
+}
+.timeline-thumbnails canvas {
+    height: 100%;
+    flex-shrink: 0;
+}
+
+.timeline-selection {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: var(--accent-soft);
+    border-left: var(--sp-1) solid var(--accent-solid);
+    border-right: var(--sp-1) solid var(--accent-solid);
+    cursor: move;
+}
+
+.timeline-handle {
+    position: absolute;
+    top: 0;
+    z-index: var(--z-content);
+    width: var(--sp-5);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-solid);
+    cursor: ew-resize;
+}
+.timeline-handle::after {
+    content: '';
+    width: var(--sp-1);
+    height: var(--sp-6);
+    background: var(--fg-on-accent);
+    border-radius: var(--radius-pill);
+}
+.timeline-handle.start {
+    left: 0;
+    border-radius: var(--radius-control) 0 0 var(--radius-control);
+}
+.timeline-handle.end {
+    right: 0;
+    border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+
+.timeline-playhead {
+    position: absolute;
+    top: 0;
+    z-index: var(--z-content);
+    width: var(--sp-1);
+    height: 100%;
+    background: var(--fg-1);
+    pointer-events: none;
+}
+
+.timeline-times {
+    display: flex;
+    justify-content: space-between;
+    margin-top: var(--sp-3);
+    font-family: var(--font-mono);
+    font-size: var(--text-micro);
+    font-variant-numeric: var(--numeric);
+    color: var(--fg-3);
+}
+
+.video-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-4);
+    margin-top: var(--sp-4);
+}
+
+.video-controls button {
+    height: var(--btn-h);
+    padding: 0 var(--sp-4);
+    background: var(--bg-1);
+    border: var(--border-w) solid var(--border-2);
+    border-radius: var(--radius-control);
+    color: var(--fg-1);
+    font-family: inherit;
+    font-size: var(--text-mini);
+    font-weight: var(--weight-medium);
+    cursor: pointer;
+    transition: background var(--t-quick) var(--ease),
+                border-color var(--t-quick) var(--ease),
+                color var(--t-quick) var(--ease);
+}
+.video-controls button:hover {
+    background: var(--bg-3);
+    border-color: var(--border-3);
+}
+.video-controls button.active {
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+    color: var(--accent);
+}
+
+#video-source { display: none; }
+
+/* ---- Badge de type de média ---- */
+.media-type-badge {
+    display: inline-block;
+    height: var(--chip-h);
+    line-height: var(--chip-h);
+    padding: 0 var(--sp-3);
+    border-radius: var(--radius-control);
+    font-size: var(--text-micro);
+    font-weight: var(--weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: var(--ls-wide);
+}
+.media-type-badge.image {
+    background: var(--success-soft);
+    color: var(--success);
+}
+.media-type-badge.video {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+/* ============================================================
+   7. AIRE DE PRÉVISUALISATION
+   ------------------------------------------------------------
+   Le canvas Fabric peint son propre fond sombre (#2a2a2a, posé
+   par editor.js) et ses poignées en rouge cerclé de blanc. Le
+   filet + l'ombre ci-dessous servent à le détacher de l'aire,
+   dans les DEUX thèmes : en clair l'aire est plus claire que le
+   canvas, en sombre elle est plus foncée.
+   ============================================================ */
+
+.preview-area {
+    flex: 1 1 auto;
+    min-width: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-7);
+    background: var(--bg-2);
+}
+
+/* Pas d'ombre portée : le canvas n'est pas un élément flottant, il est
+   posé dans l'aire. La séparation vient du filet 1px + de l'escalier de
+   surfaces (--bg-2 pour l'aire, le canvas peignant son propre fond). */
+.canvas-container {
+    border: var(--border-w) solid var(--border-2);
+    border-radius: var(--radius-control);
+    overflow: visible !important;
+}
+
+/* Fabric.js recrée un wrapper .canvas-container : on le laisse déborder
+   pour que les poignées de manipulation restent cliquables. */
+.preview-area .canvas-container { overflow: visible !important; }
+
+.preview-area canvas { display: block; }
+
+.help-text {
+    position: absolute;
+    left: 50%;
+    bottom: var(--sp-5);
+    transform: translateX(-50%);
+    max-width: calc(100% - var(--sp-8));
+    text-align: center;
+    font-size: var(--text-micro);
+    color: var(--fg-3);
+}
+
+/* ============================================================
+   8. MODALES CRÉÉES PAR editor.js
+   ------------------------------------------------------------
+   #export-modal (export vidéo FFmpeg) et #drive-config-modal
+   sont construits en JS avec des styles INLINE codés en dur, en
+   sombre, avec un rouge qui n'est plus l'accent du produit.
+   editor.js étant hors périmètre, on les rhabille ici — d'où les
+   `!important`, seule façon de battre un style inline.
+   Les sélecteurs d'attribut ciblent les valeurs inline écrites
+   par editor.js ; s'ils cessent de correspondre, la modale
+   retombe simplement sur son ancien rendu, sans rien casser.
+   ============================================================ */
+
+#export-modal,
+#drive-config-modal > div {
+    background: color-mix(in srgb, var(--bg-canvas) 82%, transparent) !important;
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+    z-index: var(--z-dialog) !important;
+    padding: var(--sp-6);
+}
+
+#export-modal > div,
+#drive-config-modal > div > div {
+    background: var(--bg-1) !important;
+    border: var(--border-w) solid var(--border-1);
+    border-radius: var(--radius-container) !important;
+    box-shadow: var(--shadow-high);
+    color: var(--fg-1) !important;
+    font-family: var(--font-ui);
+    text-align: left !important;
+    max-height: calc(100vh - var(--sp-9));
+    overflow-y: auto;
+}
+
+#export-modal h2,
+#drive-config-modal h3 {
+    color: var(--fg-1) !important;
+    font-size: var(--title-3) !important;
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--ls-tight);
+}
+
+/* Textes secondaires (inline `color:#888` / `#666` / `#aaa`). */
+#export-modal [style*="#888"],
+#export-modal [style*="#666"],
+#export-modal [style*="#aaa"],
+#drive-config-modal [style*="#888"] {
+    color: var(--fg-3) !important;
+    font-size: var(--text-small) !important;
+}
+
+/* Zone en creux des paramètres d'export (inline `background:#111`). */
+#export-modal [style*="background: #111"],
+#drive-config-modal [style*="background: #111"] {
+    background: var(--bg-2) !important;
+    border: var(--border-w) solid var(--border-1);
+    border-radius: var(--radius-block) !important;
+    color: var(--fg-2) !important;
+}
+
+/* ---- ZONE D'ERREUR ----
+   editor.js écrit le message d'échec dans un <p style="color:#ef4444">.
+   On en fait un vrai bloc d'erreur : aplat sémantique + filet, pour
+   qu'un échec FFmpeg ne passe pas pour une ligne de texte anodine. */
+#export-modal p[style*="#ef4444"] {
+    display: block;
+    padding: var(--sp-5) !important;
+    background: var(--danger-soft) !important;
+    border-left: var(--sp-2) solid var(--danger);
+    border-radius: var(--radius-control);
+    color: var(--danger) !important;
+    font-size: var(--text-small) !important;
+    font-weight: var(--weight-medium);
+    line-height: var(--lh-text);
+    word-break: break-word;
+}
+/* …sauf le rappel de durée du 1er écran, qui est un <strong>, pas un <p>. */
+#export-modal strong[style*="#ef4444"] {
+    color: var(--fg-1) !important;
+    font-variant-numeric: var(--numeric);
+}
+
+/* ---- Barre de progression ---- */
+#export-modal #progress-bar {
+    background: var(--bg-3) !important;
+    border-radius: var(--radius-pill) !important;
+    height: var(--sp-3) !important;
+}
+#export-modal #progress-fill {
+    background: var(--accent-solid) !important;
+    border-radius: var(--radius-pill);
+}
+#export-modal #progress-text {
+    color: var(--fg-3) !important;
+    font-size: var(--text-mini) !important;
+}
+
+/* ---- Boutons des modales ---- */
+#export-modal button,
+#drive-config-modal button {
+    height: var(--btn-h);
+    padding: 0 var(--sp-5) !important;
+    border-radius: var(--radius-control) !important;
+    font-family: var(--font-ui);
+    font-size: var(--text-small);
+    font-weight: var(--weight-medium);
+    line-height: var(--btn-h);
+}
+#export-modal button[style*="#333"],
+#drive-config-modal button[style*="#333"] {
+    background: var(--bg-2) !important;
+    border: var(--border-w) solid var(--border-2) !important;
+    color: var(--fg-1) !important;
+}
+#export-modal button[style*="#ef4444"],
+#drive-config-modal button[style*="#1a73e8"] {
+    background: var(--accent-solid) !important;
+    color: var(--fg-on-accent) !important;
+}
+
+#drive-config-modal input {
+    background: var(--bg-inset) !important;
+    border: var(--border-w) solid var(--border-2) !important;
+    border-radius: var(--radius-control) !important;
+    color: var(--fg-1) !important;
+    font-family: var(--font-ui);
+    font-size: var(--text-small) !important;
+}
+#drive-config-modal a { color: var(--accent) !important; }
+
+/* ============================================================
+   9. MOBILE ET POINTEUR GROSSIER
+   ------------------------------------------------------------
+   Cet écran reste un écran d'outils : l'objectif n'est pas la
+   perfection tactile mais l'absence de débordement horizontal
+   et de cibles minuscules.
+   ============================================================ */
+
+/* Cibles ≥ 44px dès que le pointeur est grossier — y compris les
+   sliders, dont la piste ne fait que 6px. */
+@media (pointer: coarse) {
+    .slider { height: var(--tap-min); }
+    .import-tab,
+    .seg__btn,
+    .video-controls button,
+    .btn { height: var(--tap-min); line-height: calc(var(--tap-min) - var(--border-w) * 2); }
+    .btn-ghost { height: var(--tap-min); line-height: calc(var(--tap-min) - var(--border-w) * 2); }
+    .drive-refresh-btn { height: var(--sp-8); }
+    .remove-file { width: var(--tap-min); height: var(--tap-min); }
+}
+
+@media (max-width: 1023px) {
+    .app {
+        flex-direction: column;
+        height: auto;
+        min-height: calc(100vh - var(--header-h));
+    }
+
+    .sidebar {
+        flex: 0 0 auto;
+        width: 100%;
+        max-height: none;
+        border-right: 0;
+        border-bottom: var(--border-w) solid var(--border-1);
+        /* La sidebar occupe toute la largeur : elle défile avec la page,
+           et le pied d'actions colle au bas de la fenêtre. */
+        order: 2;
+    }
+
+    .sidebar__scroll {
+        overflow: visible;
+        padding: var(--sp-5) var(--sp-5) var(--sp-6);
+    }
+
+    .sidebar__actions {
+        position: sticky;
+        bottom: 0;
+        z-index: var(--z-sticky);
+        box-shadow: var(--shadow-low);
+    }
+
+    .preview-area {
+        order: 1;
+        padding: var(--sp-5);
+        min-height: 45vh;
+    }
+
+    .preview-area canvas { max-width: 100%; }
+
+    .help-text { position: static; transform: none; margin-top: var(--sp-5); }
+
+    .format-selector,
+    .import-tabs { gap: var(--sp-3); }
+}
+
+/* Rien ne doit déborder horizontalement, quelle que soit la largeur. */
+.app,
+.sidebar,
+.preview-area,
+.timeline-container,
+.drive-zone {
+    max-width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 1ms !important;
+    }
+}

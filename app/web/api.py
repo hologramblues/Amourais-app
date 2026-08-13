@@ -7,17 +7,20 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+import tempfile
+import threading
+from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import re
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, abort, jsonify, render_template, request
 from loguru import logger
 from markupsafe import escape
 from sqlalchemy import func, desc
 
-from app.config import PLATFORM_URLS, SESSIONS_DIR, BASE_DIR, DATA_DIR, DB_PATH, DOWNLOAD_DIR, SETTINGS_ENV
+from app.config import DEBUG, PLATFORM_URLS, SESSIONS_DIR, BASE_DIR, DATA_DIR, DB_PATH, DOWNLOAD_DIR, SETTINGS_ENV
 from app.db import MediaItem, Profile, ScrapeJob, SessionLocal
 from app.scheduler import enqueue_manual_scrape
 
@@ -38,9 +41,57 @@ ALLOWED_ENV_KEYS = frozenset({
     # Proxies
     "PROXY_URL", "PROXY_INSTAGRAM", "PROXY_TIKTOK", "PROXY_TWITTER", "PROXY_REDDIT",
     # App / server
-    "PORT", "LOG_LEVEL", "EDITOR_MAX_FILE_SIZE_MB",
-    "APP_USERNAME", "APP_PASSWORD", "FLASK_SECRET_KEY",
+    "LOG_LEVEL", "EDITOR_MAX_FILE_SIZE_MB",
+    # NOTE: APP_USERNAME / APP_PASSWORD / FLASK_SECRET_KEY are deliberately
+    # NOT writable from the Settings UI (risque #52, AUDIT.md §6.13): a single
+    # request would lock the owner out of his own application, from a file that
+    # survives redeploys.
+    # NOTE: PORT is deliberately NOT writable either (lot 2.1). The persistent
+    # `.env` of the volume is loaded with `override=True`, so it SHADOWS the
+    # variables injected by Railway — PORT included. Saving the Settings form
+    # would make the container listen on the wrong port and kill the
+    # deployment. PORT belongs to the platform, not to the UI.
 })
+
+# Subset of ALLOWED_ENV_KEYS that `app/config.py` casts with `int()`.
+# A non-numeric value here used to be written to the persistent volume and
+# brick the next boot (risque #41, AUDIT.md §4.14).
+# (PORT is kept here as defence in depth even though it left ALLOWED_ENV_KEYS:
+# should anyone ever put it back, it must still be validated as an integer.)
+NUMERIC_ENV_KEYS = frozenset({
+    "PORT", "EDITOR_MAX_FILE_SIZE_MB", "BROWSER_POOL_SIZE", "SCROLL_PAUSE_MS",
+    "MAX_SCROLLS", "BACKFILL_MAX_SCROLLS", "DAILY_MAX_SCROLLS",
+    "DEFAULT_SCRAPE_INTERVAL_MINUTES", "DAILY_SCRAPE_INTERVAL_MINUTES",
+    "DELAY_BETWEEN_PROFILES_MS", "MAX_CONCURRENT_SCRAPES",
+})
+
+
+def _is_int(value: str) -> bool:
+    """True when `int()` will accept this value at config import time."""
+    try:
+        int(value.strip())
+    except (TypeError, ValueError, AttributeError):
+        return False
+    return True
+
+
+# Characters that would let a single form field forge EXTRA lines — hence extra
+# variables — in the persistent `.env` (lot 2.1). `PROXY_URL=x\nAPP_PASSWORD=y`
+# posted as ONE value used to write TWO variables, and the volume `.env` is
+# loaded with `override=True`: the injected variable wins over everything.
+# NUL is rejected too: it truncates the file for most C readers.
+_ENV_FORBIDDEN_CHARS = ("\n", "\r", "\0")
+
+
+def _env_value_is_safe(value: str) -> bool:
+    """False when a value would break out of its `KEY=value` line."""
+    return not any(ch in value for ch in _ENV_FORBIDDEN_CHARS)
+
+
+# One writer at a time. `_write_env_file` is a read-modify-write, and two
+# concurrent saves (two browser tabs, or the IG-API view which writes three
+# times in a row) could otherwise lose updates or interleave.
+_ENV_WRITE_LOCK = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -65,10 +116,33 @@ def _read_env_file() -> dict[str, str]:
 
 
 def _write_env_file(updates: dict[str, str]) -> None:
-    """Write user settings to the persistent .env on the data volume."""
+    """Write user settings to the persistent .env on the data volume.
+
+    The write is ATOMIC (temporary file + `os.replace`) and serialised by
+    `_ENV_WRITE_LOCK` (lot 2.1b). `config.get_proxy_for_platform` and
+    `instagram_api` re-read this file at any moment, from other threads: with
+    an in-place `write_text` a scrape starting mid-save read a truncated file
+    and silently lost its proxy (fenêtre de troncature, AUDIT.md §4.15).
+    `os.replace` is atomic on POSIX, so a reader sees either the old file or
+    the new one — never half of one.
+    """
+    # Refuse to serialise a value that would forge extra lines, whatever the
+    # caller: `save_env` filters too, but `setup_ig_api` also writes here.
+    toxiques = sorted(k for k, v in updates.items() if not _env_value_is_safe(str(v)))
+    if toxiques:
+        raise ValueError(f"valeurs .env contenant un saut de ligne ou un NUL : {toxiques}")
+
     env_path = SETTINGS_ENV  # DATA_DIR/.env — persistent on Railway
     env_path.parent.mkdir(parents=True, exist_ok=True)
 
+    with _ENV_WRITE_LOCK:
+        _write_env_file_locked(env_path, updates)
+
+    logger.info("Settings saved to {}: {}", env_path, list(updates.keys()))
+
+
+def _write_env_file_locked(env_path: Path, updates: dict[str, str]) -> None:
+    """Read-modify-write body of `_write_env_file`; call under the lock."""
     content = ""
     if env_path.exists():
         content = env_path.read_text(encoding="utf-8")
@@ -98,8 +172,101 @@ def _write_env_file(updates: dict[str, str]) -> None:
         if key not in updated_keys:
             new_lines.append(f"{key}={value}")
 
-    env_path.write_text("\n".join(new_lines), encoding="utf-8")
-    logger.info("Settings saved to {}: {}", env_path, list(updates.keys()))
+    # Atomic publication: write a sibling temp file, flush it to disk, then
+    # rename it over the target. A concurrent reader never sees a partial file.
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(env_path.parent), prefix=env_path.name + ".", suffix=".tmp"
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(new_lines))
+            fh.flush()
+            os.fsync(fh.fileno())
+        # mkstemp creates the file 0600, and os.replace keeps that mode: the
+        # .env holds proxy passwords and API tokens.
+        os.replace(tmp_path, env_path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Helper: cross-site request rejection (lot 2.3)
+# ---------------------------------------------------------------------------
+# There is NO CSRF token anywhere in the application. `save_env` reads
+# `request.form` and `upload_session` reads `request.form` / `request.files`
+# in multipart: both are "simple" content types in the CORS sense, so a form
+# hosted on ANY other site can POST to them from the owner's browser without
+# a preflight — and HTTP Basic credentials ride along.
+#
+# The cheap, token-free defence is to check the request's PROVENANCE, which
+# the browser sets and JavaScript cannot forge: `Sec-Fetch-Site` (all current
+# browsers) with `Origin` as a fallback.
+#
+# WIRED UP in `create_app()` (app/web/app.py) via
+# `app.before_request(reject_cross_site_request)`, registered right after the
+# authentication hook so a 401 keeps priority over a 403. Defining the
+# function here without registering it there makes it dead code: the test
+# `test_le_hook_inter_site_est_enregistre_sur_lapplication` guards that.
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
+
+# `same-origin` is the normal case (our own pages), `same-site` covers a
+# sub-domain deployment. `none` means the navigation was started by the user
+# himself (bookmark, address bar) — never a cross-site form POST.
+_ALLOWED_FETCH_SITES = frozenset({"same-origin", "same-site", "none"})
+
+
+def request_is_cross_site(req=None) -> bool:
+    """True when a state-changing request visibly comes from another site.
+
+    Verdict order:
+      1. safe methods are never cross-site;
+      2. `Sec-Fetch-Site` decides when the browser sent it;
+      3. otherwise `Origin` is compared to the host actually requested;
+      4. a request with NEITHER header is not a browser form post (curl,
+         HTMX-less scripts, health probes): it is allowed, because a browser
+         ALWAYS sends `Origin` on a cross-origin POST — the absence of the
+         header cannot be forged from another site.
+    """
+    req = req if req is not None else request
+
+    if req.method.upper() in _SAFE_METHODS:
+        return False
+
+    fetch_site = (req.headers.get("Sec-Fetch-Site") or "").strip().lower()
+    if fetch_site:
+        return fetch_site not in _ALLOWED_FETCH_SITES
+
+    origin = (req.headers.get("Origin") or "").strip()
+    if origin:
+        if origin.lower() == "null":  # sandboxed iframe / data: document
+            return True
+        return urlsplit(origin).netloc.lower() != (req.host or "").lower()
+
+    return False
+
+
+def reject_cross_site_request(req=None):
+    """`before_request` body: return a 403 response, or None to let it pass.
+
+    Meant to be registered ONCE on the Flask app:
+
+        from app.web.api import reject_cross_site_request
+        app.before_request(reject_cross_site_request)
+    """
+    req = req if req is not None else request
+    if not request_is_cross_site(req):
+        return None
+
+    logger.warning(
+        "Cross-site {} on {} refused (Origin={!r}, Sec-Fetch-Site={!r})",
+        req.method, req.path,
+        req.headers.get("Origin"), req.headers.get("Sec-Fetch-Site"),
+    )
+    if req.path.startswith("/api/"):
+        return jsonify(error="Requête inter-site refusée", code=403), 403
+    return "Requête inter-site refusée", 403
 
 
 # ---------------------------------------------------------------------------
@@ -139,12 +306,12 @@ def add_profile():
         username = (request.form.get("username") or "").strip().lstrip("@")
 
         if not username or platform not in ("instagram", "reddit", "tiktok", "twitter"):
-            return '<small style="color:red;">Plateforme et username requis</small>', 400
+            return '<small class="text-error">Plateforme et username requis</small>', 400
 
         # Validate username charset (defense-in-depth against stored XSS / Drive
         # query injection). Platform handles allow letters, digits, '.', '_', '-'.
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,30}", username):
-            return '<small style="color:red;">Username invalide (lettres, chiffres, . _ - uniquement)</small>', 400
+            return '<small class="text-error">Username invalide (lettres, chiffres, . _ - uniquement)</small>', 400
 
         url_builder = PLATFORM_URLS.get(platform)
         profile_url = url_builder(username) if url_builder else ""
@@ -163,9 +330,9 @@ def add_profile():
     except Exception as exc:
         db.rollback()
         if "UNIQUE constraint" in str(exc):
-            return '<small style="color:red;">Ce profil existe deja</small>', 409
+            return '<small class="text-error">Ce profil existe deja</small>', 409
         logger.error("Failed to add profile: {}", exc)
-        return '<small style="color:red;">Erreur serveur</small>', 500
+        return '<small class="text-error">Erreur serveur</small>', 500
     finally:
         db.close()
 
@@ -280,6 +447,43 @@ def _status_color(status: str) -> str:
     }.get(status, "gray")
 
 
+# Libellé français + glyphe par statut de job.
+#
+# Cohérence inter-écrans : le Calendrier rend ses états « ✓ Publié /
+# ! Échoué / ◷ Programmé » et le Viewer « ● Utilisé / ○ Inédit ».
+# Les écrans Jobs et Dashboard affichaient jusqu'ici la valeur brute
+# de la base ("failed", "completed"), en anglais et sans glyphe — même
+# concept, deux rendus. On aligne sur le motif glyphe + mot, qui reste
+# lisible en niveaux de gris (critère G11).
+_STATUS_LABELS: dict[str, tuple[str, str]] = {
+    "completed": ("✓", "Terminé"),
+    "running": ("◌", "En cours"),
+    "failed": ("!", "Échoué"),
+    "partial": ("◐", "Partiel"),
+    "empty": ("○", "Vide"),
+    "queued": ("◷", "En file"),
+}
+
+
+_TRIGGER_LABELS: dict[str, str] = {
+    "scheduler": "Planificateur",
+    "manual": "Manuel",
+    "backfill": "Backfill",
+    "api": "API",
+}
+
+
+def _status_badge(status: str) -> str:
+    """Render a job status as the app-wide pill: glyph + French label."""
+    glyph, label = _STATUS_LABELS.get(status, ("•", str(status or "Inconnu")))
+    color = _status_color(status)
+    return (
+        f'<span class="s-badge s-badge-{color}">'
+        f'<span class="s-badge__glyph" aria-hidden="true">{escape(glyph)}</span>'
+        f"{escape(label)}</span>"
+    )
+
+
 def _format_ts(ts) -> str:
     if ts is None:
         return ""
@@ -287,6 +491,47 @@ def _format_ts(ts) -> str:
         return datetime.fromtimestamp(ts).strftime("%d/%m/%Y %H:%M")
     except (OSError, ValueError):
         return ""
+
+
+@api_bp.route("/system/status")
+def system_status():
+    """Feed the nav's system indicator, on every screen.
+
+    `partials/nav.html` has always carried `data-system-status` with a
+    hardcoded `data-state="idle"` — a dot that never changed colour on
+    any of the 8 screens because nothing ever fed it. This endpoint is
+    what it reads: a running job wins over a failed one (the live state
+    is more useful than the past one), and the label is what the nav
+    shows next to the dot, so the meaning never rests on colour alone.
+    """
+    db = SessionLocal()
+    try:
+        running = (
+            db.query(func.count(ScrapeJob.id))
+            .filter(ScrapeJob.status.in_(("running", "queued")))
+            .scalar()
+            or 0
+        )
+        # created_at est un entier Unix (app/db.py:184), pas un datetime :
+        # comparer à un objet datetime ne filtrerait rien.
+        since = int((datetime.now() - timedelta(hours=24)).timestamp())
+        failed = (
+            db.query(func.count(ScrapeJob.id))
+            .filter(ScrapeJob.status == "failed", ScrapeJob.created_at >= since)
+            .scalar()
+            or 0
+        )
+
+        if running:
+            state, label = "running", f"{running} job{'s' if running > 1 else ''} en cours"
+        elif failed:
+            state, label = "error", f"{failed} échec{'s' if failed > 1 else ''} (24 h)"
+        else:
+            state, label = "ok", "File au repos"
+
+        return jsonify(state=state, label=label, running=running, failed=failed)
+    finally:
+        db.close()
 
 
 @api_bp.route("/jobs/recent")
@@ -307,14 +552,13 @@ def jobs_recent():
         html_rows = ""
         for job, profile in rows:
             username = escape(profile.username) if profile else "N/A"
-            color = _status_color(job.status)
             date_str = _format_ts(job.created_at)
             html_rows += (
                 f"<tr>"
                 f"<td>{username}</td>"
-                f'<td><span class="s-badge s-badge-{color}">{job.status}</span></td>'
-                f"<td>{job.media_new}</td>"
-                f"<td>{job.media_uploaded}</td>"
+                f"<td>{_status_badge(job.status)}</td>"
+                f'<td class="num">{job.media_new}</td>'
+                f'<td class="num">{job.media_uploaded}</td>'
                 f"<td>{date_str}</td>"
                 f"</tr>"
             )
@@ -322,7 +566,8 @@ def jobs_recent():
         return (
             "<table>"
             "<thead><tr>"
-            "<th>Profil</th><th>Status</th><th>Nouveau</th><th>Upload</th><th>Date</th>"
+            "<th>Profil</th><th>État</th><th class=\"num\">Nouveaux</th>"
+            "<th class=\"num\">Envoyés</th><th>Date</th>"
             "</tr></thead>"
             f"<tbody>{html_rows}</tbody>"
             "</table>"
@@ -349,25 +594,25 @@ def jobs_list():
         html = ""
         for job, profile in rows:
             username = escape(profile.username) if profile else "N/A"
-            color = _status_color(job.status)
             date_str = _format_ts(job.created_at)
             retry_btn = ""
             if job.status == "failed":
                 retry_btn = (
                     f'<button class="s-btn-sm" '
                     f'hx-post="/api/jobs/{job.id}/retry" hx-swap="none">'
-                    f"Retry</button>"
+                    f"Relancer</button>"
                 )
+            trigger = _TRIGGER_LABELS.get(job.triggered_by, job.triggered_by or "—")
             html += (
                 f"<tr>"
-                f"<td>{job.id}</td>"
+                f'<td class="num">{job.id}</td>'
                 f"<td>{username}</td>"
-                f'<td><span class="s-badge s-badge-{color}">{job.status}</span></td>'
-                f"<td>{job.triggered_by}</td>"
-                f"<td>{job.media_found}</td>"
-                f"<td>{job.media_new}</td>"
-                f"<td>{job.media_downloaded}</td>"
-                f"<td>{job.media_uploaded}</td>"
+                f"<td>{_status_badge(job.status)}</td>"
+                f"<td>{escape(str(trigger))}</td>"
+                f'<td class="num">{job.media_found}</td>'
+                f'<td class="num">{job.media_new}</td>'
+                f'<td class="num">{job.media_downloaded}</td>'
+                f'<td class="num">{job.media_uploaded}</td>'
                 f"<td>{date_str}</td>"
                 f"<td>{retry_btn}</td>"
                 f"</tr>"
@@ -425,7 +670,15 @@ def status():
 
 @api_bp.route("/debug/volume")
 def debug_volume():
-    """Diagnostic endpoint to check persistent volume health."""
+    """Diagnostic endpoint to check persistent volume health.
+
+    Development only: it maps DATA_DIR (paths, file names, free space, row
+    counts).  With APP_PASSWORD unset the whole app is unauthenticated, so in
+    production this route is hidden rather than merely unadvertised.
+    """
+    if not DEBUG:
+        abort(404)
+
     import time
 
     data_dir = str(DATA_DIR)
@@ -499,10 +752,20 @@ def save_env():
     try:
         updates: dict[str, str] = {}
         rejected: list[str] = []
+        invalides: list[str] = []
+        injections: list[str] = []
         for key, value in request.form.items():
             if not isinstance(value, str):
                 continue
             if key in ALLOWED_ENV_KEYS:
+                # A value carrying \n / \r / \0 would forge EXTRA variables in
+                # the persistent .env (lot 2.1) — refuse before anything else.
+                if not _env_value_is_safe(value):
+                    injections.append(key)
+                    continue
+                if key in NUMERIC_ENV_KEYS and not _is_int(value):
+                    invalides.append(key)
+                    continue
                 updates[key] = value
             else:
                 rejected.append(key)
@@ -510,14 +773,32 @@ def save_env():
         if rejected:
             logger.warning("save_env ignored non-whitelisted keys: {}", rejected)
 
+        # Refuse the whole write: an injected value must never reach the volume.
+        if injections:
+            logger.warning("save_env rejected line-breaking values for: {}", injections)
+            return (
+                '<small class="text-error">Valeur invalide (saut de ligne interdit) : '
+                f'{escape(", ".join(sorted(injections)))}</small>',
+                400,
+            )
+
+        # Refuse the whole write: a toxic value must never reach the volume.
+        if invalides:
+            logger.warning("save_env rejected non-numeric values for: {}", invalides)
+            return (
+                '<small class="text-error">Valeur numerique invalide : '
+                f'{", ".join(sorted(invalides))}</small>',
+                400,
+            )
+
         if not updates:
-            return '<small style="color:red;">Aucun champ valide a sauvegarder</small>', 400
+            return '<small class="text-error">Aucun champ valide a sauvegarder</small>', 400
 
         _write_env_file(updates)
-        return '<small style="color:green;">Sauvegarde OK</small>'
+        return '<small class="text-success">Sauvegarde OK</small>'
     except Exception as exc:
         logger.error("Failed to save settings: {}", exc)
-        return '<small style="color:red;">Erreur de sauvegarde</small>', 500
+        return '<small class="text-error">Erreur de sauvegarde</small>', 500
 
 
 @api_bp.route("/settings/ig-api", methods=["POST"])
@@ -567,9 +848,13 @@ def setup_ig_api():
                     _write_env_file({"IG_USER_ID": ig_user_id})
                     logger.info("Auto-discovered IG User ID: {} (page: {})", ig_user_id, page_name)
             except Exception as e:
+                # The exception text carries the Graph API URL and the access
+                # token query string — log it, never return it (lot 2.4b).
+                logger.warning("IG user id discovery failed: {}", e)
                 return jsonify({
                     "ok": False,
-                    "error": f"Token sauvegarde mais impossible de detecter le compte IG: {e}",
+                    "error": "Token sauvegarde mais impossible de detecter le compte IG "
+                             "(voir les logs serveur).",
                 }), 400
         else:
             _write_env_file({"IG_USER_ID": ig_user_id})
@@ -586,15 +871,71 @@ def setup_ig_api():
                 "message": f"Connecte a @{username} ({followers} followers). Collection des stats en cours...",
             })
         except Exception as e:
+            logger.warning("IG profile verification failed: {}", e)
             return jsonify({
                 "ok": True,
                 "ig_user_id": ig_user_id,
-                "message": f"Credentials sauvegardees. Verification: {e}",
+                "message": "Credentials sauvegardees. La verification du compte a echoue "
+                           "(voir les logs serveur).",
             })
 
     except Exception as exc:
+        # `str(exc)` leaks the full SQL statement on a SQLAlchemy error and the
+        # absolute volume path on an OSError (lot 2.4b): log, return generic.
         logger.exception("Failed to setup IG API: {}", exc)
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        return jsonify({"ok": False, "error": "Erreur serveur"}), 500
+
+
+# Cookie that MAKES the session for each platform. Without it the export is
+# an anonymous browsing profile: the scrape sees a logged-out page.
+_CRITICAL_SESSION_COOKIES = {
+    "instagram": ("sessionid",),
+    "tiktok": ("sessionid",),
+    "twitter": ("auth_token",),
+    "reddit": ("reddit_session",),
+}
+
+# How many timestamped copies of a session file we keep.
+_SESSION_BACKUPS_KEPT = 5
+
+
+def _missing_critical_cookies(platform: str, cookies: list[dict]) -> list[str]:
+    """Names of the platform's critical cookies absent (or empty) in the upload."""
+    presents = {
+        str(c.get("name", "")).strip().lower()
+        for c in cookies
+        if str(c.get("value", "") or "").strip()
+    }
+    return [
+        name
+        for name in _CRITICAL_SESSION_COOKIES.get(platform, ())
+        if name.lower() not in presents
+    ]
+
+
+def _backup_session_file(dest: Path) -> None:
+    """Copy an existing session file aside, timestamped, before it is replaced.
+
+    Best effort: a backup failure must never block the upload itself.
+    """
+    if not dest.exists():
+        return
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup = dest.with_name(f"{dest.name}.{stamp}.bak")
+    try:
+        backup.write_bytes(dest.read_bytes())
+        logger.info("Previous session backed up to {}", backup.name)
+    except OSError as exc:
+        logger.warning("Could not back up {}: {}", dest.name, exc)
+        return
+
+    # Keep the directory bounded: only the N most recent copies survive.
+    try:
+        anciens = sorted(dest.parent.glob(f"{dest.name}.*.bak"))
+        for vieux in anciens[:-_SESSION_BACKUPS_KEPT]:
+            vieux.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("Could not prune session backups: {}", exc)
 
 
 @api_bp.route("/settings/session", methods=["POST"])
@@ -602,68 +943,130 @@ def upload_session():
     try:
         platform = (request.form.get("platform") or "").strip()
         if platform not in ("instagram", "reddit", "tiktok", "twitter"):
-            return '<small style="color:red;">Plateforme invalide</small>', 400
+            return '<small class="text-error">Plateforme invalide</small>', 400
 
         file = request.files.get("cookies")
         if not file or not file.filename:
-            return '<small style="color:red;">Aucun fichier selectionne</small>', 400
+            return '<small class="text-error">Aucun fichier selectionne</small>', 400
 
         raw = file.read()
         # Cap size (cookie files are small; reject anything absurd)
         if len(raw) > 1 * 1024 * 1024:  # 1 MB
-            return '<small style="color:red;">Fichier trop volumineux</small>', 400
+            return '<small class="text-error">Fichier trop volumineux</small>', 400
         try:
             content = raw.decode("utf-8")
         except UnicodeDecodeError:
-            return '<small style="color:red;">Encodage invalide (UTF-8 attendu)</small>', 400
+            return '<small class="text-error">Encodage invalide (UTF-8 attendu)</small>', 400
 
         # Validate JSON shape: must be a list of cookie objects.
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError:
-            return '<small style="color:red;">Fichier JSON invalide</small>', 400
+            return '<small class="text-error">Fichier JSON invalide</small>', 400
         if not isinstance(parsed, list) or not all(isinstance(c, dict) for c in parsed):
-            return '<small style="color:red;">Format attendu : tableau de cookies</small>', 400
+            return '<small class="text-error">Format attendu : tableau de cookies</small>', 400
+
+        # An export missing the authentication cookie is INERT: it would replace
+        # a working session with a logged-out one, and the Settings light —
+        # which only reads the file's mtime — would turn GREEN at the exact
+        # moment the session is destroyed (risque #61, AUDIT.md §6.14).
+        manquants = _missing_critical_cookies(platform, parsed)
+        if manquants:
+            logger.warning(
+                "Session upload for {} refused: missing cookie(s) {}", platform, manquants
+            )
+            return (
+                '<small class="text-error">Cookies incomplets : '
+                f'{escape(", ".join(manquants))} manquant(s). Session inchangee.</small>',
+                400,
+            )
 
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         dest = SESSIONS_DIR / f"{platform}.json"
+
+        # Keep the previous session: a fresh export can still turn out to be
+        # expired, and there is no other copy of it anywhere.
+        _backup_session_file(dest)
+
         dest.write_text(content, encoding="utf-8")
 
         logger.info("Session cookies uploaded for {}", platform)
 
         now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
-        return f'<small style="color:green;">Cookies OK ({now_str})</small>'
+        return f'<small class="text-success">Cookies OK ({now_str})</small>'
     except Exception as exc:
         logger.error("Failed to upload session cookies: {}", exc)
-        return '<small style="color:red;">Erreur upload</small>', 500
+        return '<small class="text-error">Erreur upload</small>', 500
 
 
 # ===========================================================================
 # Quick Download (single URL)
 # ===========================================================================
+# Each quick download spawns a headless chromium. Without a cap, holding the
+# button down spawns one browser per click until the container is OOM-killed
+# (lot 2.4). The semaphore is released by the worker thread itself.
+_QUICK_DOWNLOAD_MAX = 3
+_QUICK_DOWNLOAD_SLOTS = threading.BoundedSemaphore(_QUICK_DOWNLOAD_MAX)
+
+
 @api_bp.route("/quick-download", methods=["POST"])
 def quick_download_url():
     """Download media from a single post URL."""
-    import threading
+    # Validate the SHAPE of the body before touching it: get_json returns any
+    # JSON type, so `{"url": 1}`, `[1,2]` or `"abc"` used to raise an
+    # uncaught AttributeError (risque #8, AUDIT.md §6.3).
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "Corps JSON invalide : objet attendu"}), 400
 
-    data = request.get_json(silent=True) or {}
-    url = (data.get("url") or "").strip()
+    raw_url = data.get("url")
+    if raw_url is not None and not isinstance(raw_url, str):
+        return jsonify({"error": "URL invalide : chaine attendue"}), 400
+
+    url = (raw_url or "").strip()
 
     if not url:
         return jsonify({"error": "URL requise"}), 400
 
     # Detect platform first (fast check)
-    from app.scraper.quick_download import detect_platform
+    from app.scraper.quick_download import detect_platform, validate_public_url
     detection = detect_platform(url)
     if detection is None:
         return jsonify({
             "error": "URL non reconnue. Plateformes supportées: Instagram, TikTok, Twitter/X, Reddit"
         }), 400
 
+    # SSRF gate (lot 2.4). `detect_platform` only `search`es the string: an URL
+    # such as `http://169.254.169.254/x#instagram.com/p/aaa` is "recognised"
+    # while aiming at the cloud metadata endpoint — and it is a headless
+    # browser INSIDE the server's network that would open it.
+    faute = validate_public_url(url)
+    if faute:
+        logger.warning("Quick download refused ({}): {}", faute, url[:120])
+        return jsonify({"error": faute}), 400
+
     platform, post_id = detection
+
+    # Bound the number of headless browsers a burst of clicks can spawn: each
+    # quick download is a chromium (~300 MB). Beyond the cap the caller is told
+    # to retry rather than the container being OOM-killed.
+    if not _QUICK_DOWNLOAD_SLOTS.acquire(blocking=False):
+        logger.warning("Quick download refused: {} slots already busy", _QUICK_DOWNLOAD_MAX)
+        return jsonify({
+            "error": f"Trop de telechargements simultanes (max {_QUICK_DOWNLOAD_MAX}). Reessaie dans un instant.",
+        }), 429
 
     # Run download in background thread
     def _do_download():
+        try:
+            _run_quick_download(url, platform)
+        finally:
+            # Always give the slot back, including on an unexpected crash.
+            _QUICK_DOWNLOAD_SLOTS.release()
+
+    def _run_quick_download(url: str, platform: str) -> None:
         from app.scraper.quick_download import quick_download
         result = quick_download(url)
 
@@ -717,8 +1120,19 @@ def quick_download_url():
         finally:
             db.close()
 
-    t = threading.Thread(target=_do_download, name=f"quick-dl-{post_id}", daemon=True)
-    t.start()
+    demarre = False
+    try:
+        t = threading.Thread(target=_do_download, name=f"quick-dl-{post_id}", daemon=True)
+        t.start()
+        demarre = True
+    except RuntimeError as exc:
+        logger.error("Quick download thread could not start: {}", exc)
+        return jsonify({"error": "Serveur sature, reessaie dans un instant"}), 503
+    finally:
+        # No carrier thread means no `_do_download`, hence nobody to release the
+        # slot: give it back here, or the cap leaks one unit per failure.
+        if not demarre:
+            _QUICK_DOWNLOAD_SLOTS.release()
 
     return jsonify({
         "status": "downloading",

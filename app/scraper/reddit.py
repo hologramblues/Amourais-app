@@ -391,6 +391,8 @@ class RedditExtractor(PlatformExtractor):
             adaptor = StealthyFetcher.fetch(submitted_url, **fetch_kwargs)
         except Exception as exc:
             logger.error("StealthyFetcher failed for Reddit: {}", exc)
+            # risque #53 / §4.20 — voir instagram.py : le pipeline conclut `failed`.
+            result.fetch_error = f"Reddit fetch failed: {exc}"
             return result
 
         # -- Phase 1: Parse intercepted API responses -----------------------
@@ -469,6 +471,7 @@ class RedditExtractor(PlatformExtractor):
                 if pid in seen_ids:
                     continue
                 seen_ids.add(pid)
+                result.total_seen += 1
 
                 if opts.scrape_mode == "daily" and (
                     pid in known_post_ids or base_pid in known_post_ids
@@ -577,6 +580,7 @@ class RedditExtractor(PlatformExtractor):
             if post_id in seen_ids:
                 continue
             seen_ids.add(post_id)
+            result.total_seen += 1
 
             if opts.scrape_mode == "daily" and post_id in known_post_ids:
                 logger.info("DOM fallback daily mode: hit known post {}", post_id)

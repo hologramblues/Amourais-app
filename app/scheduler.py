@@ -74,6 +74,29 @@ def _now_ts() -> int:
     return int(datetime.now().timestamp())
 
 
+def _fail_job(job_id: int, message: str) -> None:
+    """Mark a still-open job as ``failed`` from outside the pipeline.
+
+    A job left in ``queued``/``running`` with no thread behind it freezes its
+    profile: ``check_due_profiles`` skips any profile that already has an
+    active job (risque #54, AUDIT.md §4.2). Opens its own session because the
+    callers run outside any request/pipeline session.
+    """
+    db = SessionLocal()
+    try:
+        job = db.query(ScrapeJob).filter_by(id=job_id).first()
+        if job and job.status in ("queued", "running"):
+            job.status = "failed"
+            job.error_message = message[:500]
+            job.completed_at = _now_ts()
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("Could not mark job {} as failed: {}", job_id, exc)
+    finally:
+        db.close()
+
+
 def _run_job_safe(job_id: int, profile_id: int) -> None:
     """
     Execute a scrape job in the current thread with proper concurrency
@@ -84,6 +107,12 @@ def _run_job_safe(job_id: int, profile_id: int) -> None:
             "Profile {} already has a running job, skipping job {}",
             profile_id,
             job_id,
+        )
+        # Do not leave this job `queued` for ever: it would block every future
+        # scheduled run of the profile (risque #54, §4.2 chemin A).
+        _fail_job(
+            job_id,
+            "Skipped: profile already has a running job",
         )
         return
 
@@ -103,7 +132,10 @@ def _run_job_safe(job_id: int, profile_id: int) -> None:
         db = SessionLocal()
         try:
             job = db.query(ScrapeJob).filter_by(id=job_id).first()
-            if job and job.status == "running":
+            # `queued` too: any exception raised before the pipeline reaches
+            # `_mark_job(..., "running")` would otherwise leave the job
+            # `queued` for ever (risque #54, §4.2 chemin B).
+            if job and job.status in ("queued", "running"):
                 job.status = "failed"
                 job.error_message = f"Unhandled: {str(exc)[:500]}"
                 job.completed_at = _now_ts()
@@ -153,61 +185,84 @@ def check_due_profiles() -> None:
         logger.info("{} profile(s) due for scraping", len(due))
 
         for profile in due:
-            # Skip if already running
-            with _running_lock:
-                if profile.id in _running_profiles:
+            # Per-profile error handling: an exception raised for one profile
+            # must not skip the remaining due profiles of the cycle
+            # (risque #54, §4.2 chemin C).
+            try:
+                # Skip if already running
+                with _running_lock:
+                    if profile.id in _running_profiles:
+                        logger.debug(
+                            "Skipping @{} -- already running", profile.username
+                        )
+                        continue
+
+                # Check for an existing queued job to avoid duplicates
+                existing_queued = (
+                    db.query(ScrapeJob)
+                    .filter(
+                        ScrapeJob.profile_id == profile.id,
+                        ScrapeJob.status.in_(["queued", "running"]),
+                    )
+                    .first()
+                )
+                if existing_queued:
                     logger.debug(
-                        "Skipping @{} -- already running", profile.username
+                        "Skipping @{} -- job {} already {}",
+                        profile.username,
+                        existing_queued.id,
+                        existing_queued.status,
                     )
                     continue
 
-            # Check for an existing queued job to avoid duplicates
-            existing_queued = (
-                db.query(ScrapeJob)
-                .filter(
-                    ScrapeJob.profile_id == profile.id,
-                    ScrapeJob.status.in_(["queued", "running"]),
+                # Create a new scrape job
+                job = ScrapeJob(
+                    profile_id=profile.id,
+                    status="queued",
+                    triggered_by="scheduler",
                 )
-                .first()
-            )
-            if existing_queued:
-                logger.debug(
-                    "Skipping @{} -- job {} already {}",
+                db.add(job)
+                db.commit()
+
+                logger.info(
+                    "Created scheduled job {} for @{} ({})",
+                    job.id,
                     profile.username,
-                    existing_queued.id,
-                    existing_queued.status,
+                    profile.platform,
                 )
-                continue
 
-            # Create a new scrape job
-            job = ScrapeJob(
-                profile_id=profile.id,
-                status="queued",
-                triggered_by="scheduler",
-            )
-            db.add(job)
-            db.commit()
+                # Run in a background thread
+                t = threading.Thread(
+                    target=_run_job_safe,
+                    args=(job.id, profile.id),
+                    name=f"scrape-{profile.platform}-{profile.username}",
+                    daemon=True,
+                )
+                try:
+                    t.start()
+                except Exception as exc:
+                    # No carrier thread: the job would stay `queued` for ever
+                    # and freeze this profile until the next boot.
+                    logger.exception(
+                        "Could not start scrape thread for @{}: {}",
+                        profile.username,
+                        exc,
+                    )
+                    _fail_job(job.id, f"Could not start scrape thread: {exc}")
+                    continue
 
-            logger.info(
-                "Created scheduled job {} for @{} ({})",
-                job.id,
-                profile.username,
-                profile.platform,
-            )
-
-            # Run in a background thread
-            t = threading.Thread(
-                target=_run_job_safe,
-                args=(job.id, profile.id),
-                name=f"scrape-{profile.platform}-{profile.username}",
-                daemon=True,
-            )
-            t.start()
-
-            # Delay between profiles to be polite to platform servers
-            delay_seconds = DELAY_BETWEEN_PROFILES_MS / 1000
-            if delay_seconds > 0:
-                time.sleep(delay_seconds)
+                # Delay between profiles to be polite to platform servers
+                delay_seconds = DELAY_BETWEEN_PROFILES_MS / 1000
+                if delay_seconds > 0:
+                    time.sleep(delay_seconds)
+            except Exception as exc:
+                logger.exception(
+                    "Error while scheduling @{}: {}", profile.username, exc
+                )
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
 
     except Exception as exc:
         logger.exception("Error in check_due_profiles: {}", exc)
@@ -238,7 +293,9 @@ def retry_failed_media() -> None:
         for mi in download_failures:
             mi.status = "pending"
             mi.error_message = None
-            mi.retry_count = (mi.retry_count or 0) + 1
+            # No increment here: the counter is already bumped by the pipeline
+            # on the real failure (pipeline.py:304). Counting twice capped the
+            # media at 3 real attempts instead of 5 (risque #27, §4.12).
             logger.debug(
                 "Reset media {} (post {}) for download retry (attempt {})",
                 mi.id,
@@ -259,7 +316,8 @@ def retry_failed_media() -> None:
         for mi in upload_failures:
             mi.status = "downloaded"
             mi.error_message = None
-            mi.retry_count = (mi.retry_count or 0) + 1
+            # No increment here either: pipeline.py:366 already counted this
+            # failed attempt (risque #27, §4.12).
             logger.debug(
                 "Reset media {} (post {}) for upload retry (attempt {})",
                 mi.id,
@@ -315,7 +373,21 @@ def retry_failed_media() -> None:
                     name=f"retry-{pid}",
                     daemon=True,
                 )
-                t.start()
+                try:
+                    t.start()
+                except Exception as exc:
+                    # Same guard as check_due_profiles: the job is already
+                    # committed as `queued`, so without a carrier thread it
+                    # would freeze this profile for ever, and the raised
+                    # exception would skip the remaining affected profiles
+                    # (risque #54, §4.2 chemin C).
+                    logger.exception(
+                        "Could not start retry thread for profile {}: {}",
+                        pid,
+                        exc,
+                    )
+                    _fail_job(job.id, f"Could not start retry thread: {exc}")
+                    continue
         else:
             logger.debug("No failed media items to retry")
 
@@ -592,4 +664,11 @@ def enqueue_manual_scrape(profile_id: int, job_id: int) -> None:
         name=f"manual-scrape-{profile_id}",
         daemon=True,
     )
-    t.start()
+    try:
+        t.start()
+    except Exception as exc:
+        # Same guard as check_due_profiles: a job committed by the view with
+        # no carrier thread would stay `queued` for ever and freeze the
+        # profile (risque #54, §4.2 chemin C).
+        _fail_job(job_id, f"Could not start scrape thread: {exc}")
+        raise

@@ -1,74 +1,187 @@
+{#- ============================================================
+    ÉCRAN CALENDRIER
+    ------------------------------------------------------------
+    Écran autonome (il n'étend pas layout.html) : il charge donc
+    lui-même le socle. tokens.css AVANT calendar.css — c'est la
+    source unique de vérité des couleurs et des mesures, et c'est
+    ce qui donne à cet écran les DEUX thèmes.
+
+    Tout le contenu variable est rendu par calendar.js à partir de
+    /api/calendar/posts ; ce gabarit ne pose que la charpente et
+    les zones nommées.
+    ============================================================ -#}
+{%- macro asset(path) -%}
+{{ url_for('static', filename=path) }}?v={{ asset_version(path) if asset_version is defined else '20260813' }}
+{%- endmacro -%}
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SAMOURAIS - Calendrier</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
-    <link rel="stylesheet" href="/static/calendar.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>SAMOURAIS — Calendrier</title>
+
+  {#- Anti-flash de thème : script SYNCHRONE, avant tout CSS (G9).
+      Même mécanique et mêmes deux couleurs que layout.html. -#}
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch (e) { /* stockage indisponible : on suit le système */ }
+    })();
+  </script>
+  <style>
+    html { background: #f4f5f7; }
+    @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #0a0b0d; } }
+    html[data-theme="dark"] { background: #0a0b0d; }
+  </style>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&display=swap">
+
+  <link rel="stylesheet" href="{{ asset('tokens.css') }}">
+  <link rel="stylesheet" href="{{ asset('calendar.css') }}">
+
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 </head>
 <body>
-    {% set nav_active = 'calendar' %}
-    {% include "partials/nav.html" %}
+  {% set nav_active = 'calendar' %}
+  {% include "partials/nav.html" %}
 
-    <!-- Stats row -->
-    <div style="padding: 24px 24px 0;">
-        <div class="stats-row">
-            <div class="stat-card draft">
-                <div class="stat-value" id="stat-drafts">0</div>
-                <div class="stat-label">Brouillons</div>
-            </div>
-            <div class="stat-card scheduled">
-                <div class="stat-value" id="stat-scheduled">0</div>
-                <div class="stat-label">Planifi&eacute;s</div>
-            </div>
-            <div class="stat-card published">
-                <div class="stat-value" id="stat-published">0</div>
-                <div class="stat-label">Publi&eacute;s</div>
-            </div>
-        </div>
+  <div class="cal">
+
+    <!-- ============ Barre d'outils (C9 + C12) ============ -->
+    <header class="cal-bar">
+      <h1 class="cal-bar__title">Calendrier</h1>
+
+      <div class="cal-bar__period">
+        <button type="button" class="btn btn--icon" id="cal-prev"
+                aria-label="Période précédente">&#8249;</button>
+        <button type="button" class="btn btn--icon" id="cal-next"
+                aria-label="Période suivante">&#8250;</button>
+        <button type="button" class="btn btn--mini" id="cal-today">Aujourd&rsquo;hui</button>
+        <span class="cal-bar__month" id="cal-period" aria-live="polite">&nbsp;</span>
+      </div>
+
+      <span class="cal-bar__spacer"></span>
+
+      <!-- Fuseau horaire écrit en clair, sans ouvrir les réglages — C12 -->
+      <span class="cal-tz" id="cal-tz" title="Toutes les heures de cet écran sont exprimées dans ce fuseau.">
+        <span class="cal-tz__glyph" aria-hidden="true">&#9200;</span>
+        <span id="cal-tz-text">&nbsp;</span>
+      </span>
+
+      <div class="seg" role="group" aria-label="Granularité d'affichage">
+        <button type="button" class="seg__btn" data-view="dayGridMonth" aria-pressed="true">Mois</button>
+        <button type="button" class="seg__btn" data-view="timeGridWeek" aria-pressed="false">Semaine</button>
+        <button type="button" class="seg__btn" data-view="queue" aria-pressed="false">Liste</button>
+      </div>
+
+      <button type="button" class="btn btn--primary" id="cal-new">Nouveau post</button>
+    </header>
+
+    <!-- ============ Filtres persistants (C13) ============ -->
+    <div class="cal-filters">
+      <div class="cal-filters__group" id="filter-status" role="group" aria-label="Filtrer par état">
+        <!-- rendu par calendar.js : un jeton par état, avec son compte -->
+      </div>
+
+      <label class="u-sr" for="filter-platform">Filtrer par plateforme</label>
+      <select class="input" id="filter-platform">
+        <option value="">Toutes plateformes</option>
+        <option value="instagram">Instagram</option>
+        <option value="tiktok">TikTok</option>
+        <option value="twitter">X / Twitter</option>
+        <option value="reddit">Reddit</option>
+        <option value="none">Sans plateforme</option>
+      </select>
+
+      <label class="u-sr" for="filter-q">Rechercher dans les titres et légendes</label>
+      <input type="search" class="input cal-filters__search" id="filter-q"
+             placeholder="Rechercher un post&hellip;">
+
+      <button type="button" class="cal-filters__reset" id="filter-reset">Tout réafficher</button>
     </div>
 
-    <!-- Main app layout -->
-    <div class="calendar-app">
-        <!-- Calendar -->
-        <div class="calendar-main">
-            <div class="calendar-header">
-                <h1>&#x1F4C5; Calendrier de publication</h1>
-                <div class="header-actions">
-                    <div class="view-toggle">
-                        <button class="active" data-view="dayGridMonth">Mois</button>
-                        <button data-view="timeGridWeek">Semaine</button>
-                        <button data-view="listWeek">Liste</button>
-                    </div>
-                    <a href="/editor" class="btn btn-primary">&#x1F3A8; Cr&eacute;er un meme</a>
-                </div>
-            </div>
-            <div id="calendar"></div>
-        </div>
-
-        <!-- Sidebar (post details) -->
-        <div class="calendar-sidebar" id="calendar-sidebar">
-            <div class="sidebar-header">
-                <h2>D&eacute;tails du post</h2>
-                <button class="sidebar-close" onclick="closeSidebar()">&times;</button>
-            </div>
-            <div class="sidebar-content" id="sidebar-body">
-                <div class="empty-sidebar">
-                    <div class="icon">&#x1F4C5;</div>
-                    <p>Clique sur un &eacute;v&eacute;nement dans le calendrier pour voir ses d&eacute;tails, ou clique sur une date vide pour cr&eacute;er un nouveau post.</p>
-                </div>
-            </div>
-            <div class="sidebar-actions" id="sidebar-actions"></div>
-        </div>
+    <!-- ============ Bandeau d'échec (G27) ============ -->
+    <div class="alert" id="cal-alert" role="status" hidden>
+      <span class="alert__glyph" aria-hidden="true">!</span>
+      <div class="alert__body">
+        <p class="alert__title" id="cal-alert-title"></p>
+        <p class="alert__text" id="cal-alert-text"></p>
+      </div>
+      <button type="button" class="btn btn--mini" id="cal-alert-go">Voir la file</button>
     </div>
 
-    <!-- Modal overlay -->
-    <div class="modal-overlay" id="modal-overlay"></div>
+    <div class="cal-body">
 
-    <script src="/static/calendar.js"></script>
+      <!-- ============ Bibliothèque latérale (C1 + C2 + C10) ============
+           Elle est sur CET écran, en permanence : programmer un média ne
+           demande plus d'aller au Viewer et de revenir. -->
+      <aside class="lib" id="cal-lib" data-open="true" aria-label="Bibliothèque de médias">
+        <div class="lib__head">
+          <h2 class="lib__title">Médias</h2>
+          <span class="lib__count num" id="lib-count">&nbsp;</span>
+          <button type="button" class="btn btn--icon lib__toggle" id="lib-toggle"
+                  aria-expanded="true" aria-controls="lib-panel"
+                  aria-label="Masquer la bibliothèque">&#8249;</button>
+        </div>
+
+        <div class="lib__panel" id="lib-panel">
+          <!-- C10 : filtre « non utilisés » actif par défaut, VISIBLE et désactivable -->
+          <label class="lib__filter" for="lib-unused">
+            <input type="checkbox" id="lib-unused" checked>
+            <span>Non utilisés seulement</span>
+          </label>
+
+          <p class="lib__hint">
+            Glisse une vignette sur une case&nbsp;: le composer s&rsquo;ouvre déjà rempli.
+            Sans souris&nbsp;: clique la vignette, puis la case.
+          </p>
+
+          <div class="lib__grid" id="lib-grid" role="list"></div>
+        </div>
+      </aside>
+
+      <div class="cal-work">
+
+        <!-- ============ Posts sans date ============ -->
+        <section class="tray" id="cal-tray" data-open="true" hidden aria-label="Posts sans date">
+          <button type="button" class="tray__head" id="cal-tray-toggle" aria-expanded="true"
+                  aria-controls="cal-tray-list">
+            <span class="tray__caret" aria-hidden="true">&#9662;</span>
+            <span>Sans date</span>
+            <span class="tray__count num" id="cal-tray-count">0</span>
+            <span class="tray__hint">&mdash; ces posts n&rsquo;apparaissent dans aucune case&nbsp;: donne-leur une date pour les programmer.</span>
+          </button>
+          <div class="tray__list" id="cal-tray-list"></div>
+        </section>
+
+        <!-- ============ Grille (Mois / Semaine) ============ -->
+        <div class="cal-grid" id="cal-grid"><div id="calendar"></div></div>
+
+        <!-- ============ File (Liste), problèmes d'abord — C14 ============ -->
+        <div class="queue" id="cal-queue" hidden></div>
+      </div>
+
+      <!-- ============ Inspecteur ============ -->
+      <aside class="side" id="cal-side" hidden aria-label="Détails du post">
+        <div class="side__head">
+          <h2 class="side__title" id="side-title">Détails du post</h2>
+          <button type="button" class="btn btn--icon" id="side-close" aria-label="Fermer les détails">&times;</button>
+        </div>
+        <div class="side__body" id="side-body"></div>
+        <div class="side__foot" id="side-foot"></div>
+      </aside>
+    </div>
+  </div>
+
+  <dialog class="dlg" id="cal-dialog"></dialog>
+  <div class="toasts" id="cal-toasts" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="{{ asset('calendar.js') }}"></script>
 </body>
 </html>

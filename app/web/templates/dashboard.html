@@ -5,20 +5,20 @@
 
 {% if storage_mode == "local" %}
 <div class="s-alert">
-  <strong>Mode local</strong> — Les medias sont sauvegardes dans <code>{{ data_dir }}/downloads/</code>.
-  Pour activer Google Drive, configurez vos credentials dans <a href="/settings">Settings</a>.
+  <strong>Mode local</strong> — Les médias sont sauvegardés dans <code>{{ data_dir }}/downloads/</code>.
+  Pour activer Google Drive, configurez vos identifiants dans <a href="/settings">Réglages</a>.
 </div>
 {% endif %}
 
 <!-- KPI Cards -->
 <div class="s-grid-4">
   <div class="s-card">
-    <div class="s-card-header"><h5>Profiles</h5></div>
+    <div class="s-card-header"><h5>Profils</h5></div>
     <div class="s-card-value">{{ stats.totalProfiles }}</div>
     <div class="s-card-sub">{{ stats.activeProfiles }} actifs</div>
   </div>
   <div class="s-card">
-    <div class="s-card-header"><h5>Media total</h5></div>
+    <div class="s-card-header"><h5>Médias au total</h5></div>
     <div class="s-card-value">{{ stats.totalMedia }}</div>
     <div class="s-card-sub">{{ stats.uploadedMedia }} uploaded</div>
   </div>
@@ -30,14 +30,14 @@
   <div class="s-card">
     <div class="s-card-header"><h5>En attente</h5></div>
     <div class="s-card-value">{{ stats.pendingMedia }}</div>
-    <div class="s-card-sub">media a traiter</div>
+    <div class="s-card-sub">médias à traiter</div>
   </div>
 </div>
 
 <!-- Quick Download -->
 <div class="s-section">
   <h2>Quick Download</h2>
-  <p>Colle un lien Instagram, TikTok, Twitter/X ou Reddit pour telecharger le media.</p>
+  <p>Colle un lien Instagram, TikTok, Twitter/X ou Reddit pour télécharger le média.</p>
   <div class="s-input-group">
     <input
       type="url"
@@ -45,7 +45,7 @@
       placeholder="https://www.instagram.com/p/ABC123/ ..."
     >
     <button id="quick-dl-btn" onclick="quickDownload()" class="s-btn-primary">
-      Telecharger
+      Télécharger
     </button>
   </div>
   <div id="quick-dl-status" class="mt-1"></div>
@@ -82,17 +82,17 @@ function quickDownload() {
       const postId = data.post_id || '';
       statusDiv.innerHTML =
         `<small class="text-success">${data.message || 'Lancement OK'}</small>` +
-        `<br><small class="text-muted">${platform} — ${postId}. Le media apparaitra dans le Viewer.</small>`;
+        `<br><small class="text-muted">${platform} — ${postId}. Le média apparaîtra dans l'écran Médias.</small>`;
       urlInput.value = '';
     }
   })
   .catch(err => {
-    statusDiv.innerHTML = `<small class="text-error">Erreur reseau: ${err.message}</small>`;
+    statusDiv.innerHTML = `<small class="text-error">Erreur réseau : ${err.message}</small>`;
   })
   .finally(() => {
     btn.disabled = false;
     btn.removeAttribute('aria-busy');
-    btn.textContent = 'Telecharger';
+    btn.textContent = 'Télécharger';
   });
 }
 
@@ -107,7 +107,7 @@ document.getElementById('quick-dl-url').addEventListener('keydown', function(e) 
 <!-- Recent Jobs -->
 <div class="s-section">
   <div class="s-section-header">
-    <h2>Activite recente</h2>
+    <h2>Activité récente</h2>
   </div>
   <div hx-get="/api/jobs/recent" hx-trigger="load, every 10s" hx-target="#recent-jobs">
     <div id="recent-jobs">
@@ -119,16 +119,16 @@ document.getElementById('quick-dl-url').addEventListener('keydown', function(e) 
 <!-- Profiles -->
 <div class="s-section">
   <div class="s-section-header">
-    <h2>Profiles suivis</h2>
+    <h2>Profils suivis</h2>
     <a href="/profiles" class="s-btn s-btn-sm s-btn-ghost">Voir tout &rarr;</a>
   </div>
   <table>
     <thead>
       <tr>
         <th>Plateforme</th>
-        <th>Username</th>
-        <th>Dernier scrape</th>
-        <th>Status</th>
+        <th>Nom d'utilisateur</th>
+        <th>Dernière collecte</th>
+        <th>État</th>
         <th>Actions</th>
       </tr>
     </thead>

@@ -4,9 +4,12 @@ Flask application factory for SAMOURAIS SCRAPPER.
 from __future__ import annotations
 
 import hmac
+import os
 from datetime import datetime
 
-from flask import Flask, Response, request
+from flask import Flask, Response, jsonify, request
+from loguru import logger
+from werkzeug.exceptions import HTTPException
 
 
 def _filter_formatdate(value, fmt: str = "%d/%m/%Y %H:%M") -> str:
@@ -34,14 +37,26 @@ def _filter_timestamptodate(value) -> str:
 
 
 def _filter_platformicon(platform: str) -> str:
-    """Jinja2 filter: return a small emoji/icon for the given platform name."""
-    icons = {
-        "instagram": "&#x1F4F7;",  # camera
-        "reddit": "&#x1F47D;",     # alien (Snoo)
-        "tiktok": "&#x1F3B5;",     # musical note
-        "twitter": "&#x1F426;",    # bird
+    """Jinja2 filter: monochrome two-letter mark for a platform.
+
+    Cohérence inter-écrans : le Calendrier rend déjà les plateformes
+    par une marque monochrome (`PLATFORMS[*].mono` dans calendar.js —
+    IG / TT / X / RD) et le Viewer par un libellé texte. L'écran
+    Profils était le seul à afficher un emoji en couleur pleine
+    (📷 🐦 👽 🎵), ce que la grille interdit explicitement (critère G8 :
+    « sans logo de plateforme en couleur pleine surface »).
+
+    Le rendu suit maintenant la même convention que le Calendrier, et
+    reste lisible en niveaux de gris.
+    """
+    marks = {
+        "instagram": "IG",
+        "reddit": "RD",
+        "tiktok": "TT",
+        "twitter": "X",
     }
-    return icons.get(platform, "&#x1F310;")  # globe fallback
+    mark = marks.get(platform, (platform or "?")[:2].upper())
+    return f'<span class="s-plat" aria-hidden="true">{mark}</span>'
 
 
 def create_app() -> Flask:
@@ -72,8 +87,15 @@ def create_app() -> Flask:
     def _check_auth(auth) -> bool:
         if auth is None:
             return False
-        user_ok = hmac.compare_digest(auth.username or "", APP_USERNAME)
-        pass_ok = hmac.compare_digest(auth.password or "", APP_PASSWORD)
+        # Compare BYTES, not str: hmac.compare_digest raises TypeError on any
+        # non-ASCII str, so an accented APP_PASSWORD used to blow up on every
+        # request carrying an Authorization header (risque #59, AUDIT.md §6.3).
+        user_ok = hmac.compare_digest(
+            (auth.username or "").encode("utf-8"), (APP_USERNAME or "").encode("utf-8")
+        )
+        pass_ok = hmac.compare_digest(
+            (auth.password or "").encode("utf-8"), (APP_PASSWORD or "").encode("utf-8")
+        )
         return user_ok and pass_ok
 
     @app.before_request
@@ -92,11 +114,84 @@ def create_app() -> Flask:
         )
 
     # ------------------------------------------------------------------
+    # Protection inter-site (CSRF) — risque #62, AUDIT.md §9/2.3
+    # La logique vit dans app/web/api.py ; elle n'a d'effet qu'une fois
+    # enregistrée ici. Elle est posée APRÈS l'authentification pour que le
+    # 401 reste prioritaire sur le 403, et elle laisse passer toutes les
+    # méthodes sûres — /health compris.
+    # ------------------------------------------------------------------
+    from app.web.api import reject_cross_site_request
+
+    app.before_request(reject_cross_site_request)
+
+    # ------------------------------------------------------------------
+    # Error handling
+    # No view may ever leak a traceback — let alone the interactive Werkzeug
+    # console — to the caller (risque #8, AUDIT.md §6.3).
+    # ------------------------------------------------------------------
+    def _wants_json() -> bool:
+        return request.path.startswith("/api/")
+
+    def _sober_error_page(code: int, message: str) -> Response:
+        return Response(
+            "<!doctype html><meta charset='utf-8'>"
+            f"<title>Erreur {code}</title>"
+            "<body style='font-family:system-ui;margin:3rem;'>"
+            f"<h1>Erreur {code}</h1><p>{message}</p>"
+            "</body>",
+            code,
+            {"Content-Type": "text/html; charset=utf-8"},
+        )
+
+    @app.errorhandler(HTTPException)
+    def _handle_http_exception(exc: HTTPException):  # noqa: ANN202
+        """404 / 405 / 413… stay what they are — only the rendering changes."""
+        code = exc.code or 500
+        if _wants_json():
+            return jsonify(error=exc.description, code=code), code
+        return exc.get_response()
+
+    @app.errorhandler(413)
+    def _handle_too_large(exc):  # noqa: ANN202
+        """Editor upload above MAX_CONTENT_LENGTH."""
+        message = f"Fichier trop volumineux (max {EDITOR_MAX_FILE_SIZE_MB} Mo)"
+        if _wants_json():
+            return jsonify(error=message, code=413), 413
+        return _sober_error_page(413, message)
+
+    @app.errorhandler(Exception)
+    def _handle_unexpected(exc: Exception):  # noqa: ANN202
+        """Last resort: turn any uncaught exception into a structured 500."""
+        if isinstance(exc, HTTPException):
+            return _handle_http_exception(exc)
+        logger.exception("Unhandled exception on {} {}", request.method, request.path)
+        if _wants_json():
+            return jsonify(error="Erreur serveur"), 500
+        return _sober_error_page(500, "Une erreur interne est survenue.")
+
+    # ------------------------------------------------------------------
     # Jinja2 custom filters
     # ------------------------------------------------------------------
     app.jinja_env.filters["formatdate"] = _filter_formatdate
     app.jinja_env.filters["timestamptodate"] = _filter_timestamptodate
     app.jinja_env.filters["platformicon"] = _filter_platformicon
+
+    # ------------------------------------------------------------------
+    # Cache-busting des assets
+    # `layout.html` appelle `asset_version(chemin)` dès que la globale
+    # existe, et retombe sinon sur une empreinte de build écrite à la main.
+    # Calculer l'empreinte sur le mtime évite d'avoir à penser à bumper
+    # cette constante : un CSS corrigé purge le cache tout seul.
+    # ------------------------------------------------------------------
+    def _asset_version(path: str) -> str:
+        try:
+            return str(int(os.stat(os.path.join(app.static_folder, path)).st_mtime))
+        except OSError:
+            # Fichier absent ou illisible : une valeur stable vaut mieux
+            # qu'une erreur de rendu sur toute la page.
+            return "0"
+
+    app.jinja_env.globals["asset_version"] = _asset_version
 
     # ------------------------------------------------------------------
     # Register blueprints
