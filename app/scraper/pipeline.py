@@ -202,12 +202,19 @@ def _plateforme_non_atteinte(result) -> str | None:
     return None
 
 
+#: Statuts TERMINAUX d'un job : plus rien ne s'exécutera après eux, ils
+#: s'horodatent donc tous. `empty` en fait partie (risque #3, §4.1, lot 3.3) —
+#: son absence de `completed_at` laissait l'interface sans date de fin sur les
+#: jobs quotidiens sans nouveauté, c'est-à-dire sur la moitié d'entre eux.
+_STATUTS_TERMINAUX = ("completed", "failed", "partial", "empty")
+
+
 def _mark_job(db, job: ScrapeJob, status: str, error: str | None = None) -> None:
     """Update job status and optional error message."""
     job.status = status
     if status == "running" and job.started_at is None:
         job.started_at = _now_ts()
-    if status in ("completed", "failed", "partial"):
+    if status in _STATUTS_TERMINAUX:
         job.completed_at = _now_ts()
     if error:
         job.error_message = error
@@ -584,9 +591,23 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
     job.media_downloaded = media_downloaded
     job.media_uploaded = media_uploaded
 
-    if media_found == 0:
-        # Nothing discovered at all — almost always expired/missing cookies or a
-        # block, NOT a success. Flag it distinctly so it doesn't look "completed".
+    # risque #3 / §4.1 — le statut se décide sur `total_seen`, PAS sur
+    # `media_found`. `media_found = len(result.media)` ne compte que les médias
+    # NOUVEAUX : un profil sain dont aucun post n'a bougé depuis le dernier
+    # cycle en rapporte zéro, et tombait donc dans `empty` — le même badge
+    # orange qu'une session morte. `total_seen` compte les posts VUS sur la
+    # page ; les 4 extracteurs l'incrémentent désormais (lot 1.5).
+    #
+    # `empty` garde un sens précis, et un seul : la page n'a rien montré du
+    # tout. L'échec TOTAL de fetch, lui, est déjà parti en `failed` à l'étape 5b
+    # (risque #53) — les deux situations ne partagent plus de statut.
+    #
+    # `media_found` reste dans la condition en garde : un extracteur qui
+    # rapporterait des médias sans alimenter `total_seen` ne doit pas produire
+    # un `empty` absurde.
+    if total_seen == 0 and media_found == 0:
+        # Nothing seen on the page at all — expired/missing cookies, a block or
+        # a genuinely empty profile. NOT a success: flagged distinctly.
         final_status = "empty"
     elif media_downloaded < len(pending_items) or media_uploaded < len(downloaded_items):
         final_status = "partial"

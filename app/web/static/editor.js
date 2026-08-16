@@ -18,6 +18,12 @@
             console.warn('[editor]', message);
         }
 
+        // Opacité du filigrane, en pourcentage. Constante volontaire : elle ne
+        // varie jamais d'une composition à l'autre, et le curseur qui l'exposait
+        // n'offrait que le risque de la dérégler. Les compositions enregistrées
+        // avant ce changement portent leur propre valeur et restent inchangées.
+        const WATERMARK_OPACITY = 50;
+
         // ============================================
         // TEMPLATES DEFINITION
         // ============================================
@@ -112,8 +118,8 @@
             lineHeight: 1.2,
             overlayText: '',
             showOverlay: false,
-            // Watermark state
-            watermarkOpacity: 100,
+            // Watermark state — opacité constante, voir WATERMARK_OPACITY
+            watermarkOpacity: WATERMARK_OPACITY,
             // Frame customization (for story template)
             frameHeightPercent: 100,
             // Canvas state
@@ -175,10 +181,6 @@
         const driveLoading = document.getElementById('drive-loading');
         const driveFiles = document.getElementById('drive-files');
         const connectDriveBtn = document.getElementById('connect-drive-btn');
-        
-        // Watermark opacity
-        const watermarkOpacitySlider = document.getElementById('watermark-opacity');
-        const watermarkOpacityValue = document.getElementById('watermark-opacity-value');
         
         // Video-related elements
         const mediaTypeBadge = document.getElementById('media-type-badge');
@@ -1326,15 +1328,6 @@
             }
         }
 
-        function updateWatermarkOpacity(value) {
-            state.watermarkOpacity = value;
-            watermarkOpacityValue.textContent = value + '%';
-            
-            if (watermark) {
-                watermark.set('opacity', value / 100);
-                canvas.renderAll();
-            }
-        }
 
         // ============================================
         // GOOGLE DRIVE PICKER
@@ -2583,11 +2576,6 @@
 
             // Google Drive connect button
             connectDriveBtn.addEventListener('click', openGoogleDrivePicker);
-
-            // Watermark opacity slider
-            watermarkOpacitySlider.addEventListener('input', (e) => {
-                updateWatermarkOpacity(parseInt(e.target.value));
-            });
 
             // ---- Retouche image (LOT C) ----
             if (cropGroup) {

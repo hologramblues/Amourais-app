@@ -2,9 +2,11 @@ import logging
 from datetime import datetime
 from sqlalchemy import (
     create_engine, Column, Integer, Text, Float, Boolean,
-    ForeignKey, UniqueConstraint, Index, event,
+    ForeignKey, UniqueConstraint, Index, event, text,
 )
-from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+from sqlalchemy.dialects import sqlite as sqlite_dialect
+from sqlalchemy.orm import backref, declarative_base, sessionmaker, relationship
+from sqlalchemy.schema import CreateIndex
 from app.config import DB_PATH
 
 logger = logging.getLogger(__name__)
@@ -105,16 +107,39 @@ class MediaItem(Base):
     collection_links = relationship(
         "CollectionItem", back_populates="media_item", cascade="all, delete-orphan"
     )
+    # Références de l'ÉDITEUR (lot 3.7, risques #11/#12). Aucune cascade : un
+    # post programmé et un mème sauvegardé ont leur propre fichier, ils
+    # survivent à la disparition du média source. La relation existe pour que
+    # l'unité de travail SQLAlchemy remette `source_media_id` à NULL AVANT de
+    # supprimer le média — c'est ce qui rend la suppression sûre même sur la
+    # base de production, dont le DDL de `scheduled_posts` / `saved_memes` ne
+    # porte PAS `ON DELETE SET NULL` (les tables préexistent, et SQLite ne sait
+    # pas modifier une clé étrangère par ALTER TABLE).
+    scheduled_posts = relationship("ScheduledPost", back_populates="source_media")
+    saved_memes = relationship("SavedMeme", back_populates="source_media")
 
     __table_args__ = (
         UniqueConstraint("profile_id", "post_id", "media_url", name="idx_media_dedup"),
         Index("idx_media_status", "status"),
         Index("idx_media_profile", "profile_id"),
         # Les deux index de déduplication. Sur une base EXISTANTE, create_all()
-        # saute la table entière (donc ses index) : c'est _migrate_add_columns
+        # saute la table entière (donc ses index) : c'est _migrate_add_indexes
         # qui les crée, en CREATE INDEX IF NOT EXISTS.
         Index("idx_media_md5", "md5"),
         Index("idx_media_phash", "phash"),
+        # ---- Lot 3.8 / risque #25 : tris de la bibliothèque et de l'analytics.
+        # `posted_at` seul sert `ORDER BY posted_at` (analytics), le composite
+        # sert `WHERE status = ? ORDER BY posted_at` (viewer filtré). Les deux
+        # suppriment un « USE TEMP B-TREE FOR ORDER BY » mesuré sur la base
+        # réelle.
+        Index("idx_media_posted_at", "posted_at"),
+        Index("idx_media_status_posted", "status", "posted_at"),
+        # Le tri PAR DÉFAUT du viewer porte sur `coalesce(posted_at,
+        # discovered_at)` (viewer_api.py:238) : un index sur `posted_at` seul
+        # ne le sert pas. SQLite sait utiliser un index d'EXPRESSION pour un
+        # ORDER BY — vérifié par EXPLAIN QUERY PLAN sur une copie de la base
+        # de production.
+        Index("idx_media_date_effective", text("coalesce(posted_at, discovered_at)")),
     )
 
 
@@ -238,7 +263,14 @@ class IgInsightSnapshot(Base):
     profile_views = Column(Integer, default=0)
     snapshot_at = Column(Integer, nullable=False, default=lambda: int(datetime.now().timestamp()))
 
-    profile = relationship("Profile", backref="ig_insights")
+    # `cascade="all, delete-orphan"` porté par le BACKREF (lot 3.7, risque #12) :
+    # sans lui l'ORM tentait de mettre `profile_id` à NULL en supprimant un
+    # profil, ce que `nullable=False` interdit — un profil doté d'un snapshot IG
+    # était donc INDÉLETABLE (500 générique sur l'API).
+    profile = relationship(
+        "Profile",
+        backref=backref("ig_insights", cascade="all, delete-orphan"),
+    )
 
     __table_args__ = (
         Index("idx_ig_insights_profile", "profile_id"),
@@ -267,6 +299,9 @@ class ScrapeJob(Base):
     __table_args__ = (
         Index("idx_jobs_profile", "profile_id"),
         Index("idx_jobs_status", "status"),
+        # Lot 3.8 : l'historique des jobs est toujours lu en
+        # `ORDER BY created_at DESC` (web/api.py:544, :586).
+        Index("idx_jobs_created", "created_at"),
     )
 
 
@@ -280,13 +315,21 @@ class ScheduledPost(Base):
     media_type = Column(Text)              # image | video
     template_format = Column(Text)         # square | portrait | story
     thumbnail_path = Column(Text)          # small preview
-    source_media_id = Column(Integer, ForeignKey("media_items.id"), nullable=True)
+    # `ondelete="SET NULL"` (lot 3.7) : sur une base NEUVE, le moteur annule la
+    # référence quand le média disparaît. Sur la base de production — dont le
+    # DDL est antérieur — c'est la relation ORM `MediaItem.scheduled_posts` qui
+    # fait le même travail avant la suppression.
+    source_media_id = Column(
+        Integer, ForeignKey("media_items.id", ondelete="SET NULL"), nullable=True
+    )
     scheduled_at = Column(Integer)         # target unix timestamp
     status = Column(Text, nullable=False, default="draft")  # draft | scheduled | published | failed
     platforms = Column(Text)               # JSON array: ["instagram", "tiktok"]
     publish_results = Column(Text)         # JSON: per-platform results
     created_at = Column(Integer, nullable=False, default=lambda: int(datetime.now().timestamp()))
     updated_at = Column(Integer, nullable=False, default=lambda: int(datetime.now().timestamp()))
+
+    source_media = relationship("MediaItem", back_populates="scheduled_posts")
 
     __table_args__ = (
         Index("idx_scheduled_posts_status", "status"),
@@ -306,11 +349,51 @@ class SavedMeme(Base):
     file_path = Column(Text, nullable=False)  # path to the saved meme file
     thumbnail_path = Column(Text)  # path to thumbnail (for videos)
     file_size = Column(Integer)
-    source_media_id = Column(Integer, ForeignKey("media_items.id"), nullable=True)
+    # Même traitement que `ScheduledPost.source_media_id` (lot 3.7) : le mème
+    # garde son propre fichier, seule la référence est annulée.
+    source_media_id = Column(
+        Integer, ForeignKey("media_items.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = Column(Integer, nullable=False, default=lambda: int(datetime.now().timestamp()))
+
+    source_media = relationship("MediaItem", back_populates="saved_memes")
 
     __table_args__ = (
         Index("idx_saved_memes_created", "created_at"),
+    )
+
+
+class SessionHealth(Base):
+    """Dernier état connu de la session d'une plateforme (lot « santé de session »).
+
+    Une ligne par plateforme, écrasée à chaque évaluation. La table est un
+    CACHE d'affichage, jamais une source de vérité : `session_health.py` sait
+    recalculer le signal passif sans elle, et l'application fonctionne
+    parfaitement quand la table est VIDE (c'est l'état d'une base de production
+    au premier démarrage après cette migration).
+
+    TOUTES les colonnes sont NULLABLES sauf `platform` : rien ici ne peut
+    empêcher une écriture ni un démarrage.
+    """
+
+    __tablename__ = "session_health"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    platform = Column(Text, nullable=False)  # instagram | reddit | tiktok | twitter
+    #: connecté | déconnecté | bloqué | inconnu — jamais un booléen.
+    state = Column(Text)
+    message = Column(Text)          # explication courte, en français
+    remedy = Column(Text)           # geste correctif, quand il y en a un
+    source = Column(Text)           # cookies | jobs | sonde | aucune
+    details = Column(Text)          # JSON : la liste des indices retenus
+    checked_at = Column(Integer)    # dernière évaluation (unix)
+    last_probe_at = Column(Integer)  # dernière SONDE ACTIVE (unix)
+    last_ok_at = Column(Integer)    # dernière preuve de session vivante (unix)
+    cookies_mtime = Column(Integer)  # date du fichier de cookies (unix)
+    expires_at = Column(Integer)    # expiration la plus proche d'un cookie critique
+
+    __table_args__ = (
+        UniqueConstraint("platform", name="idx_session_health_platform"),
     )
 
 
@@ -322,17 +405,28 @@ SessionLocal = sessionmaker(bind=engine)
 
 @event.listens_for(engine, "connect")
 def _set_sqlite_pragma(dbapi_conn, _connection_record):
-    """Enable WAL + a busy timeout on every SQLite connection.
+    """Enable WAL, a busy timeout and FOREIGN KEYS on every SQLite connection.
 
     WAL lets readers and a writer work concurrently (the web app reads while
     scrape threads write), and busy_timeout makes other connections wait for a
     lock instead of failing immediately with "database is locked".
+
+    `foreign_keys` (lot 3.7, risque #11) est OFF par défaut dans SQLite : sans
+    ce PRAGMA, tous les `ON DELETE CASCADE` déclarés dans le schéma sont
+    DÉCORATIFS. Il est posé par connexion (le réglage n'est pas persistant) et
+    hors transaction — un `PRAGMA foreign_keys` émis à l'intérieur d'une
+    transaction est silencieusement ignoré, d'où sa place ici.
+
+    Contrôle préalable : `PRAGMA foreign_key_check` sur une COPIE de la base de
+    production ne remonte AUCUNE violation (0 orphelin, 13 tables). Le
+    contrôle est rejoué à chaque `init_db()` — cf. `_detecter_les_orphelins`.
     """
     cursor = dbapi_conn.cursor()
     try:
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA busy_timeout=15000")  # 15s
         cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA foreign_keys=ON")
     finally:
         cursor.close()
 
@@ -384,16 +478,15 @@ def _migrate_add_columns():
         # dans cet état. Le remplissage est différé, jamais bloquant.
         ("media_items", "md5",              "TEXT"),
         ("media_items", "phash",            "TEXT"),
-    ]
-
-    # `create_all()` ne pose les index QUE sur les tables qu'il vient de créer.
-    # Sur la base du propriétaire, `media_items` existe déjà : sans ces deux
-    # lignes, la recherche de doublons balayerait toute la table à chaque appel.
-    # `IF NOT EXISTS` rend l'opération idempotente, et un CREATE INDEX ne
-    # touche aucune donnée.
-    index_migrations = [
-        ("idx_media_md5", "CREATE INDEX IF NOT EXISTS idx_media_md5 ON media_items (md5)"),
-        ("idx_media_phash", "CREATE INDEX IF NOT EXISTS idx_media_phash ON media_items (phash)"),
+        # NOTE — `session_health` (lot « santé de session ») ne figure PAS ici,
+        # et c'est volontaire : cette liste ne s'adresse qu'aux tables DÉJÀ
+        # PRÉSENTES dans une base ancienne, auxquelles il manque des colonnes.
+        # `session_health` est une table ENTIÈREMENT nouvelle : `create_all()`
+        # la crée d'un bloc, avec toutes ses colonnes, et son `checkfirst`
+        # équivaut à un CREATE TABLE IF NOT EXISTS (aucun DROP, aucun UPDATE).
+        # L'y ajouter ferait au contraire ÉCHOUER la migration sur toute base
+        # où la table n'existe pas encore — « no such table » n'est pas une
+        # erreur ignorable ici, et ne doit pas le devenir.
     ]
 
     conn = sqlite3.connect(str(DB_PATH))
@@ -414,7 +507,55 @@ def _migrate_add_columns():
                 )
                 raise
 
-        for nom, sql in index_migrations:
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _index_declares():
+    """Yield `(nom, DDL)` pour CHAQUE `Index(...)` déclaré dans les modèles.
+
+    Le DDL est produit par le compilateur SQLite de SQLAlchemy, jamais
+    concaténé à la main : les index d'EXPRESSION (`coalesce(posted_at,
+    discovered_at)`) et un éventuel `unique=True` sortent alors corrects, et la
+    liste ne peut pas diverger des modèles — il n'y a pas de liste.
+    """
+    dialecte = sqlite_dialect.dialect()
+    for table in Base.metadata.sorted_tables:
+        for index in sorted(table.indexes, key=lambda ix: ix.name or ""):
+            ddl = str(
+                CreateIndex(index, if_not_exists=True).compile(dialect=dialecte)
+            ).strip()
+            yield index.name, ddl
+
+
+def _migrate_add_indexes():
+    """Create every declared index on a PREEXISTING table (SQLite DDL).
+
+    Le piège du risque #62, vérifié par exécution (SQLAlchemy 2.0.47) :
+    `create_all()` écarte en bloc toute table déjà présente
+    (`_can_create_table()`) et n'appelle donc jamais `visit_table`, SEUL
+    émetteur des `CREATE INDEX`. Ajouter un `Index(...)` au modèle d'une table
+    en production est un **no-op silencieux** — aucune exception, les requêtes
+    continuent simplement en balayage complet.
+
+    Cette migration comble le trou, exactement comme `_migrate_add_columns`
+    comble celui des colonnes : `CREATE INDEX IF NOT EXISTS`, donc idempotente,
+    et non destructive par construction (jamais de DROP, jamais d'UPDATE).
+
+    Elle s'exécute APRÈS `_migrate_add_columns` : un index sur une colonne
+    fraîchement ajoutée (`md5`, `phash`) a besoin que la colonne existe.
+
+    Comme pour les colonnes, un échec est journalisé bruyamment puis propagé :
+    un index déclaré et jamais créé est précisément ce que ce lot corrige, il
+    ne doit pas pouvoir passer inaperçu une seconde fois.
+    """
+    import sqlite3
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        cur = conn.cursor()
+        for nom, sql in _index_declares():
             try:
                 cur.execute(sql)
             except sqlite3.OperationalError as exc:
@@ -425,17 +566,64 @@ def _migrate_add_columns():
                     nom, exc,
                 )
                 raise
-
         conn.commit()
     finally:
         conn.close()
 
 
+def _detecter_les_orphelins():
+    """Report (never delete) rows that violate a declared foreign key.
+
+    `PRAGMA foreign_keys=ON` n'invalide PAS rétroactivement les lignes déjà en
+    base : SQLite ne contrôle une contrainte qu'au moment où une écriture la
+    touche. Une base contenant des orphelins ne « casse » donc pas au
+    démarrage — elle casse plus tard, sur une écriture, loin de la cause.
+
+    D'où ce contrôle au boot : il COMPTE et JOURNALISE, il ne supprime rien.
+    Décider du sort de lignes orphelines est une décision du propriétaire, pas
+    d'une migration automatique (AUDIT.md §9, question ouverte n°5).
+
+    Renvoie le nombre de violations, `{}` quand la base est saine.
+    """
+    import sqlite3
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        try:
+            lignes = conn.execute("PRAGMA foreign_key_check").fetchall()
+        except sqlite3.DatabaseError as exc:
+            # Un contrôle de diagnostic ne doit JAMAIS empêcher le démarrage.
+            logger.warning("PRAGMA foreign_key_check indisponible: %s", exc)
+            return {}
+    finally:
+        conn.close()
+
+    violations: dict[str, int] = {}
+    for table, _rowid, table_parente, _fk_id in lignes:
+        cle = f"{table} -> {table_parente}"
+        violations[cle] = violations.get(cle, 0) + 1
+
+    if violations:
+        logger.error(
+            "INTEGRITE REFERENTIELLE: %d ligne(s) orpheline(s) detectee(s) dans "
+            "%s. PRAGMA foreign_keys=ON est actif : SQLite ne revalide pas les "
+            "lignes existantes, elles restent donc lisibles et modifiables, mais "
+            "toute ecriture qui TOUCHE la cle etrangere echouera. Aucune "
+            "suppression automatique n'est faite — le nettoyage est une decision "
+            "du proprietaire.",
+            sum(violations.values()),
+            ", ".join(f"{cle} ({n})" for cle, n in sorted(violations.items())),
+        )
+    return violations
+
+
 def init_db():
-    """Create tables if they don't exist, then run column migrations."""
+    """Create tables if they don't exist, then run column and index migrations."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(engine)
     _migrate_add_columns()
+    _migrate_add_indexes()
+    _detecter_les_orphelins()
 
 
 def get_db():

@@ -28,8 +28,35 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;450;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
-    <script src="https://apis.google.com/js/api.js"></script>
+    {#- ── Fabric.js — RAPATRIÉ EN LOCAL (lot D) ────────────────────────────
+        Cette balise pointait sur https://cdnjs.cloudflare.com/…/5.3.1/fabric.min.js.
+        Conséquences constatées : sur une machine sans accès sortant (ou si le
+        CDN tombe), le script ne se charge pas, `fabric` reste indéfini et
+        `init()` d'editor.js meurt sur `new fabric.Canvas` (editor.js:261) —
+        l'éditeur ne survivait QUE par le cache du navigateur. C'était aussi
+        une dépendance de chaîne d'approvisionnement sans contrôle d'intégrité.
+
+        Le fichier servi ici est l'octet-pour-octet du build 5.3.1 de cdnjs
+        (311 096 octets), vérifié contre le SRI publié par cdnjs :
+          sha512-CeIsOAsgJnmevfCi2C7Zsyy6bQKi43utIjdA87Q0ZY84oDqnI0uwfM9+bKiIkI75lUeI00WG/+uJzOmuHlesMA==
+        Même version qu'avant, donc aucun changement de comportement.
+        (La chaîne `fabric.version` de ce build annonce « 5.3.0 » : c'est une
+        coquille amont du paquet 5.3.1, pas une erreur de version ici.)
+        Mettre à jour = remplacer le fichier ET ce numéro dans le chemin. -#}
+    <script src="/static/vendor/fabric-5.3.1.min.js?v={{ asset_version('vendor/fabric-5.3.1.min.js') }}"></script>
+
+    {#- ── API Google — NON rapatriable ─────────────────────────────────────
+        api.js doit venir de Google (jetons OAuth, Picker). Deux changements :
+        1. `async` : la balise était BLOQUANTE. Hors ligne, le rendu de la page
+           restait suspendu jusqu'au timeout DNS/TCP. gapi n'est utilisé qu'au
+           clic sur « Ouvrir Google Drive », rien ne justifie de bloquer.
+        2. `onload`/`onerror` renseignent un état lu par le garde-fou en bas de
+           page : si Google est injoignable, l'éditeur fonctionne intégralement
+           et SEULE la fonction Drive se désactive, en le disant. -#}
+    <script>window.SAMOURAIS_GAPI = { etat: 'chargement' };</script>
+    <script async src="https://apis.google.com/js/api.js"
+            onload="window.SAMOURAIS_GAPI.etat = (window.gapi && typeof window.gapi.load === 'function') ? 'ok' : 'indisponible';"
+            onerror="window.SAMOURAIS_GAPI.etat = 'indisponible';"></script>
     {# tokens.css AVANT editor.css : socle de couleurs + thème clair/sombre.
        Il ne style aucun élément, il ne fait que déclarer des variables. #}
     <link rel="stylesheet" href="/static/tokens.css?v={{ asset_version('tokens.css') }}">
@@ -349,13 +376,9 @@
                         </div>
                     </div>
 
-                    <div class="ctl">
-                        <div class="ctl-row">
-                            <label class="ctl-label" for="watermark-opacity">Opacit&eacute; du logo</label>
-                            <input type="range" class="slider" id="watermark-opacity" min="0" max="100" value="100">
-                            <output class="slider-value" id="watermark-opacity-value" for="watermark-opacity">100%</output>
-                        </div>
-                    </div>
+                    {# L'opacité du logo est fixée à 50 % (constante WATERMARK_OPACITY dans
+                       editor.js) : elle ne varie jamais d'une composition à l'autre, un
+                       réglage exposé n'apportait qu'un risque de la dérégler. #}
                 </section>
 
             </div>
@@ -388,5 +411,99 @@
     </div>
 
     <script src="/static/editor.js?v={{ asset_version('editor.js') }}"></script>
+
+    {#- ── Garde-fou « Google Drive injoignable » (lot D) ───────────────────
+        `openGoogleDrivePicker` (editor.js:1342) appelle `gapi.load` sans
+        aucune garde : si apis.google.com n'a pas répondu, le clic lève une
+        ReferenceError, la zone Drive reste bloquée sur son spinner et
+        l'utilisateur n'a AUCUN message. Ce bloc rend la panne visible et non
+        bloquante — le reste de l'éditeur (Fabric, désormais local) marche.
+
+        Il vit ici et non dans editor.js à dessein : c'est l'unique endroit qui
+        connaît la balise <script> distante et son issue. Il n'écrase aucune
+        fonction d'editor.js, il intercepte le clic en phase de CAPTURE, donc
+        AVANT le gestionnaire d'editor.js, et seulement quand gapi manque. -#}
+    <script>
+    (function () {
+        'use strict';
+
+        var MESSAGE = 'Google Drive est indisponible : le script de Google '
+            + '(apis.google.com) n’a pas pu être chargé. Le reste de '
+            + 'l’éditeur fonctionne normalement — importe ton média '
+            + 'depuis « Ordi » ou « Bibliothèque ».';
+        var MESSAGE_ATTENTE = 'Google Drive n’a pas fini de se charger. '
+            + 'Patiente quelques secondes et réessaie.';
+
+        var etatGapi = function () {
+            var s = window.SAMOURAIS_GAPI || {};
+            // `onload` peut n'avoir jamais été rattaché (script retiré par un
+            // bloqueur) : on refait le constat sur l'objet lui-même.
+            if (window.gapi && typeof window.gapi.load === 'function') return 'ok';
+            return s.etat || 'indisponible';
+        };
+
+        function dire(message) {
+            if (window.samourais && typeof window.samourais.notify === 'function') {
+                window.samourais.notify(message, 'error');
+            } else {
+                console.warn('[editor] ' + message);
+            }
+        }
+
+        // Désactivation VISIBLE, pas seulement un refus au clic.
+        function desactiverDrive() {
+            var bouton = document.getElementById('connect-drive-btn');
+            if (bouton && !bouton.disabled) {
+                bouton.disabled = true;
+                bouton.setAttribute('aria-disabled', 'true');
+                bouton.title = MESSAGE;
+            }
+            var onglet = document.querySelector('.import-tab[data-source="drive"]');
+            if (onglet) {
+                onglet.setAttribute('aria-disabled', 'true');
+                onglet.title = MESSAGE;
+            }
+            var indice = document.querySelector('#drive-connect .drive-hint');
+            if (indice && indice.dataset.indisponible !== '1') {
+                indice.dataset.indisponible = '1';
+                indice.textContent = 'Service indisponible — apis.google.com est injoignable.';
+            }
+            // Le spinner d'editor.js ne se referme jamais tout seul.
+            var chargement = document.getElementById('drive-loading');
+            var connexion = document.getElementById('drive-connect');
+            if (chargement) chargement.style.display = 'none';
+            if (connexion) connexion.style.display = 'block';
+        }
+
+        // Phase de capture : on passe avant le gestionnaire d'editor.js.
+        document.addEventListener('click', function (ev) {
+            var cible = ev.target && ev.target.closest
+                ? ev.target.closest('#connect-drive-btn')
+                : null;
+            if (!cible) return;
+            var etat = etatGapi();
+            if (etat === 'ok') return;  // cas nominal : on ne s'interpose pas
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+            if (etat === 'chargement') {
+                dire(MESSAGE_ATTENTE);
+            } else {
+                desactiverDrive();
+                dire(MESSAGE);
+            }
+        }, true);
+
+        // Verdict différé : une balise `async` vers un hôte filtré ne déclenche
+        // parfois NI onload NI onerror avant le timeout TCP. Au-delà du délai,
+        // l'absence de gapi vaut indisponibilité.
+        window.setTimeout(function () {
+            if (etatGapi() !== 'ok') {
+                window.SAMOURAIS_GAPI.etat = 'indisponible';
+                desactiverDrive();
+            }
+        }, 8000);
+    })();
+    </script>
 </body>
 </html>

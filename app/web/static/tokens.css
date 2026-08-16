@@ -139,57 +139,66 @@
      Toute couleur du produit est définie ici, par RÔLE.
      ========================================================== */
 
-  /* Surfaces — escalier de 4 niveaux + fond de champ */
-  --bg-canvas: #f4f5f7; /* fond de page, sidebar */
+  /* Surfaces — escalier de 4 niveaux + fond de champ
+     DIRECTION « PAPIER » : neutres CHAUDS, sans dominante bleue.
+     Le contenu du produit est l'image ; un gris bleuté teinte la
+     perception des couleurs des médias posés dessus, un neutre chaud
+     les laisse tranquilles. Écart maximal de 2 points entre les
+     canaux R et B, contre 3 à 5 dans la rampe bleutée précédente. */
+  --bg-canvas: #fbfbfa; /* fond de page, sidebar */
   --bg-1:      #ffffff; /* conteneur principal, cartes */
-  --bg-2:      #f1f2f4; /* zone en creux, en-tête de tableau */
-  --bg-3:      #e8eaed; /* survol de rangée, piste de slider */
-  --bg-inset:  #fbfbfc; /* fond de champ de saisie */
+  --bg-2:      #f4f4f2; /* zone en creux, en-tête de tableau */
+  --bg-3:      #eaeae7; /* survol de rangée, piste de slider */
+  --bg-inset:  #fcfcfb; /* fond de champ de saisie */
 
   /* Bordures — 3 niveaux */
-  --border-1: #e3e5e8; /* filet par défaut */
-  --border-2: #d2d6dc; /* séparateur appuyé, bordure de contrôle */
-  --border-3: #b7bdc6; /* bordure au survol */
+  --border-1: #e5e5e1; /* filet par défaut */
+  --border-2: #d6d6d1; /* séparateur appuyé, bordure de contrôle */
+  --border-3: #b9b9b3; /* bordure au survol */
 
   /* Texte — 4 niveaux */
-  --fg-1: #16181d; /* primaire */
-  --fg-2: #3d434c; /* secondaire */
-  /* ÉCART : #6b7280 (REFERENCES.md) -> #636a74. Le ton prescrit ne
-     donne que 4.43:1 sur --bg-canvas, 4.32:1 sur --bg-2 et 4.01:1 sur
-     --bg-3 : sous le seuil AA de 4.5:1, alors que --fg-3 porte les
-     en-têtes de colonne, les métadonnées et .empty__text, qui vivent
-     précisément sur ces fonds. #636a74 tient 5.01 / 4.88 / 4.53. */
-  --fg-3: #636a74; /* tertiaire — labels, métadonnées */
-  --fg-4: #99a0aa; /* quaternaire — placeholder, désactivé */
+  --fg-1: #191918; /* primaire — 17.2:1 sur --bg-canvas */
+  --fg-2: #45443f; /* secondaire — 9.0:1 */
+  /* Le tertiaire porte les en-têtes de colonne, les métadonnées sous
+     vignette et le texte des états vides : il vit donc sur --bg-2 et
+     --bg-3 autant que sur le fond de page. Il est tenu volontairement
+     plus foncé que ne le suggère la direction (#8b8b87, qui ne donne
+     que 3.3:1) pour rester au-dessus du seuil AA de 4.5:1 partout.
+     Valeurs mesurées : 5.49 sur --bg-canvas, 5.16 sur --bg-2, 4.71 sur
+     --bg-3. Un premier essai à #6e6e6a passait sur les deux premiers
+     fonds mais tombait à 4.25 sur --bg-3, le fond de survol de rangée —
+     précisément là où ces métadonnées sont lues. */
+  --fg-3: #676763; /* tertiaire — labels, métadonnées */
+  --fg-4: #9c9c97; /* quaternaire — placeholder, désactivé (exempté AA) */
   --fg-on-accent: #ffffff;
   --fg-on-solid:  #ffffff; /* texte sur aplat sémantique plein */
 
-  /* Accent — bleu 218°, seule famille non consommée par la sémantique
+  /* Accent — ENCRE, quasi noir
      ------------------------------------------------------------
-     DEUX RAMPES, et c'est délibéré :
-       --accent*       = accent porté par du TEXTE, une icône, un filet.
-                         Doit tenir 4.5:1 sur les fonds clairs, y compris
-                         sur --accent-soft (jeton actif, badge info).
-       --accent-solid* = accent en APLAT, sous du texte --fg-on-accent.
-                         Doit tenir 4.5:1 face au blanc.
-     Une seule teinte ne peut pas satisfaire les deux contraintes, qui
-     tirent en sens inverse. Les séparer est ce qui rend le bouton
-     primaire ET le jeton actif conformes dans les deux thèmes.
-     ------------------------------------------------------------
-     ÉCART : la rampe TEXTE est décalée d'un cran vers le foncé par
-     rapport à REFERENCES.md. Le #2f6fe0 prescrit ne donne que 4.10:1
-     sur --accent-soft et 4.31:1 sur --bg-canvas. Il est conservé tel
-     quel comme --accent-solid : l'aplat du bouton primaire en thème
-     clair est donc inchangé au pixel près. */
-  --accent:        #2861cb;
-  --accent-hover:  #2255b3;
-  --accent-active: #1d4a9b;
-  --accent-soft:   #e8f0fe; /* fond de jeton actif / sélection */
-  --accent-border: #a9c6f5;
+     DIRECTION « PAPIER ». L'accent n'est plus une couleur mais une
+     VALEUR. Trois raisons, dans l'ordre d'importance :
+       1. Aucune couleur d'interface ne dispute l'attention aux médias.
+          C'est le parti pris des bibliothèques d'images et des outils
+          d'écriture, et c'est le contenu qui doit porter la couleur.
+       2. Le contraste devient énorme et gratuit : 16.8:1 partout, là
+          où le bleu se battait pour atteindre 4.5:1 et imposait deux
+          rampes décalées.
+       3. La couleur redevient exclusivement SÉMANTIQUE : vert, orange
+          et rouge ne sont plus noyés au milieu d'un bleu décoratif.
+     Les deux rampes sont conservées par sécurité — des composants les
+     référencent séparément — mais elles convergent désormais : l'encre
+     tient les deux contraintes à la fois, ce qu'aucune teinte colorée
+     ne pouvait faire.
+     ------------------------------------------------------------ */
+  --accent:        #1c1c1a; /* sur --accent-soft : 15.1:1 */
+  --accent-hover:  #33322e;
+  --accent-active: #000000;
+  --accent-soft:   #efeeeb; /* fond de jeton actif / sélection */
+  --accent-border: #d4d3cd;
 
-  --accent-solid:        #2f6fe0; /* blanc dessus : 4.70:1 */
-  --accent-solid-hover:  #2861cb; /* blanc dessus : 5.73:1 */
-  --accent-solid-active: #2255b3; /* blanc dessus : 6.96:1 */
+  --accent-solid:        #1c1c1a; /* blanc dessus : 16.8:1 */
+  --accent-solid-hover:  #33322e; /* blanc dessus : 12.1:1 */
+  --accent-solid-active: #000000; /* blanc dessus : 21.0:1 */
 
   /* Sémantique — jamais décorative
      ÉCART : --success et --warning sont assombris d'un cran par
@@ -203,8 +212,13 @@
   --danger:       #c22b30;
   --danger-hover: #a82327;
   --danger-soft:  #fdeaea;
-  --info:         var(--accent);
-  --info-soft:    var(--accent-soft);
+  /* L'information garde une couleur PROPRE. Elle pointait sur l'accent
+     à l'époque où celui-ci était bleu ; maintenant que l'accent est de
+     l'encre, un badge « info » serait devenu noir, indistinguable d'un
+     badge neutre. Le bleu de l'ancienne rampe est repris tel quel : il
+     ne sert plus qu'ici, donc il redevient porteur de sens. */
+  --info:         #2861cb;
+  --info-soft:    #e8f0fe;
   --neutral:      var(--fg-3);
   --neutral-soft: var(--bg-3);
 
@@ -221,8 +235,8 @@
   --selection-fg: var(--fg-1);
 
   /* Squelette de chargement */
-  --skeleton-base:  #e8eaed;
-  --skeleton-sheen: #f4f5f7;
+  --skeleton-base:  #eaeae7;
+  --skeleton-sheen: #f6f6f4;
 
   /* Focus */
   --focus-color:  var(--accent);
@@ -317,35 +331,44 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --bg-canvas: #0a0b0d;
-    --bg-1:      #101214;
-    --bg-2:      #16181b;
-    --bg-3:      #1d2024;
-    --bg-inset:  #0d0e10;
+    /* Neutres CHAUDS, symétriques du thème clair : la dominante bleue
+       du fond teintait la perception des médias posés dessus. */
+    --bg-canvas: #0d0d0c;
+    --bg-1:      #151513;
+    --bg-2:      #1c1c19;
+    --bg-3:      #24241f;
+    --bg-inset:  #100f0e;
 
-    --border-1: #23262b;
-    --border-2: #31353b;
-    --border-3: #414751;
+    --border-1: #2a2a26;
+    --border-2: #3a3a34;
+    --border-3: #4c4b44;
 
-    --fg-1: #f2f3f5;
-    --fg-2: #c6ccd4;
-    --fg-3: #8b929c;
-    --fg-4: #61666e;
-    --fg-on-accent: #ffffff;
+    --fg-1: #f4f3f0;
+    --fg-2: #cbc9c3;
+    --fg-3: #928f88; /* 5.5:1 sur --bg-2 */
+    --fg-4: #6a6862;
+    /* PIÈGE : l'accent étant devenu un aplat CLAIR en thème sombre, du
+       texte blanc dessus serait illisible. --fg-on-accent passe donc au
+       foncé. --fg-on-solid reste blanc : il habille les aplats
+       sémantiques (danger, succès), qui eux restent colorés et sombres. */
+    --fg-on-accent: #16150f;
     --fg-on-solid:  #ffffff;
 
-    --accent:        #4b8dfa;
-    --accent-hover:  #6ba0ff;
-    --accent-active: #3a7ae8;
-    --accent-soft:   #16233a;
-    --accent-border: #2f4d80;
+    /* Accent = ENCRE INVERSÉE. Le thème clair pose du quasi-noir sur du
+       papier ; le thème sombre pose du quasi-blanc sur de l'encre. Même
+       parti pris, même contraste, aucune couleur décorative. */
+    --accent:        #f0efec;
+    --accent-hover:  #ffffff;
+    --accent-active: #d8d6d0;
+    --accent-soft:   #26251f;
+    --accent-border: #46443c;
 
-    /* En thème sombre, la rampe TEXTE est éclaircie pour se détacher
-       du fond — mais du blanc sur ce #4b8dfa ne donne que 3.24:1.
-       L'aplat garde donc les bleus profonds du thème clair. */
-    --accent-solid:        #2b6ad8; /* blanc dessus : 5.05:1 */
-    --accent-solid-hover:  #2f6fe0; /* blanc dessus : 4.70:1 */
-    --accent-solid-active: #2255b3; /* blanc dessus : 6.96:1 */
+    --accent-solid:        #f0efec; /* --fg-on-accent dessus : 15.9:1 */
+    --accent-solid-hover:  #ffffff; /* --fg-on-accent dessus : 17.6:1 */
+    --accent-solid-active: #d8d6d0; /* --fg-on-accent dessus : 12.4:1 */
+
+    --info:      #6fa8ff;
+    --info-soft: #14203a;
 
     --success:      #35b364;
     --success-soft: #10261a;
@@ -380,34 +403,37 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg-canvas: #0a0b0d;
-  --bg-1:      #101214;
-  --bg-2:      #16181b;
-  --bg-3:      #1d2024;
-  --bg-inset:  #0d0e10;
+  --bg-canvas: #0d0d0c;
+  --bg-1:      #151513;
+  --bg-2:      #1c1c19;
+  --bg-3:      #24241f;
+  --bg-inset:  #100f0e;
 
-  --border-1: #23262b;
-  --border-2: #31353b;
-  --border-3: #414751;
+  --border-1: #2a2a26;
+  --border-2: #3a3a34;
+  --border-3: #4c4b44;
 
-  --fg-1: #f2f3f5;
-  --fg-2: #c6ccd4;
-  --fg-3: #8b929c;
-  --fg-4: #61666e;
-  --fg-on-accent: #ffffff;
+  --fg-1: #f4f3f0;
+  --fg-2: #cbc9c3;
+  --fg-3: #928f88;
+  --fg-4: #6a6862;
+  /* Voir le bloc A : l'aplat d'accent est CLAIR en thème sombre, le
+     texte posé dessus doit donc être foncé. */
+  --fg-on-accent: #16150f;
   --fg-on-solid:  #ffffff;
 
-  --accent:        #4b8dfa;
-  --accent-hover:  #6ba0ff;
-  --accent-active: #3a7ae8;
-  --accent-soft:   #16233a;
-  --accent-border: #2f4d80;
+  --accent:        #f0efec;
+  --accent-hover:  #ffffff;
+  --accent-active: #d8d6d0;
+  --accent-soft:   #26251f;
+  --accent-border: #46443c;
 
-  /* Voir le bloc A : l'aplat garde les bleus profonds du thème clair,
-     seule façon de tenir 4.5:1 sous du texte blanc. */
-  --accent-solid:        #2b6ad8; /* blanc dessus : 5.05:1 */
-  --accent-solid-hover:  #2f6fe0; /* blanc dessus : 4.70:1 */
-  --accent-solid-active: #2255b3; /* blanc dessus : 6.96:1 */
+  --accent-solid:        #f0efec; /* --fg-on-accent dessus : 15.9:1 */
+  --accent-solid-hover:  #ffffff; /* --fg-on-accent dessus : 17.6:1 */
+  --accent-solid-active: #d8d6d0; /* --fg-on-accent dessus : 12.4:1 */
+
+  --info:      #6fa8ff;
+  --info-soft: #14203a;
 
   --success:      #35b364;
   --success-soft: #10261a;

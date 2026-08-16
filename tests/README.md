@@ -217,12 +217,23 @@ vert et déxfailer ces 5 tests-là »*.
 > désignant l'absence de `total_seen` dans 3 extracteurs. Les `reason` concernés
 > rappellent les deux numéros pour qu'aucune recherche ne tombe à côté.
 
-### Lot 2.5 — intégrité du contenu téléchargé
+### Lot 2.5 — intégrité du contenu téléchargé — ✅ LIVRÉ
 
-| Test | Risque | Lot | Comportement attendu une fois corrigé |
+Marqueurs retirés : les deux tests ci-dessous sont désormais des tests de
+non-régression permanents.
+
+| Test | Risque | Lot | Comportement obtenu |
 |---|---|---|---|
-| `test_stockage.py::test_une_page_derreur_html_doit_etre_rejetee` | §6.6 / T10 | 2.5 | Validation du contenu (content-type + magic bytes) : une page d'erreur HTML n'est pas stockée comme média |
-| `test_stockage.py::test_guess_extension_devrait_appliquer_une_liste_blanche` | §6.6 / T10 | 2.5 | Liste blanche d'extensions : plus de XSS stockée same-origin via le `Content-Type` distant |
+| `test_stockage.py::test_une_page_derreur_html_doit_etre_rejetee` | §6.6 / T10 | 2.5 ✅ | Validation du contenu (content-type + magic bytes) : une page d'erreur HTML n'est pas stockée comme média |
+| `test_stockage.py::test_guess_extension_devrait_appliquer_une_liste_blanche` | §6.6 / T10 | 2.5 ✅ | Liste blanche d'extensions (`downloaders.MEDIA_EXTENSIONS`) : plus de XSS stockée same-origin via le `Content-Type` distant |
+
+Tests ajoutés par le lot (aucun n'est xfail) : `test_un_refus_json_est_rejete_sur_son_content_type`,
+`test_une_page_html_deguisee_en_image_est_rejetee_sur_ses_magic_bytes`,
+`test_une_reponse_tronquee_est_rejetee_et_retentee`,
+`test_guess_extension_laisse_passer_les_vrais_medias`, et côté service des
+fichiers (`routes.py`) `test_web.py::test_media_file_pose_nosniff`,
+`test_media_file_ne_sert_jamais_inline_un_fichier_non_media`,
+`test_media_file_sert_toujours_les_vrais_medias_inline`.
 
 ### Lot 3.3 / 3.4 / 3.4b — statuts, disque, nettoyage
 
@@ -230,15 +241,26 @@ vert et déxfailer ces 5 tests-là »*.
 |---|---|---|---|
 | `test_pipeline.py::test_scrape_sain_sans_nouveaute_devrait_etre_completed` | #3 §4.1 | 3.3 (après 1.5) | Statut décidé sur `total_seen` : un cycle sain sans nouveauté est `completed` |
 | `test_pipeline.py::test_un_job_empty_devrait_avoir_une_date_de_fin` | #3 §4.1 | 3.3 | `_mark_job` horodate aussi `empty` — **demi-correctif facile à oublier** |
-| `test_stockage.py::test_aucun_fichier_partiel_ne_doit_survivre_a_trois_tentatives_ratees` | #14 | 3.4 | `try/finally` supprimant `dest` quand `iter_bytes` lève |
-| `test_stockage.py::test_enospc_ne_doit_laisser_aucun_fichier_derriere_lui` | #14 §4.10 | 3.4 | `ENOSPC` capturé et fichier nettoyé |
-| `test_stockage.py::test_download_media_doit_verifier_lespace_disque_avant_decrire` | #14 §4.10 | 3.4 | Contrôle d'espace **avant** la requête réseau et **avant** toute écriture |
-| `test_stockage.py::test_une_erreur_definitive_ne_devrait_pas_etre_retentee` | T11 §7.4 | 3.4 | Un 403 n'est pas retenté 3 fois |
-| `test_stockage.py::test_le_menage_doit_purger_les_vignettes_orphelines` | #14 / #51 | 3.4 | `cleanup_temp_files` balaie `.thumbs` |
-| `test_stockage.py::test_le_menage_doit_purger_les_repertoires_de_lediteur` | #14 | 3.4 | `EDITOR_UPLOAD_DIR` / `EDITOR_OUTPUT_DIR` balayés |
-| `test_stockage.py::test_le_menage_doit_purger_les_medias_du_calendrier` | #56 | 3.4 | `CALENDAR_DIR` balayé (aujourd'hui aucun chemin de code ne le touche) |
-| `test_stockage.py::test_hls_doit_retenter_comme_le_telechargement_direct` | #64 | 3.4b | `_download_hls` a la même boucle `_MAX_RETRIES` + backoff que `_download_direct` |
-| `test_stockage.py::test_hls_un_fichier_vide_doit_aussi_etre_retente` | #64 | 3.4b | Un ffmpeg produisant un fichier vide est retenté |
+| `test_stockage.py::test_aucun_fichier_partiel_ne_doit_survivre_a_trois_tentatives_ratees` | #14 | 3.4 ✅ | `try/finally` supprimant `dest` quand `iter_bytes` lève |
+| `test_stockage.py::test_enospc_ne_doit_laisser_aucun_fichier_derriere_lui` | #14 §4.10 | 3.4 ✅ | `ENOSPC` nettoie le fichier (et reste NON retenté : `test_enospc_remonte_brut_sans_retry`) |
+| `test_stockage.py::test_download_media_doit_verifier_lespace_disque_avant_decrire` | #14 §4.10 | 3.4 ✅ | Contrôle d'espace **avant** la requête réseau et **avant** toute écriture (`_assert_enough_free_space`, marge `_MIN_FREE_BYTES`) |
+| `test_stockage.py::test_une_erreur_definitive_ne_devrait_pas_etre_retentee` | T11 §7.4 | 3.4 ✅ | Un 403 n'est pas retenté 3 fois — contrôle négatif : `test_une_panne_reellement_transitoire_reste_retentee` (429/5xx) |
+| `test_stockage.py::test_le_menage_doit_purger_les_vignettes_orphelines` | #14 / #51 | 3.4 ✅ | `cleanup_temp_files` balaie `.thumbs` — mais épargne la vignette d'un média vivant (garde sur le radical) |
+| `test_stockage.py::test_le_menage_doit_purger_les_repertoires_de_lediteur` | #14 | 3.4 ✅ | `EDITOR_UPLOAD_DIR` / `EDITOR_OUTPUT_DIR` balayés |
+| `test_stockage.py::test_le_menage_doit_purger_les_medias_du_calendrier` | #56 | 3.4 ✅ | `CALENDAR_DIR` balayé — mais `ScheduledPost.media_path` et `SavedMeme.file_path` sont désormais lus comme références |
+| `test_stockage.py::test_hls_doit_retenter_comme_le_telechargement_direct` | #64 | 3.4b ✅ | `_download_hls` a la même boucle `_MAX_RETRIES` + backoff que `_download_direct` (sauf timeout : définitif) |
+| `test_stockage.py::test_hls_un_fichier_vide_doit_aussi_etre_retente` | #64 | 3.4b ✅ | Un ffmpeg produisant un fichier vide est retenté |
+
+> **Lots 3.4 et 3.4b livrés** (les 9 marqueurs ci-dessus sont retirés ; les
+> lignes 3.3 restent dues). Jumeaux verts de caractérisation réécrits en
+> conséquence : `test_une_url_cdn_expiree_nest_plus_retentee`,
+> `test_enospc_remonte_brut_sans_retry`, `test_hls_un_echec_ffmpeg_ne_laisse_aucun_residu`,
+> `test_le_menage_ne_supprime_jamais_un_repertoire`. Contrôles négatifs ajoutés
+> (sans eux, un correctif trop zélé resterait vert) :
+> `test_le_menage_epargne_la_vignette_dun_media_vivant`,
+> `test_le_menage_epargne_le_visuel_dun_post_programme`,
+> `test_le_menage_epargne_les_fichiers_de_service`,
+> `test_hls_un_timeout_ffmpeg_nest_jamais_retente`.
 
 ### Lot 3.2b / 3.7 / 3.8 / 3.9 / 5.4 — intégrité, retry, viewer
 

@@ -1,10 +1,14 @@
 """
 APScheduler-based job scheduling for the SAMOURAIS SCRAPPER.
 
-Runs three recurring tasks:
+Recurring tasks (see `start_scheduler` for the authoritative list):
     1. Check due profiles every 30 minutes and enqueue scrape jobs.
     2. Retry failed media downloads/uploads every 2 hours.
     3. Clean up stale temp files daily at 03:00.
+    4. Check for due scheduled posts every 5 minutes.
+    5/6. Collect Instagram stats and media insights via the Graph API.
+    7. Probe each platform's session health every 6 hours — WITHOUT ever
+       taking a scrape slot (see `sonder_les_sessions`).
 
 Also provides an API for triggering immediate (manual) scrape jobs.
 """
@@ -24,7 +28,14 @@ from app.config import (
     DOWNLOAD_DIR,
     MAX_CONCURRENT_SCRAPES,
 )
-from app.db import MediaItem, Profile, ScheduledPost, ScrapeJob, SessionLocal
+from app.db import (
+    MediaItem,
+    Profile,
+    SavedMeme,
+    ScheduledPost,
+    ScrapeJob,
+    SessionLocal,
+)
 
 # ---------------------------------------------------------------------------
 # Scheduler singleton
@@ -440,46 +451,96 @@ def check_due_posts() -> None:
         db.close()
 
 
-def cleanup_temp_files() -> None:
+#: Âge minimum d'un fichier avant qu'il soit considéré comme abandonné. Un
+#: téléchargement ou un rendu vidéo en cours ne doit jamais être effacé sous
+#: les pieds de celui qui l'écrit.
+_CLEANUP_MAX_AGE_SECONDS = 24 * 3600  # 24 heures
+
+def _est_fichier_de_service(nom: str) -> bool:
+    """Fichiers jamais balayés : `.gitkeep` (versionné), `.DS_Store`, marqueur
+    de volume… Les supprimer ne libère rien et casse l'arborescence attendue."""
+    return nom.startswith(".")
+
+
+def _cleanup_targets() -> list:
+    """Répertoires balayés par le ménage.
+
+    Résolus à l'APPEL depuis `app.config` (et non importés par valeur en tête
+    de module) pour deux raisons : `DOWNLOAD_DIR` reste substituable par les
+    tests, et les trois autres répertoires suivent `DATA_DIR` quel que soit le
+    montage. Avant le lot 3.4, seul `DOWNLOAD_DIR` était balayé — et seulement
+    à son premier niveau : `.thumbs` (risque #51), les répertoires de l'éditeur
+    et `CALENDAR_DIR` (risque #56) grossissaient sans limite jusqu'à saturer le
+    volume, ce que rien ne signalait.
     """
-    Remove orphaned files from the download directory that are older
-    than 24 hours and not referenced by any media item.
+    from app.config import CALENDAR_DIR, EDITOR_OUTPUT_DIR, EDITOR_UPLOAD_DIR
+
+    return [DOWNLOAD_DIR, EDITOR_UPLOAD_DIR, EDITOR_OUTPUT_DIR, CALENDAR_DIR]
+
+
+def _referenced_paths(db) -> set[str]:
+    """Chemins absolus référencés en base — intouchables par le ménage.
+
+    Trois familles : les médias téléchargés (`MediaItem.local_path`), les
+    visuels du calendrier (`ScheduledPost`) et les memes sauvegardés
+    (`SavedMeme`, qui vivent dans `EDITOR_OUTPUT_DIR/memes`). Sans les deux
+    dernières, étendre le balayage aux répertoires de l'éditeur et du
+    calendrier détruirait des fichiers encore utilisés.
     """
-    logger.debug("Running temp file cleanup...")
-    db = SessionLocal()
-    try:
-        if not DOWNLOAD_DIR.exists():
-            return
-
-        # Build a set of currently-referenced local paths
-        referenced_paths: set[str] = set()
-        rows = (
-            db.query(MediaItem.local_path)
-            .filter(MediaItem.local_path.isnot(None))
-            .all()
-        )
-        for (path,) in rows:
-            if path:
-                referenced_paths.add(os.path.abspath(path))
-
-        now = time.time()
-        max_age_seconds = 24 * 3600  # 24 hours
-        removed = 0
-
-        for entry in os.scandir(str(DOWNLOAD_DIR)):
-            if not entry.is_file():
+    referenced: set[str] = set()
+    for model, colonnes in (
+        (MediaItem, ("local_path",)),
+        (ScheduledPost, ("media_path", "thumbnail_path")),
+        (SavedMeme, ("file_path", "thumbnail_path")),
+    ):
+        for nom_colonne in colonnes:
+            colonne = getattr(model, nom_colonne, None)
+            if colonne is None:  # pragma: no cover - schéma plus ancien
                 continue
-
-            file_path = os.path.abspath(entry.path)
-
-            # Skip files still referenced in the DB
-            if file_path in referenced_paths:
-                continue
-
-            # Only remove files older than max_age_seconds
             try:
-                file_age = now - entry.stat().st_mtime
-                if file_age < max_age_seconds:
+                rows = db.query(colonne).filter(colonne.isnot(None)).all()
+            except Exception as exc:  # pragma: no cover - table absente
+                logger.warning(
+                    "Ménage : lecture de {}.{} impossible ({}) — "
+                    "ces fichiers sont épargnés par précaution",
+                    model.__name__,
+                    nom_colonne,
+                    exc,
+                )
+                db.rollback()
+                continue
+            for (path,) in rows:
+                if path:
+                    referenced.add(os.path.abspath(path))
+    return referenced
+
+
+def _sweep_directory(directory, referenced: set[str], stems: set[str], now: float) -> int:
+    """Supprime récursivement les fichiers orphelins et vieux de *directory*."""
+    if not directory.exists():
+        return 0
+
+    removed = 0
+    for racine, _sous_dossiers, fichiers in os.walk(str(directory)):
+        for nom in fichiers:
+            if _est_fichier_de_service(nom):
+                continue
+
+            file_path = os.path.abspath(os.path.join(racine, nom))
+
+            # Fichier encore référencé en base
+            if file_path in referenced:
+                continue
+
+            # Vignette d'un média vivant : `.thumbs/<nanoid>.jpg` porte le même
+            # radical que `downloads/<nanoid>.mp4`. Sans cette garde, le ménage
+            # détruirait chaque nuit les vignettes de toute la bibliothèque, à
+            # regénérer une par une à coups de ffmpeg au prochain affichage.
+            if os.path.splitext(nom)[0] in stems:
+                continue
+
+            try:
+                if now - os.stat(file_path).st_mtime < _CLEANUP_MAX_AGE_SECONDS:
                     continue
             except OSError:
                 continue
@@ -489,6 +550,27 @@ def cleanup_temp_files() -> None:
                 removed += 1
             except OSError as exc:
                 logger.warning("Failed to remove temp file {}: {}", file_path, exc)
+
+    return removed
+
+
+def cleanup_temp_files() -> None:
+    """
+    Remove orphaned files older than 24 hours, and not referenced in the
+    database, from every directory the application writes to: the download
+    directory (including `.thumbs`), the editor's upload/output directories
+    and the calendar media directory.
+    """
+    logger.debug("Running temp file cleanup...")
+    db = SessionLocal()
+    try:
+        referenced = _referenced_paths(db)
+        stems = {os.path.splitext(os.path.basename(p))[0] for p in referenced}
+
+        now = time.time()
+        removed = 0
+        for directory in _cleanup_targets():
+            removed += _sweep_directory(directory, referenced, stems, now)
 
         if removed > 0:
             logger.info("Cleaned up {} orphaned temp files", removed)
@@ -502,6 +584,50 @@ def cleanup_temp_files() -> None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Santé de session — sonde active périodique
+# ---------------------------------------------------------------------------
+def sonder_les_sessions() -> None:
+    """Sonde active de chaque plateforme qui possède des cookies (toutes les 6 h).
+
+    TROIS PROMESSES, tenues par construction :
+
+    1. Elle ne bloque JAMAIS un scrape. Elle n'acquiert pas
+       `_scrape_semaphore` et ne réserve aucun slot de scrape : APScheduler
+       l'exécute dans son propre thread, et `session_health` protège la sonde
+       par un verrou qui lui est PROPRE (`_VERROU_SONDE`).
+    2. Elle est bornée dans le temps. Chaque sonde a un délai franc
+       (`DELAI_SONDE_S`) ; au-delà elle rend « inconnu » et rend la main.
+    3. Elle ne lève jamais. Un job planifié qui explose ferait taire tous ses
+       passages suivants dans les logs — on journalise et on continue.
+
+    Les plateformes SANS fichier de cookies sont ignorées : il n'y a rien à
+    sonder, et un navigateur coûte trop cher pour l'apprendre.
+    """
+    from app.scraper.session_health import (
+        SondeOccupee,
+        plateformes_sondables,
+        sonder_si_libre,
+    )
+
+    plateformes = plateformes_sondables()
+    if not plateformes:
+        logger.info("Sonde de session : aucune plateforme avec des cookies, rien a faire")
+        return
+
+    for plateforme in plateformes:
+        try:
+            etat = sonder_si_libre(plateforme)
+            niveau = logger.warning if etat.urgent else logger.info
+            niveau(
+                "Sante de session {} : {} — {}", plateforme, etat.etat, etat.message
+            )
+        except SondeOccupee:
+            logger.info("Sonde de session {} ignoree : une sonde tourne deja", plateforme)
+        except Exception as exc:
+            logger.error("Sonde de session {} en echec: {}", plateforme, exc)
+
+
 def _recover_stale_jobs() -> None:
     """Fail jobs left in 'queued'/'running' by a previous process.
 
@@ -611,8 +737,22 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Job 7: Sonde active de santé de session toutes les 6 heures.
+    # Espacée volontairement : chaque passage lance un navigateur furtif par
+    # plateforme. `next_run_time` n'est PAS forcé au démarrage — le boot ne
+    # doit pas payer un navigateur, le signal passif suffit à l'affichage
+    # immédiat, et le bouton « Vérifier maintenant » reste disponible.
+    scheduler.add_job(
+        sonder_les_sessions,
+        trigger="interval",
+        hours=6,
+        id="sonder_les_sessions",
+        name="Sonde de sante des sessions",
+        replace_existing=True,
+    )
+
     scheduler.start()
-    logger.info("Scheduler started with 6 recurring jobs")
+    logger.info("Scheduler started with 7 recurring jobs")
 
     # Run an initial check immediately so we do not wait 30 minutes for
     # the first pass after server startup

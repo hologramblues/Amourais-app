@@ -281,12 +281,32 @@
   </div>
 </div>
 
-{# ===== COOKIES ===== #}
-<div class="s-section">
+{# ===== SANTÉ DE SESSION =====
+   Une ligne par plateforme, LES PLUS URGENTES EN TÊTE (tri fait côté
+   serveur par la gravité de l'état). Chaque ligne porte, dans l'ordre :
+   le nom, la pastille + le MOT d'état, la cause en clair, la date
+   ABSOLUE de la dernière session valide, le geste correctif, puis les
+   deux actions — vérifier en direct, réimporter les cookies.
+
+   L'ancien affichage tenait en une ligne : « OK (10/03/2026 20:47) » en
+   vert dès que le fichier existait. Le fichier existe toujours ; la
+   session, elle, est morte depuis mars. #}
+{%- set _badge = {'ok': 's-badge-green', 'warn': 's-badge-orange', 'danger': 's-badge-red', 'neutre': 's-badge-gray'} -%}
+{%- set _dot = {'ok': 's-dot-green', 'warn': 's-dot-orange', 'danger': 's-dot-red', 'neutre': 's-dot-gray'} -%}
+<div class="s-section" id="sessions">
   <div class="s-card">
     <div class="s-card-header">
-      <h3>Sessions (Cookies)</h3>
+      <h3>Sessions par plateforme</h3>
+      <span class="s-sess-resume s-sess-resume--{{ sessions_resume.ton }}">
+        <span class="s-dot {{ _dot[sessions_resume.ton] }}" aria-hidden="true"></span>{{ sessions_resume.titre }}
+      </span>
     </div>
+
+    <p class="s-sess-intro">
+      L'état ci-dessous ne se contente pas de constater qu'un fichier de cookies existe :
+      il lit l'expiration des cookies d'authentification, l'issue des derniers scrapes, et —
+      quand tu le demandes — la vraie page servie par la plateforme.
+    </p>
 
     <details class="mb-3">
       <summary>Comment recuperer ses cookies ?</summary>
@@ -303,73 +323,154 @@
       </div>
     </details>
 
-    <div class="s-cookie-grid">
-      <div>
-        <h4>Instagram</h4>
-        <form hx-post="/api/settings/session" hx-encoding="multipart/form-data" hx-target="#session-ig-status" hx-swap="innerHTML">
-          <input type="hidden" name="platform" value="instagram">
-          <input type="file" name="cookies" accept=".json,.txt" required>
-          <button type="submit" class="s-btn-sm mt-1">Upload</button>
-        </form>
-        <div id="session-ig-status" class="mt-1">
-          {% if sessions.instagram %}
-            <small class="text-success">OK ({{ sessions.instagram|formatdate }})</small>
-          {% else %}
-            <small class="text-muted">Pas de cookies</small>
-          {% endif %}
-        </div>
-      </div>
+    {% if not sessions_sante %}
+      <p class="s-sess-panne">
+        L'état des sessions n'a pas pu être calculé. Les cookies restent en place :
+        réimporte-les seulement si les scrapes échouent.
+      </p>
+    {% endif %}
 
-      <div>
-        <h4>TikTok</h4>
-        <form hx-post="/api/settings/session" hx-encoding="multipart/form-data" hx-target="#session-tt-status" hx-swap="innerHTML">
-          <input type="hidden" name="platform" value="tiktok">
-          <input type="file" name="cookies" accept=".json,.txt" required>
-          <button type="submit" class="s-btn-sm mt-1">Upload</button>
-        </form>
-        <div id="session-tt-status" class="mt-1">
-          {% if sessions.tiktok %}
-            <small class="text-success">OK ({{ sessions.tiktok|formatdate }})</small>
-          {% else %}
-            <small class="text-muted">Pas de cookies</small>
-          {% endif %}
-        </div>
-      </div>
+    <ul class="s-sess-list">
+      {% for s in sessions_sante %}
+      <li class="s-sess" data-ton="{{ s.ton }}" data-plateforme="{{ s.plateforme }}" id="session-{{ s.plateforme }}">
 
-      <div>
-        <h4>Twitter / X</h4>
-        <form hx-post="/api/settings/session" hx-encoding="multipart/form-data" hx-target="#session-tw-status" hx-swap="innerHTML">
-          <input type="hidden" name="platform" value="twitter">
-          <input type="file" name="cookies" accept=".json,.txt" required>
-          <button type="submit" class="s-btn-sm mt-1">Upload</button>
-        </form>
-        <div id="session-tw-status" class="mt-1">
-          {% if sessions.twitter %}
-            <small class="text-success">OK ({{ sessions.twitter|formatdate }})</small>
-          {% else %}
-            <small class="text-muted">Pas de cookies</small>
-          {% endif %}
+        <div class="s-sess__head">
+          <h4 class="s-sess__nom">{{ s.plateforme|platformicon|safe }} {{ s.nom }}</h4>
+          <span class="s-badge {{ _badge[s.ton] }}">
+            <span class="s-dot {{ _dot[s.ton] }}" aria-hidden="true"></span>{{ s.libelle }}
+          </span>
         </div>
-      </div>
 
-      <div>
-        <h4>Reddit</h4>
-        <form hx-post="/api/settings/session" hx-encoding="multipart/form-data" hx-target="#session-rd-status" hx-swap="innerHTML">
-          <input type="hidden" name="platform" value="reddit">
-          <input type="file" name="cookies" accept=".json,.txt" required>
-          <button type="submit" class="s-btn-sm mt-1">Upload</button>
-        </form>
-        <div id="session-rd-status" class="mt-1">
-          {% if sessions.reddit %}
-            <small class="text-success">OK ({{ sessions.reddit|formatdate }})</small>
-          {% else %}
-            <small class="text-muted">Pas de cookies</small>
+        {# La CAUSE, en clair. Jamais « Erreur ». #}
+        <p class="s-sess__msg">{{ s.message }}</p>
+
+        {% if s.alerte %}
+        <p class="s-sess__alerte">{{ s.alerte }}</p>
+        {% endif %}
+
+        {# Le GESTE, seulement quand il y a quelque chose à faire. #}
+        {% if s.geste and (s.urgent or s.alerte or s.etat == 'inconnu') %}
+        <p class="s-sess__geste">{{ s.geste }}</p>
+        {% endif %}
+
+        {# Dates ABSOLUES : « il y a 5 mois » ne se recoupe avec aucun souvenir. #}
+        <ul class="s-sess__faits">
+          <li>{{ s.succes_texte }}</li>
+          <li>{{ s.cookies_texte }}</li>
+          {% if s.expire_texte %}<li>{{ s.expire_texte }}</li>{% endif %}
+          <li>{{ s.sonde_texte }}</li>
+          {% if not s.sonde_verifiee %}
+          <li class="s-sess__reserve">Vérification en direct non éprouvée sur cette plateforme — le résultat peut rester « indéterminé ».</li>
           {% endif %}
+        </ul>
+
+        <div class="s-sess__actions">
+          <button type="button" class="s-btn s-sess__probe"
+                  data-probe="{{ s.plateforme }}"
+                  data-sonde="{{ s.derniere_sonde or 0 }}"
+                  aria-describedby="sonde-{{ s.plateforme }}">Vérifier maintenant</button>
+
+          {# Envoi en fetch() et non en HTMX : c'est le choix déjà pris par cet
+             écran (« bypasses HTMX for reliability ») pour le multipart. Le
+             script du bas de page le reprend et recharge après un import
+             réussi, sans quoi le voyant resterait sur l'état d'avant. #}
+          <form class="s-sess__form" data-upload data-cible="#session-{{ s.slug }}-status">
+            <input type="hidden" name="platform" value="{{ s.plateforme }}">
+            <label class="s-sess__file">
+              <span>Fichier de cookies</span>
+              <input type="file" name="cookies" accept=".json,.txt" required>
+            </label>
+            <button type="submit" class="s-btn">Réimporter</button>
+          </form>
         </div>
-      </div>
-    </div>
+
+        <p class="s-sess__sonde" id="sonde-{{ s.plateforme }}" role="status" aria-live="polite"></p>
+        <div id="session-{{ s.slug }}-status" class="s-sess__upload"></div>
+      </li>
+      {% endfor %}
+    </ul>
   </div>
 </div>
+
+<script>
+/* « Vérifier maintenant » — la SONDE ACTIVE.
+   Elle lance un vrai navigateur côté serveur : l'API répond 202 tout de
+   suite et travaille en fond. On interroge donc l'état jusqu'à ce que
+   l'horodatage de sonde change, puis on recharge la page pour que le
+   serveur re-rende TOUT (libellés, dates, tri par urgence) — une seule
+   mise en forme, aucune version JavaScript à maintenir en double. */
+(function () {
+  var INTERVALLE_MS = 3000;
+  var PLAFOND_MS = 150000;   // la sonde a 90 s côté serveur : on laisse la marge
+
+  function sonder(bouton) {
+    var plateforme = bouton.getAttribute('data-probe');
+    var depart = parseInt(bouton.getAttribute('data-sonde') || '0', 10) || 0;
+    var ligne = document.getElementById('sonde-' + plateforme);
+    var t0 = Date.now();
+
+    function dire(texte, classe) {
+      if (!ligne) return;
+      ligne.textContent = texte;
+      ligne.className = 's-sess__sonde' + (classe ? ' ' + classe : '');
+    }
+
+    function fini(texte, classe) {
+      bouton.disabled = false;
+      bouton.removeAttribute('aria-busy');
+      bouton.textContent = 'Vérifier maintenant';
+      dire(texte, classe);
+    }
+
+    bouton.disabled = true;
+    bouton.setAttribute('aria-busy', 'true');
+    bouton.textContent = 'Vérification…';
+    dire('Navigateur lancé sur ' + plateforme + '. Cela prend jusqu’à une minute et demie.', 's-sess__sonde--attente');
+
+    fetch('/api/sessions/' + encodeURIComponent(plateforme) + '/probe', { method: 'POST' })
+      .then(function (r) { return r.json().then(function (d) { return { code: r.status, corps: d }; }); })
+      .then(function (rep) {
+        if (rep.code === 409) {
+          fini('Une autre vérification est déjà en cours. Réessaie dans un instant.', 's-sess__sonde--warn');
+          return;
+        }
+        if (rep.code !== 202) {
+          fini(rep.corps && rep.corps.error ? rep.corps.error : 'Vérification impossible à lancer.', 's-sess__sonde--erreur');
+          return;
+        }
+        attendre();
+      })
+      .catch(function (e) {
+        fini('Réseau indisponible : ' + e.message, 's-sess__sonde--erreur');
+      });
+
+    function attendre() {
+      if (Date.now() - t0 > PLAFOND_MS) {
+        fini('La vérification n’a pas rendu de verdict dans le temps imparti. L’état affiché reste celui d’avant.', 's-sess__sonde--warn');
+        return;
+      }
+      fetch('/api/sessions/' + encodeURIComponent(plateforme) + '/health', { headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          var sonde = d && d.signaux && d.signaux.sonde;
+          var vu = sonde && (sonde.derniere_sonde || sonde.verifie_le) || 0;
+          if (vu > depart) {
+            dire('Verdict reçu : ' + (sonde.etat || '') + '. Mise à jour de l’écran…', 's-sess__sonde--attente');
+            location.reload();
+            return;
+          }
+          window.setTimeout(attendre, INTERVALLE_MS);
+        })
+        .catch(function () { window.setTimeout(attendre, INTERVALLE_MS); });
+    }
+  }
+
+  var boutons = document.querySelectorAll('[data-probe]');
+  for (var i = 0; i < boutons.length; i++) {
+    (function (b) { b.addEventListener('click', function () { sonder(b); }); })(boutons[i]);
+  }
+})();
+</script>
 
 {# ===== ADVANCED ===== #}
 <div class="s-section">
@@ -518,18 +619,16 @@ document.body.addEventListener('htmx:afterRequest', function(evt) {
   }
 })();
 
-/* ── Cookie upload via JS (bypasses HTMX for reliability) ── */
-document.querySelectorAll('.s-cookie-grid form').forEach(function(form) {
-  /* Remove HTMX attributes so it doesn't interfere */
-  form.removeAttribute('hx-post');
-  form.removeAttribute('hx-encoding');
-  form.removeAttribute('hx-swap');
-
+/* ── Import de cookies en fetch() (HTMX écarté ici pour le multipart) ──
+   Ajout du lot « santé de session » : un import réussi CHANGE l'état de la
+   plateforme. Sans rechargement, la page continuerait d'afficher le verdict
+   d'avant — exactement le mensonge que ce chantier corrige. */
+document.querySelectorAll('form[data-upload]').forEach(function(form) {
   form.addEventListener('submit', function(e) {
     e.preventDefault();
     var btn = form.querySelector('button[type="submit"]');
-    var targetId = form.getAttribute('hx-target');
-    var statusEl = targetId ? document.querySelector(targetId) : null;
+    var cible = form.getAttribute('data-cible');
+    var statusEl = cible ? document.querySelector(cible) : null;
     var fileInput = form.querySelector('input[type="file"]');
 
     if (!fileInput || !fileInput.files.length) {
@@ -539,22 +638,28 @@ document.querySelectorAll('.s-cookie-grid form').forEach(function(form) {
 
     var fd = new FormData(form);
     btn.disabled = true;
-    btn.textContent = 'Upload...';
+    btn.textContent = 'Import…';
 
     fetch('/api/settings/session', {
       method: 'POST',
       body: fd
     })
-    .then(function(r) { return r.text(); })
-    .then(function(html) {
-      if (statusEl) statusEl.innerHTML = html;
+    .then(function(r) { return r.text().then(function(html) { return { ok: r.ok, html: html }; }); })
+    .then(function(rep) {
+      if (statusEl) statusEl.innerHTML = rep.html;
       btn.disabled = false;
-      btn.textContent = 'Upload';
+      btn.textContent = 'Réimporter';
+      if (rep.ok) {
+        if (statusEl) {
+          statusEl.innerHTML += '<small class="text-secondary"> Recalcul de l\'état…</small>';
+        }
+        window.setTimeout(function() { location.reload(); }, 1200);
+      }
     })
     .catch(function(err) {
       if (statusEl) statusEl.innerHTML = '<small class="text-error">Erreur: ' + err.message + '</small>';
       btn.disabled = false;
-      btn.textContent = 'Upload';
+      btn.textContent = 'Réimporter';
     });
   });
 });

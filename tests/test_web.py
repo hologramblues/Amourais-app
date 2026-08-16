@@ -1065,6 +1065,64 @@ def test_media_file_dl_1_force_le_telechargement(client, download_dir_des_routes
         telechargement.close()
 
 
+def test_media_file_pose_nosniff(client, download_dir_des_routes):
+    """Lot 2.5 (§6.6 / T10) : le navigateur ne devine JAMAIS le type servi.
+
+    Sans `nosniff`, un fichier au type générique dont le contenu ressemble à du
+    HTML est interprété comme du HTML sur l'origine de l'application.
+    """
+    (download_dir_des_routes / "media-legitime.jpg").write_bytes(b"\xff\xd8\xffOK")
+
+    reponse = client.get("/media/file/media-legitime.jpg")
+    try:
+        assert reponse.headers["X-Content-Type-Options"] == "nosniff"
+    finally:
+        reponse.close()
+
+
+@pytest.mark.security
+@pytest.mark.parametrize("nom", ["piege.html", "piege.svg", "piege.bin"])
+def test_media_file_ne_sert_jamais_inline_un_fichier_non_media(
+    client, download_dir_des_routes, nom
+):
+    """Lot 2.5 : les fichiers écrits AVANT la liste blanche restent sur le volume.
+
+    `_guess_extension` ne peut plus créer de `.html` ni de `.svg`, mais ceux
+    déjà téléchargés étaient encore servis INLINE, same-origin : XSS stockée.
+    Ils sortent désormais en pièce jointe et en `application/octet-stream`.
+    """
+    (download_dir_des_routes / nom).write_bytes(
+        b"<html><script>alert(document.domain)</script></html>"
+    )
+
+    reponse = client.get(f"/media/file/{nom}")
+    try:
+        assert reponse.status_code == 200
+        assert reponse.headers["Content-Disposition"].startswith("attachment")
+        assert reponse.headers["Content-Type"].startswith("application/octet-stream")
+        assert reponse.headers["X-Content-Type-Options"] == "nosniff"
+    finally:
+        reponse.close()
+
+
+def test_media_file_sert_toujours_les_vrais_medias_inline(
+    client, download_dir_des_routes
+):
+    """Contrôle négatif : la mesure ci-dessus ne casse ni le viewer ni le lecteur.
+
+    Une vidéo servie en pièce jointe ne se lirait plus dans la lightbox.
+    """
+    (download_dir_des_routes / "clip.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42")
+
+    reponse = client.get("/media/file/clip.mp4")
+    try:
+        assert reponse.status_code == 200
+        assert "attachment" not in reponse.headers.get("Content-Disposition", "")
+        assert reponse.headers["Content-Type"].startswith("video/mp4")
+    finally:
+        reponse.close()
+
+
 def test_media_thumb_sert_la_vignette_en_cache_sans_ffmpeg(
     client, download_dir_des_routes, ffmpeg_interdit
 ):

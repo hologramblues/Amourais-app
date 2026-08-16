@@ -268,16 +268,17 @@ def _scenario_echec_total_de_fetch(factories, install_extractor, run_job):
 def test_scrape_sain_sans_nouveaute_nest_pas_signale_comme_une_erreur(
     factories, install_extractor, run_job, downloads
 ):
-    """Caractérisation : un scrape sain ne produit ni `failed` ni message d'erreur.
+    """RÉGRESSION (lot 3.3) : un scrape sain ne produit ni erreur ni ambiguïté.
 
-    L'assertion est volontairement tolérante sur le statut exact (`empty`
-    aujourd'hui, `completed` après le lot 3.3) : ce test verrouille le fait
-    qu'un cycle nominal ne soit jamais présenté comme un échec, pas la valeur
-    fautive elle-même.
+    Ce test portait avant le lot 3.3 une assertion tolérante
+    (`status in {"empty", "completed"}`) parce que la valeur correcte n'était
+    pas encore atteignable. Le statut étant désormais décidé sur `total_seen`,
+    la tolérance n'a plus lieu d'être : elle rendrait le test incapable de
+    rougir sur un retour en arrière.
     """
     profil, job = _scenario_scrape_sain_sans_nouveaute(factories, install_extractor, run_job)
 
-    assert job.status in {"empty", "completed"}
+    assert job.status == "completed"
     assert job.error_message is None
     assert job.media_found == 0
     assert job.media_new == 0
@@ -285,19 +286,14 @@ def test_scrape_sain_sans_nouveaute_nest_pas_signale_comme_une_erreur(
     assert profil.last_scraped_at == FIXED_NOW
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "risque #3 / §4.1 AUDIT.md — `media_found = len(result.media)` ne compte que "
-        "les NOUVEAUX médias, donc un cycle sain sans nouveauté tombe dans la branche "
-        "`empty` de pipeline.py:417-420 ; la variable discriminante `total_seen` est "
-        "pourtant calculée deux lignes plus haut ; lot 3.3 (après 1.5)"
-    ),
-)
 def test_scrape_sain_sans_nouveaute_devrait_etre_completed(
     factories, install_extractor, run_job, downloads
 ):
-    """25 posts vus, tous déjà connus : c'est un SUCCÈS, pas une anomalie."""
+    """25 posts vus, tous déjà connus : c'est un SUCCÈS, pas une anomalie.
+
+    Corrigé par le lot 3.3 : `pipeline.py` décide `empty` sur `total_seen`
+    (posts VUS sur la page) et non plus sur `media_found` (posts NOUVEAUX).
+    """
     _profil, job = _scenario_scrape_sain_sans_nouveaute(factories, install_extractor, run_job)
 
     assert job.status == "completed"
@@ -385,18 +381,38 @@ def test_exception_dextraction_doit_quand_meme_horodater_le_profil(
 def test_profil_introuvable_marque_le_job_failed(factories, run_job, db_session):
     """Caractérisation : `pipeline.py:112` — l'autre écrivain de `failed`.
 
-    La ligne `profiles` est supprimée en SQL brut : `PRAGMA foreign_keys` n'est
-    jamais activé (risque #11), donc le job survit à son profil — c'est
-    précisément l'état que `pipeline.py:109-113` doit savoir traiter.
+    Depuis le lot 3.7, `PRAGMA foreign_keys=ON` est posé sur chaque connexion :
+    supprimer un profil emporte ses jobs par `ON DELETE CASCADE`, et un job
+    orphelin ne peut plus être FABRIQUÉ. Reste l'état que cette branche doit
+    savoir traiter : un job orphelin DÉJÀ EN BASE. SQLite ne revalide jamais
+    les lignes existantes quand on active le PRAGMA — un tel job survit donc
+    à la migration, et `pipeline.py:109-113` reste son seul filet.
+
+    On le reproduit fidèlement par une connexion sqlite3 nue (le PRAGMA y est
+    OFF par défaut, comme il l'était pour toute l'application avant le lot).
     """
-    from sqlalchemy import text
+    import sqlite3
+
+    import app.db as app_db
 
     profil = factories.profile(platform="instagram")
     job = factories.scrape_job(profil)
-    db_session.execute(text("DELETE FROM profiles WHERE id = :id"), {"id": profil.id})
-    db_session.commit()
+    job_id, profil_id = job.id, profil.id
+    db_session.commit()  # libère le verrou d'écriture avant la connexion nue
 
-    run_job(job.id)
+    conn = sqlite3.connect(str(app_db.DB_PATH))
+    try:
+        conn.execute("DELETE FROM profiles WHERE id = ?", (profil_id,))
+        conn.commit()
+        restants = conn.execute(
+            "SELECT COUNT(*) FROM scrape_jobs WHERE id = ?", (job_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert restants == 1, "le job orphelin doit survivre à son profil"
+    db_session.expire_all()
+
+    run_job(job_id)
 
     assert job.status == "failed"
     assert job.error_message == "Profile not found"
@@ -587,17 +603,20 @@ def test_matrice_du_statut_final(
     assert job.media_new == nb_medias
     assert job.media_downloaded == nb_medias - nb_echecs_de_telechargement
     assert job.media_uploaded == nb_medias - nb_echecs_de_telechargement
-    # `_mark_job` (pipeline.py:66) n'horodate QUE completed/failed/partial :
-    # un job `empty` n'a jamais de date de fin. Cf. la paire de tests
-    # dédiée ci-dessous (lot 3.3).
-    assert job.completed_at == (None if statut_attendu == "empty" else FIXED_NOW)
+    # Lot 3.3 : `empty` a rejoint les statuts TERMINAUX de `_mark_job`, les
+    # quatre cas s'horodatent donc de la même façon.
+    assert job.completed_at == FIXED_NOW
 
 
-def test_un_job_empty_na_pas_de_date_de_fin(factories, install_extractor, run_job):
-    """CARACTÉRISATION : `_mark_job` (pipeline.py:62-70) ne pose `completed_at`
-    que pour `completed`/`failed`/`partial`. Un scrape SAIN mais sans nouveauté
-    — la moitié des jobs quotidiens — se termine donc sans date de fin, et
-    l'UI n'a rien à afficher."""
+def test_un_job_empty_devrait_avoir_une_date_de_fin(
+    factories, install_extractor, run_job
+):
+    """RÉGRESSION (lot 3.3) : `empty` est un état TERMINAL, il s'horodate.
+
+    Avant le lot 3.3, `_mark_job` ne posait `completed_at` que pour
+    `completed`/`failed`/`partial` : un job `empty` restait sans date de fin et
+    l'interface n'avait rien à afficher.
+    """
     profil = factories.profile(platform="instagram", scrape_mode="daily")
     job = factories.scrape_job(profil)
     install_extractor(resultat_sain(media=[], total_seen=0))
@@ -606,29 +625,6 @@ def test_un_job_empty_na_pas_de_date_de_fin(factories, install_extractor, run_jo
 
     assert job.status == "empty"
     assert job.started_at == FIXED_NOW
-    assert job.completed_at is None
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "risque #3 / §4.1 AUDIT.md — `_mark_job` (pipeline.py:66) n'horodate "
-        "`completed_at` que pour completed/failed/partial : un job `empty` est "
-        "un job TERMINÉ et doit avoir une date de fin ; lot 3.3 (volet "
-        "« completed_at pour empty »)"
-    ),
-)
-def test_un_job_empty_devrait_avoir_une_date_de_fin(
-    factories, install_extractor, run_job
-):
-    """COMPORTEMENT ATTENDU : `empty` est un état TERMINAL, il s'horodate."""
-    profil = factories.profile(platform="instagram", scrape_mode="daily")
-    job = factories.scrape_job(profil)
-    install_extractor(resultat_sain(media=[], total_seen=0))
-
-    run_job(job.id)
-
-    assert job.status == "empty"
     assert job.completed_at == FIXED_NOW
 
 

@@ -51,12 +51,14 @@ from sqlalchemy import (
     Table,
     Text,
     create_engine,
+    event,
     text,
 )
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import sessionmaker
 
 import app.db as app_db
-from app.db import Base
+from app.db import Base, MediaItem, Profile, SavedMeme, ScheduledPost
 
 pytestmark = pytest.mark.db
 
@@ -116,6 +118,52 @@ CREATE TABLE media_items (
     downloaded_at INTEGER,
     uploaded_at INTEGER,
     CONSTRAINT idx_media_dedup UNIQUE (profile_id, post_id, media_url)
+)
+"""
+
+
+#: `scheduled_posts` et `saved_memes` TELS QU'ILS SONT EN PRODUCTION (relevé par
+#: `SELECT sql FROM sqlite_master` sur une copie de `data/samourais.db`) : leur
+#: clé étrangère `source_media_id` ne porte AUCUNE clause `ON DELETE`. Le lot
+#: 3.7 ajoute `ondelete="SET NULL"` au modèle, ce qui ne change QUE les bases
+#: neuves — SQLite ne sait pas modifier une clé étrangère par `ALTER TABLE`, et
+#: reconstruire la table serait destructif. Ces deux DDL servent à prouver que
+#: la relation ORM couvre le cas réel.
+LEGACY_SCHEDULED_POSTS_DDL = """
+CREATE TABLE scheduled_posts (
+    id INTEGER NOT NULL,
+    title TEXT,
+    caption TEXT,
+    media_path TEXT,
+    media_type TEXT,
+    template_format TEXT,
+    thumbnail_path TEXT,
+    source_media_id INTEGER,
+    scheduled_at INTEGER,
+    status TEXT NOT NULL,
+    platforms TEXT,
+    publish_results TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(source_media_id) REFERENCES media_items (id)
+)
+"""
+
+LEGACY_SAVED_MEMES_DDL = """
+CREATE TABLE saved_memes (
+    id INTEGER NOT NULL,
+    title TEXT,
+    caption TEXT,
+    media_type TEXT NOT NULL,
+    template_format TEXT,
+    file_path TEXT NOT NULL,
+    thumbnail_path TEXT,
+    file_size INTEGER,
+    source_media_id INTEGER,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(source_media_id) REFERENCES media_items (id)
 )
 """
 
@@ -530,47 +578,58 @@ def test_create_all_ne_cree_aucun_index_sur_une_table_preexistante(tmp_path):
     )
 
 
-def test_init_db_sur_base_legacy_ne_recree_pas_les_index_de_media_items(legacy_db):
-    """CARACTÉRISATION du risque #62 sur le VRAI schéma — état PARTIEL.
+def test_init_db_sur_base_legacy_indexe_bien_media_items(legacy_db):
+    """RÉGRESSION du risque #62 sur le VRAI schéma (lot 3.8).
 
-    `media_items` préexiste sans ses index : `create_all()` ne les crée pas.
+    `media_items` préexiste SANS ses index. `create_all()` saute la table
+    entière, donc ses `CREATE INDEX` : avant le lot 3.8, `idx_media_status` et
+    `idx_media_profile` restaient absents d'une base de production. C'est
+    désormais `_migrate_add_indexes()` — piloté par les `Index(...)` déclarés,
+    sans aucune liste en dur — qui les pose.
 
-    Le lot A (doublons) a ajouté à `_migrate_add_columns` un CREATE INDEX IF
-    NOT EXISTS pour SES deux index — `idx_media_md5` et `idx_media_phash` —
-    parce que la recherche de doublons balaierait sinon toute la table à
-    chaque appel. Ces deux-là existent donc désormais sur une base legacy.
-
-    Le risque #62 reste ENTIER pour les autres : `idx_media_status` et
-    `idx_media_profile` sont déclarés dans le modèle et toujours absents
-    d'une base préexistante. Le lot 3.8 (un `_migrate_add_indexes()`
-    générique, piloté par les `Index(...)` déclarés) reste à faire.
+    Ce test nomme les index un par un, là où son voisin générique compare des
+    ensembles : si quelqu'un retire une déclaration du modèle, le test
+    générique reste vert (moins de déclarations, moins d'attentes), celui-ci
+    rougit.
     """
     path = legacy_db(LEGACY_PROFILES_DDL, LEGACY_MEDIA_ITEMS_DDL, rebind_engine=True)
+    assert _index_names(path, "media_items") == set(), "la base legacy part sans index"
 
     app_db.init_db()
 
-    assert _index_names(path, "media_items") == {"idx_media_md5", "idx_media_phash"}
-    assert _declared_index_names("media_items") == {
+    assert {
         "idx_media_status",
         "idx_media_profile",
         "idx_media_md5",
         "idx_media_phash",
-    }
-    # Le cœur de la caractérisation : deux index déclarés restent absents.
-    assert _declared_index_names("media_items") - _index_names(path, "media_items") == {
-        "idx_media_status",
-        "idx_media_profile",
-    }
+        "idx_media_posted_at",
+        "idx_media_status_posted",
+        "idx_media_date_effective",
+    } <= _index_names(path, "media_items")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="risque #62 AUDIT.md — create_all() n'indexe pas une table "
-    "préexistante ; il manque un _migrate_add_indexes() (db.py:294-298) ; lot 3.8",
-)
+def test_migrate_add_indexes_est_idempotent(legacy_db):
+    """Trois passages de suite ne doivent ni lever ni changer quoi que ce soit.
+
+    `init_db()` est appelé à CHAQUE démarrage (run.py) : une migration d'index
+    non idempotente ferait tomber l'application au deuxième boot.
+    """
+    path = legacy_db(LEGACY_PROFILES_DDL, LEGACY_MEDIA_ITEMS_DDL, rebind_engine=True)
+
+    app_db.init_db()
+    apres_1 = _index_names(path)
+    # Sans cette garde, le test survivrait à un `_migrate_add_indexes` réduit à
+    # un no-op : deux ensembles VIDES sont égaux.
+    assert "idx_media_status" in apres_1, "le premier passage n'a rien indexé"
+    app_db.init_db()
+    app_db.init_db()
+
+    assert _index_names(path) == apres_1
+
+
 def test_init_db_sur_base_legacy_doit_creer_les_index_declares(legacy_db):
-    """COMPORTEMENT ATTENDU (T1, volet index) : après `init_db()`, tout
-    `Index(...)` déclaré existe en base, y compris sur une table préexistante."""
+    """RÉGRESSION (T1, volet index) : après `init_db()`, tout `Index(...)`
+    déclaré existe en base, y compris sur une table préexistante (lot 3.8)."""
     path = legacy_db(LEGACY_PROFILES_DDL, LEGACY_MEDIA_ITEMS_DDL, rebind_engine=True)
 
     app_db.init_db()
@@ -583,39 +642,148 @@ def test_init_db_sur_base_legacy_doit_creer_les_index_declares(legacy_db):
     assert manquants == {}
 
 
+# ---------------------------------------------------------------------------
+# Risque #25 — les tris de la bibliothèque cessent de passer par un TEMP B-TREE
+# ---------------------------------------------------------------------------
+
+#: Les requêtes de tri RÉELLEMENT émises par l'application, et l'index qui doit
+#: les servir. `USE TEMP B-TREE FOR ORDER BY` dans le plan signifie que SQLite
+#: matérialise et trie tout l'ensemble en mémoire à chaque page.
+_TRIS_DE_PRODUCTION = [
+    # analytics/api.py:817
+    (
+        "SELECT id FROM media_items ORDER BY posted_at DESC, id DESC",
+        "idx_media_posted_at",
+    ),
+    # viewer_api.py:378 — le tri PAR DÉFAUT de la bibliothèque
+    (
+        "SELECT id FROM media_items "
+        "ORDER BY coalesce(posted_at, discovered_at) DESC, id DESC",
+        "idx_media_date_effective",
+    ),
+    # viewer_api.py — bibliothèque filtrée par statut
+    (
+        "SELECT id FROM media_items WHERE status = 'uploaded' ORDER BY posted_at DESC",
+        "idx_media_status_posted",
+    ),
+    # web/api.py:544 et :586 — l'historique des jobs
+    (
+        "SELECT id FROM scrape_jobs ORDER BY created_at DESC LIMIT 20",
+        "idx_jobs_created",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "requete, index_attendu",
+    _TRIS_DE_PRODUCTION,
+    ids=[i for _, i in _TRIS_DE_PRODUCTION],
+)
+def test_les_tris_de_production_nont_plus_de_tri_temporaire(
+    db_engine, requete, index_attendu
+):
+    """Risque #25 / lot 3.8 : preuve par `EXPLAIN QUERY PLAN`.
+
+    Déclarer un index ne prouve rien — c'est le planificateur qui tranche.
+    Mesuré identiquement sur une COPIE de la base de production : les quatre
+    plans passent de `SCAN ... USE TEMP B-TREE FOR ORDER BY` à un parcours
+    d'index.
+    """
+    with db_engine.connect() as conn:
+        plan = " | ".join(
+            str(row[3]) for row in conn.exec_driver_sql(f"EXPLAIN QUERY PLAN {requete}")
+        )
+
+    assert "TEMP B-TREE" not in plan, f"tri temporaire sur {requete!r} : {plan}"
+    assert index_attendu in plan, f"{index_attendu} inutilisé : {plan}"
+
+
 # ===========================================================================
 # 5. Intégrité référentielle — PRAGMA foreign_keys (risques #11/#12, lot 3.7)
 # ===========================================================================
 
 
-def test_pragma_foreign_keys_nest_pas_active(db_engine):
-    """CARACTÉRISATION du risque #11 : le listener de `db.py:249-255` pose WAL,
-    `busy_timeout` et `synchronous`, mais jamais `foreign_keys=ON`."""
+def test_pragma_foreign_keys_est_active(db_engine):
+    """RÉGRESSION du risque #11 (lot 3.7) : le listener de `app/db.py` pose
+    désormais `foreign_keys=ON` en plus de WAL, `busy_timeout` et
+    `synchronous`. Sans lui, tous les `ON DELETE CASCADE` du schéma sont
+    décoratifs."""
     with db_engine.connect() as conn:
-        assert conn.exec_driver_sql("PRAGMA foreign_keys").scalar() == 0
-        # Les 3 PRAGMA réellement posés, eux, sont bien là.
+        assert conn.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+        # Les 3 PRAGMA d'origine ne doivent pas avoir été perdus au passage.
         assert conn.exec_driver_sql("PRAGMA journal_mode").scalar() == "wal"
         assert conn.exec_driver_sql("PRAGMA busy_timeout").scalar() == 15000
 
 
-def test_une_ligne_orpheline_est_acceptee_sans_broncher(db_session):
-    """CARACTÉRISATION : la clé étrangère `media_items.profile_id` n'est pas
-    contrôlée — on insère un enfant dont le parent n'existe pas."""
-    db_session.execute(
-        text(
+def test_une_ligne_orpheline_est_desormais_refusee(db_session):
+    """RÉGRESSION (lot 3.7) : insérer un enfant sans parent lève.
+
+    C'est la contrepartie visible du PRAGMA : `media_items.profile_id` est
+    enfin contrôlé par le moteur, plus seulement par la bonne volonté du code
+    appelant.
+    """
+    with pytest.raises(IntegrityError) as excinfo:
+        db_session.execute(
+            text(
+                "INSERT INTO media_items "
+                "(profile_id, platform, post_id, media_type, media_url, status, "
+                " retry_count, discovered_at) "
+                "VALUES (424242, 'instagram', 'orphelin', 'image', "
+                "'https://cdn.invalid/x.jpg', 'pending', 0, 0)"
+            )
+        )
+        db_session.commit()
+    db_session.rollback()
+
+    assert "FOREIGN KEY constraint failed" in str(excinfo.value)
+    reste = db_session.execute(
+        text("SELECT COUNT(*) FROM media_items WHERE profile_id = 424242")
+    ).scalar()
+    assert reste == 0
+
+
+def test_detecter_les_orphelins_compte_sans_rien_supprimer(legacy_db):
+    """Lot 3.7 : le contrôle de boot COMPTE les orphelins, il ne les touche pas.
+
+    Activer `foreign_keys=ON` ne revalide PAS les lignes déjà en base : un
+    orphelin hérité survit silencieusement à la migration. `init_db()` le
+    signale donc à chaque démarrage — sans jamais décider à la place du
+    propriétaire (AUDIT.md §9, question ouverte n°5).
+    """
+    path = legacy_db(LEGACY_PROFILES_DDL, LEGACY_MEDIA_ITEMS_DDL)
+    conn = sqlite3.connect(str(path))
+    try:
+        conn.execute(
             "INSERT INTO media_items "
             "(profile_id, platform, post_id, media_type, media_url, status, "
             " retry_count, discovered_at) "
             "VALUES (424242, 'instagram', 'orphelin', 'image', "
             "'https://cdn.invalid/x.jpg', 'pending', 0, 0)"
         )
-    )
+        conn.commit()
+    finally:
+        conn.close()
+
+    violations = app_db._detecter_les_orphelins()
+
+    assert violations == {"media_items -> profiles": 1}
+    # NON DESTRUCTIF : la ligne est toujours là après le diagnostic.
+    conn = sqlite3.connect(str(path))
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM media_items").fetchone()[0] == 1
+    finally:
+        conn.close()
+
+
+def test_detecter_les_orphelins_ne_signale_rien_sur_une_base_saine(db_session, factories):
+    """Contre-épreuve du test précédent : sur une base saine, le diagnostic est
+    muet. Sans cette garde, un `_detecter_les_orphelins` qui crierait au loup à
+    chaque démarrage passerait pour correct."""
+    profil = factories.profile()
+    factories.media_item(profil)
     db_session.commit()
 
-    reste = db_session.execute(
-        text("SELECT COUNT(*) FROM media_items WHERE profile_id = 424242")
-    ).scalar()
-    assert reste == 1
+    assert app_db._detecter_les_orphelins() == {}
 
 
 def test_la_cascade_orm_supprime_bien_les_enfants(db_session, factories):
@@ -665,15 +833,13 @@ def _arbre_complet_avec_references_editeur(db_session, factories):
     return identifiants
 
 
-def test_supprimer_un_profil_laisse_des_references_pendantes_dans_lediteur(
-    db_session, factories
-):
-    """CARACTÉRISATION (volet manquant de T9, AUDIT.md l.683 « ZÉRO ORPHELIN »).
+def test_supprimer_un_profil_conserve_les_lignes_de_lediteur(db_session, factories):
+    """RÉGRESSION (lot 3.7) : le post programmé et le mème SURVIVENT.
 
-    Après suppression du profil, les `media_items` disparaissent bien par la
-    cascade ORM, mais `scheduled_posts` et `saved_memes` SURVIVENT en pointant
-    sur un `media_items.id` qui n'existe plus. Ce test fige ce comportement :
-    le jour où le lot 3.7 le corrige, il rougit et désigne son jumeau xfail.
+    La contrepartie du volet « SET NULL » : on annule la référence, on ne
+    supprime pas la ligne. Le mème et le post programmé ont leur propre fichier
+    (`file_path`, `media_path`) — les effacer avec le média source détruirait un
+    travail d'édition que le propriétaire n'a pas demandé de jeter.
     """
     _profile_id, media_id, post_id, meme_id = _arbre_complet_avec_references_editeur(
         db_session, factories
@@ -685,28 +851,22 @@ def test_supprimer_un_profil_laisse_des_references_pendantes_dans_lediteur(
     assert restants_media == 0, "la cascade ORM doit bien supprimer le média"
 
     for table, ligne_id in (("scheduled_posts", post_id), ("saved_memes", meme_id)):
-        pendant = db_session.execute(
-            text(f"SELECT source_media_id FROM {table} WHERE id = :v"), {"v": ligne_id}
+        survivante = db_session.execute(
+            text(f"SELECT COUNT(*) FROM {table} WHERE id = :v"), {"v": ligne_id}
         ).scalar()
-        assert pendant == media_id, (
-            f"{table} : aujourd'hui la ligne survit avec une référence pendante"
-        )
+        assert survivante == 1, f"{table} : la ligne éditeur a été emportée à tort"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "risque #11/#12 AUDIT.md — scheduled_posts.source_media_id (db.py:201) et "
-        "saved_memes.source_media_id (db.py:227) n'ont ni ondelete=SET NULL ni "
-        "relationship ORM : supprimer un profil laisse des références pendantes ; "
-        "lot 3.7 (volet « ondelete=SET NULL sur les 2 source_media_id »)"
-    ),
-)
 def test_supprimer_un_profil_doit_annuler_les_references_de_lediteur(
     db_session, factories
 ):
-    """COMPORTEMENT ATTENDU : `source_media_id` doit valoir NULL, la ligne
-    éditeur étant conservée (le mème et le post gardent leur fichier propre)."""
+    """RÉGRESSION (lot 3.7) : `source_media_id` vaut NULL après la suppression.
+
+    Deux mécanismes se recouvrent, à dessein : `ondelete="SET NULL"` sur les 2
+    clés étrangères (base NEUVE) et la relation ORM `MediaItem.scheduled_posts`
+    / `.saved_memes` (base de PRODUCTION, dont le DDL est antérieur et que
+    SQLite ne sait pas modifier par ALTER TABLE).
+    """
     _profile_id, _media_id, post_id, meme_id = _arbre_complet_avec_references_editeur(
         db_session, factories
     )
@@ -718,33 +878,17 @@ def test_supprimer_un_profil_doit_annuler_les_references_de_lediteur(
         assert pendant is None, f"{table} : référence pendante vers un média supprimé"
 
 
-def test_la_cascade_orm_ne_couvre_pas_ig_insight_snapshots(db_session, factories):
-    """CARACTÉRISATION du risque #12 : `IgInsightSnapshot` utilise `backref`
-    SANS `cascade` (db.py:159), donc l'ORM tente de mettre `profile_id` à NULL
-    au lieu de supprimer la ligne — ce que `nullable=False` (db.py:149)
-    interdit. Résultat : un profil doté d'un snapshot IG est INDÉLETABLE, et
-    l'API renvoie un 500 générique.
-    """
-    profile = factories.profile()
-    factories.ig_insight_snapshot(profile)
-
-    db_session.delete(profile)
-    with pytest.raises(IntegrityError) as excinfo:
-        db_session.commit()
-    db_session.rollback()
-
-    assert "ig_insight_snapshots.profile_id" in str(excinfo.value)
-    assert "UPDATE ig_insight_snapshots SET profile_id" in str(excinfo.value)
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="risque #12 AUDIT.md — backref sans cascade sur IgInsightSnapshot "
-    "(db.py:159) : le profil devient indéletable ; lot 3.7",
-)
 def test_supprimer_un_profil_doit_supprimer_ses_snapshots_ig(db_session, factories):
-    """COMPORTEMENT ATTENDU : supprimer un profil supprime ses snapshots IG,
-    exactement comme ses médias, ses jobs et ses `profile_snapshots`."""
+    """RÉGRESSION du risque #12 (lot 3.7) : supprimer un profil supprime ses
+    snapshots IG, exactement comme ses médias, ses jobs et ses
+    `profile_snapshots` — et surtout, ne lève plus.
+
+    `IgInsightSnapshot` utilisait un `backref` SANS `cascade` : l'ORM tentait de
+    mettre `profile_id` à NULL au lieu de supprimer la ligne, ce que
+    `nullable=False` interdit. Un profil doté d'un snapshot IG était donc
+    INDÉLETABLE et l'API renvoyait un 500 générique. Le `backref(...,
+    cascade="all, delete-orphan")` clôt le cas.
+    """
     profile = factories.profile()
     factories.ig_insight_snapshot(profile)
     profile_id = profile.id
@@ -759,18 +903,112 @@ def test_supprimer_un_profil_doit_supprimer_ses_snapshots_ig(db_session, factori
     assert reste == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="risque #11 AUDIT.md — PRAGMA foreign_keys jamais activé "
-    "(db.py:249-255), les ON DELETE CASCADE sont décoratifs ; lot 3.7",
-)
+def test_sur_le_ddl_de_production_lorm_annule_seul_les_references(tmp_path, monkeypatch):
+    """LE cas que la base de test ne peut PAS reproduire (lot 3.7).
+
+    La base de test est fabriquée par `create_all()` : elle porte donc le DDL
+    NEUF, avec `ON DELETE SET NULL`, et c'est le moteur qui annule la
+    référence. La base de PRODUCTION, elle, a un DDL antérieur sans clause
+    `ON DELETE` — et SQLite ne sait pas la modifier par `ALTER TABLE`.
+
+    Avec `PRAGMA foreign_keys=ON` (lot 3.7), supprimer un média référencé y
+    lèverait « FOREIGN KEY constraint failed » : la suppression d'un média
+    depuis le viewer, ou d'un profil entier, tomberait en 500. Ce qui l'en
+    empêche est la relation ORM `MediaItem.scheduled_posts` / `.saved_memes` :
+    l'unité de travail émet un `UPDATE ... SET source_media_id = NULL` AVANT le
+    `DELETE`.
+
+    Ce test rejoue exactement cette situation, sur le DDL réel.
+    """
+    path = _make_legacy_db(
+        tmp_path / "ddl-de-production.db",
+        ddls=[
+            LEGACY_PROFILES_DDL,
+            LEGACY_MEDIA_ITEMS_DDL,
+            LEGACY_SCHEDULED_POSTS_DDL,
+            LEGACY_SAVED_MEMES_DDL,
+        ],
+    )
+    moteur = create_engine(f"sqlite:///{path}")
+    event.listen(moteur, "connect", app_db._set_sqlite_pragma)
+    monkeypatch.setattr(app_db, "DB_PATH", path)
+    monkeypatch.setattr(app_db, "engine", moteur)
+    app_db.init_db()  # complète les colonnes et les index, JAMAIS les tables existantes
+
+    # Garde : sans elle, ce test se contenterait de re-tester le DDL neuf.
+    conn = sqlite3.connect(str(path))
+    try:
+        ddl = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name = 'scheduled_posts'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert "SET NULL" not in ddl.upper(), "le DDL n'est plus celui de la production"
+
+    Session = sessionmaker(bind=moteur)
+    db = Session()
+    try:
+        assert db.execute(text("PRAGMA foreign_keys")).scalar() == 1
+
+        profil = Profile(
+            platform="instagram",
+            username="prod",
+            profile_url="https://instagram.com/prod",
+            is_active=True,
+            scrape_mode="daily",
+            scrape_interval_minutes=360,
+            created_at=0,
+            updated_at=0,
+        )
+        db.add(profil)
+        db.flush()
+        media = MediaItem(
+            profile_id=profil.id,
+            platform="instagram",
+            post_id="P1",
+            media_type="image",
+            media_url="https://cdn.invalid/1.jpg",
+            status="pending",
+            retry_count=0,
+            discovered_at=0,
+        )
+        db.add(media)
+        db.flush()
+        post = ScheduledPost(
+            source_media_id=media.id, status="draft", created_at=0, updated_at=0
+        )
+        meme = SavedMeme(
+            source_media_id=media.id,
+            media_type="image",
+            file_path="/tmp/meme.png",
+            created_at=0,
+        )
+        db.add_all([post, meme])
+        db.commit()
+        post_id, meme_id = post.id, meme.id
+
+        db.delete(media)
+        db.commit()  # ne doit PAS lever « FOREIGN KEY constraint failed »
+
+        for table, ligne_id in (("scheduled_posts", post_id), ("saved_memes", meme_id)):
+            ligne = db.execute(
+                text(f"SELECT source_media_id FROM {table} WHERE id = :v"),
+                {"v": ligne_id},
+            ).fetchone()
+            assert ligne is not None, f"{table} : la ligne éditeur a été emportée"
+            assert ligne[0] is None, f"{table} : référence pendante"
+    finally:
+        db.close()
+        moteur.dispose()
+
+
 def test_supprimer_un_profil_en_sql_doit_supprimer_ses_medias_en_cascade(
     db_session, factories
 ):
-    """COMPORTEMENT ATTENDU : une suppression au niveau SQL — celle que fait un
-    script de maintenance, une purge ou un `DELETE` en masse — doit entraîner
-    la suppression des médias liés, comme le déclare `ondelete="CASCADE"`
-    (db.py:55). Aujourd'hui la contrainte n'est pas appliquée par le moteur.
+    """RÉGRESSION (lot 3.7) : une suppression au niveau SQL — celle que fait un
+    script de maintenance, une purge ou un `DELETE` en masse — entraîne la
+    suppression des médias liés, comme le déclare `ondelete="CASCADE"`. Avant
+    le PRAGMA, la contrainte n'était pas appliquée par le moteur.
     """
     profile = factories.profile()
     factories.media_item(profile)

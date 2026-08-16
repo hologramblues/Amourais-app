@@ -18,10 +18,11 @@ from app.config import (
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
     GOOGLE_REFRESH_TOKEN,
-    SESSIONS_DIR,
     STORAGE_MODE,
 )
 from app.db import MediaItem, Profile, ScrapeJob, SessionLocal
+from app.scraper import session_health as sante
+from app.scraper.downloaders import MEDIA_EXTENSIONS
 from app.storage import get_gdrive_auth_url, exchange_code
 
 pages_bp = Blueprint("pages", __name__)
@@ -80,6 +81,175 @@ def _read_env_file() -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
+# SANTÉ DE SESSION — mise en mots pour l'écran
+# ---------------------------------------------------------------------------
+# L'ancien calcul tenait en deux lignes : le fichier de cookies existe, et il a
+# telle date de modification → « OK » en vert. Mesuré le 15/08/2026 sur la vraie
+# session Instagram (fichier du 10 mars, `ds_user_id` expiré depuis 68 jours,
+# scrape rapportant 0 média sur un mur de connexion), ce voyant restait VERT.
+#
+# Il est remplacé ici par le moteur `app.scraper.session_health`, qui rend un
+# état parmi quatre. Ce module ne DÉCIDE plus rien : il met en français, en date
+# absolue et en geste correctif ce que le moteur a déjà tranché.
+_NOMS_PLATEFORMES = {
+    "instagram": "Instagram",
+    "tiktok": "TikTok",
+    "twitter": "Twitter / X",
+    "reddit": "Reddit",
+}
+
+#: Identifiant court utilisé par les cibles HTMX de l'écran Réglages.
+_SLUGS_PLATEFORMES = {
+    "instagram": "ig",
+    "tiktok": "tt",
+    "twitter": "tw",
+    "reddit": "rd",
+}
+
+#: État du moteur → ton visuel. Trois couleurs sémantiques, plus le GRIS de
+#: l'indéterminé. « inconnu » n'emprunte jamais le vert : c'est exactement la
+#: confusion que ce chantier corrige.
+_TONS = {
+    "connecté": "ok",
+    "bloqué": "warn",
+    "déconnecté": "danger",
+    "inconnu": "neutre",
+}
+
+#: Libellé affiché À CÔTÉ de la pastille — le sens ne repose jamais sur la
+#: seule couleur. Accordé au féminin : on parle de « la session ».
+_LIBELLES = {
+    "connecté": "Connectée",
+    "bloqué": "Bloquée",
+    "déconnecté": "Déconnectée",
+    "inconnu": "Indéterminée",
+}
+
+_MOIS_FR = (
+    "janvier", "février", "mars", "avril", "mai", "juin",
+    "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+)
+
+
+def _date_fr(ts: int | float | None) -> str | None:
+    """Horodatage unix → date ABSOLUE en français (« 10 mars à 20:47 »).
+
+    Absolue et non relative : « il y a 5 mois » se lit vite mais ne permet pas
+    de recouper avec un souvenir (« je les ai réimportés après les vacances »).
+    L'année n'apparaît que si elle n'est pas l'année courante — la porter tout
+    le temps allonge la ligne sans rien apprendre.
+    """
+    if not ts:
+        return None
+    try:
+        d = datetime.fromtimestamp(float(ts))
+    except (OverflowError, OSError, ValueError):
+        return None
+    annee = "" if d.year == datetime.now().year else f" {d.year}"
+    return f"{d.day} {_MOIS_FR[d.month - 1]}{annee} à {d:%H:%M}"
+
+
+def _mise_en_mots(etat: dict) -> dict:
+    """Enrichit un verdict du moteur de tout ce que le gabarit doit afficher."""
+    plateforme = etat.get("plateforme", "")
+    brut = etat.get("etat") or "inconnu"
+    jamais_vu = not etat.get("dernier_succes") and not etat.get("derniere_sonde")
+
+    libelle = _LIBELLES.get(brut, "Indéterminée")
+    if brut == "inconnu" and jamais_vu:
+        # « Jamais vérifiée » ne doit surtout pas ressembler à « tout va bien ».
+        libelle = "Jamais vérifiée"
+
+    succes = _date_fr(etat.get("dernier_succes"))
+    if succes:
+        succes_texte = f"Dernière session valide le {succes}"
+    elif jamais_vu:
+        succes_texte = "Jamais vérifiée — aucune session valide connue"
+    else:
+        succes_texte = "Aucune session valide connue"
+
+    cookies = _date_fr(etat.get("cookies_le"))
+    cookies_texte = f"Cookies importés le {cookies}" if cookies else "Aucun cookie importé"
+
+    expire = etat.get("expire_le")
+    expire_texte = None
+    if expire:
+        quand = _date_fr(expire)
+        if quand:
+            passe = expire < datetime.now().timestamp()
+            expire_texte = f"Cookies expirés le {quand}" if passe else f"Cookies valables jusqu'au {quand}"
+
+    sonde = _date_fr(etat.get("derniere_sonde"))
+    sonde_texte = f"Dernière vérification en direct le {sonde}" if sonde else "Jamais vérifiée en direct"
+
+    return {
+        **etat,
+        "nom": _NOMS_PLATEFORMES.get(plateforme, plateforme.capitalize()),
+        "slug": _SLUGS_PLATEFORMES.get(plateforme, plateforme),
+        "ton": _TONS.get(brut, "neutre"),
+        "libelle": libelle,
+        "succes_texte": succes_texte,
+        "cookies_texte": cookies_texte,
+        "expire_texte": expire_texte,
+        "sonde_texte": sonde_texte,
+    }
+
+
+def _sante_des_sessions() -> list[dict]:
+    """Les 4 plateformes, LES PLUS URGENTES D'ABORD, prêtes à afficher.
+
+    Le tri vient du moteur (`GRAVITE`) : une plateforme en panne remonte en tête
+    de liste toute seule. Si le moteur casse, l'écran doit rester debout : on
+    rend une liste vide plutôt qu'une 500, et le gabarit le dit.
+    """
+    try:
+        return [_mise_en_mots(e) for e in sante.etats_de_toutes_les_plateformes()]
+    except Exception as exc:  # pragma: no cover - filet
+        logger.error("Sante des sessions illisible: {}", exc)
+        return []
+
+
+def _resume_sessions(etats: list[dict]) -> dict:
+    """Compteur pour le tableau de bord — un chiffre ET une phrase.
+
+    Un chiffre seul (« 1 ») n'apprend rien : le résumé porte la CAUSE et le
+    lien vers le GESTE. Une session morte arrête tout le produit, elle ne peut
+    pas rester invisible tant qu'on n'ouvre pas les Réglages.
+    """
+    en_panne = [e for e in etats if e.get("urgent")]
+    connectees = [e for e in etats if e.get("etat") == "connecté"]
+    indeterminees = [e for e in etats if e.get("etat") == "inconnu"]
+
+    if en_panne:
+        pire = en_panne[0]
+        ton = _TONS.get(pire.get("etat"), "danger")
+        valeur = str(len(en_panne))
+        titre = (
+            f"Session {pire['nom']} {pire['libelle'].lower()}"
+            if len(en_panne) == 1
+            else f"{len(en_panne)} sessions à reconnecter"
+        )
+        detail = pire.get("geste") or ""
+    elif connectees:
+        ton, valeur = "ok", str(len(connectees))
+        titre = "session valide" if len(connectees) == 1 else "sessions valides"
+        detail = "Aucune plateforme ne demande d'action."
+    else:
+        ton, valeur = "neutre", str(len(indeterminees) or len(etats))
+        titre = "Aucune session vérifiée"
+        detail = "Importe tes cookies, puis lance « Vérifier maintenant »."
+
+    return {
+        "ton": ton,
+        "valeur": valeur,
+        "titre": titre,
+        "detail": detail,
+        "en_panne": en_panne,
+        "total": len(etats),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
 @pages_bp.route("/")
@@ -121,11 +291,18 @@ def dashboard():
 
         profiles_list = db.query(Profile).all()
 
+        # Santé de session : gratuite (fichiers de cookies + historique des
+        # jobs déjà en base), aucun appel réseau, donc elle peut vivre sur le
+        # tableau de bord sans le ralentir.
+        etats_sessions = _sante_des_sessions()
+
         return render_template(
             "dashboard.html",
             page="dashboard",
             title="Dashboard",
             profiles=profiles_list,
+            sessions_sante=etats_sessions,
+            sessions_resume=_resume_sessions(etats_sessions),
             storage_mode=STORAGE_MODE,
             data_dir=str(DATA_DIR),
             stats={
@@ -187,18 +364,12 @@ def jobs_page():
 def settings_page():
     gdrive_connected = bool(GOOGLE_CLIENT_ID and GOOGLE_REFRESH_TOKEN)
 
-    # Check session cookie files
-    sessions: dict[str, datetime | None] = {
-        "instagram": None,
-        "reddit": None,
-        "tiktok": None,
-        "twitter": None,
-    }
-    for platform in ("instagram", "reddit", "tiktok", "twitter"):
-        cookie_path = SESSIONS_DIR / f"{platform}.json"
-        if cookie_path.exists():
-            mtime = cookie_path.stat().st_mtime
-            sessions[platform] = datetime.fromtimestamp(mtime)
+    # ANCIEN CALCUL, RETIRÉ : `SESSIONS_DIR/<p>.json` existe → vert, avec sa
+    # mtime pour toute preuve. Un fichier lisible dont la plateforme a invalidé
+    # le `sessionid` côté serveur affichait « OK » en vert. Le voyant vient
+    # désormais du moteur, qui lit AUSSI l'expiration des cookies critiques,
+    # l'historique des jobs et le dernier verdict de sonde.
+    etats_sessions = _sante_des_sessions()
 
     env_values = _read_env_file()
 
@@ -207,7 +378,8 @@ def settings_page():
         page="settings",
         title="Réglages",
         gdrive_connected=gdrive_connected,
-        sessions=sessions,
+        sessions_sante=etats_sessions,
+        sessions_resume=_resume_sessions(etats_sessions),
         env=env_values,
     )
 
@@ -265,12 +437,25 @@ def serve_media_file(filename):
     """Serve downloaded media files with caching and Range request support."""
     # ?dl=1 forces a download (Content-Disposition: attachment)
     # conditional_response=True enables HTTP 304 (ETag/Last-Modified) + Range (206)
+    #
+    # Lot 2.5 (§6.6 / T10) — tout ce qui n'est pas une extension média connue
+    # est servi en PIÈCE JOINTE et en `application/octet-stream`. Le
+    # téléchargeur applique désormais une liste blanche à l'écriture, mais les
+    # fichiers déjà sur le volume (`.html`, `.svg`… écrits avant ce lot)
+    # seraient toujours rendus INLINE sur l'origine de l'application : XSS
+    # stockée. `nosniff` complète la mesure en interdisant au navigateur de
+    # deviner un type plus « exécutable » que celui annoncé.
+    est_media = Path(filename).suffix.lower() in MEDIA_EXTENSIONS
+    force_download = request.args.get("dl") == "1"
+
     resp = send_from_directory(
         str(DOWNLOAD_DIR), filename, conditional=True,
-        as_attachment=request.args.get("dl") == "1",
+        as_attachment=force_download or not est_media,
+        mimetype=None if est_media else "application/octet-stream",
     )
     # Cache for 7 days — files don't change once downloaded
     resp.headers["Cache-Control"] = "public, max-age=604800, immutable"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
     return resp
 
 
@@ -294,6 +479,7 @@ def serve_media_thumbnail(filename):
     if thumb_path.exists():
         resp = send_from_directory(str(thumb_dir), thumb_name, mimetype="image/jpeg")
         resp.headers["Cache-Control"] = "public, max-age=2592000, immutable"
+        resp.headers["X-Content-Type-Options"] = "nosniff"
         return resp
 
     # safe_join rejects path traversal (../) and absolute paths -> returns None
@@ -341,6 +527,7 @@ def serve_media_thumbnail(filename):
 
     resp = send_from_directory(str(thumb_dir), thumb_name, mimetype="image/jpeg")
     resp.headers["Cache-Control"] = "public, max-age=2592000, immutable"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
     return resp
 
 

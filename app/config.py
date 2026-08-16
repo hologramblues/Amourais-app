@@ -14,7 +14,32 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ---------------------------------------------------------------------------
 load_dotenv(BASE_DIR / ".env")
 
+#: `DATA_DIR` a-t-il été posé EXPLICITEMENT dans l'environnement ?
+#: Railway le définit (/data, le volume persistant). En développement local il
+#: est souvent absent — et le repli silencieux sur `<projet>/data` fait alors
+#: écrire dans les données de PRODUCTION : base, médias, sessions.
+#: Ce défaut a déjà coûté un profil au propriétaire (un script lancé sans la
+#: variable a créé des jobs et supprimé un profil dans la vraie base).
+DATA_DIR_EXPLICITE = os.getenv("DATA_DIR") is not None
+
 DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
+
+if not DATA_DIR_EXPLICITE:
+    # On NE CHANGE PAS le comportement par défaut : Railway définit la
+    # variable, le développement local dépend du repli. On rend le risque
+    # VISIBLE, c'est tout. Un avertissement sur trois lignes, impossible à
+    # confondre avec le bruit habituel du démarrage.
+    logger.warning(
+        "\n"
+        "  ================================================================\n"
+        "   DATA_DIR N'EST PAS DEFINI — LES DONNEES DE PRODUCTION VONT\n"
+        "   ETRE UTILISEES.\n"
+        "   Repli automatique sur : {}\n"
+        "   Base, medias, sessions et .env de ce dossier seront ECRITS.\n"
+        "   Pour un essai sans risque : DATA_DIR=/chemin/bac-a-sable <cmd>\n"
+        "  ================================================================",
+        DATA_DIR,
+    )
 
 # User-settings .env — lives on the persistent volume so it survives redeploy
 SETTINGS_ENV = DATA_DIR / ".env"

@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAMOURAIS — 4 directions esthétiques à comparer</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   CADRE DE LA PAGE DE COMPARAISON (neutre, n'appartient à aucune
+   des 4 propositions : il ne doit pas influencer le jugement)
+   ═══════════════════════════════════════════════════════════════ */
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:#141516;color:#e8e9ea;
+  font:14px/1.6 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased;padding-bottom:80px;
+}
+.page{max-width:1240px;margin:0 auto;padding:0 20px}
+.intro{padding:36px 0 26px;border-bottom:1px solid #2a2b2d;margin-bottom:32px}
+.intro h1{font-size:22px;font-weight:600;letter-spacing:-.02em;margin-bottom:10px}
+.intro p{color:#9a9ea3;max-width:70ch;margin-bottom:10px}
+.intro strong{color:#e8e9ea;font-weight:550}
+
+.jump{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.jump a{
+  display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:7px;
+  background:#1e1f21;border:1px solid #2f3033;color:#e8e9ea;text-decoration:none;font-size:13px;
+  transition:background .12s,border-color .12s;
+}
+.jump a:hover{background:#26272a;border-color:#3d3e42}
+.jump i{width:9px;height:9px;border-radius:50%;flex:none}
+
+.variant{margin-bottom:52px;scroll-margin-top:16px}
+.vhead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.vhead h2{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.vhead .tag{
+  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
+  padding:3px 8px;border-radius:5px;background:#26272a;color:#9a9ea3;
+}
+.vdesc{color:#9a9ea3;max-width:78ch;margin-bottom:8px}
+.vargs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0 16px}
+@media(max-width:760px){.vargs{grid-template-columns:1fr}}
+.varg{
+  padding:10px 13px;border-radius:7px;font-size:13px;line-height:1.5;
+  border-left:2px solid;background:#1a1b1d;color:#b4b8bd;
+}
+.varg.pour{border-color:#4cb782}
+.varg.contre{border-color:#e0a33a}
+.varg b{display:block;color:#e8e9ea;font-weight:550;margin-bottom:2px;font-size:12px;
+  text-transform:uppercase;letter-spacing:.05em}
+
+.swatches{display:flex;gap:6px;margin:12px 0 16px;flex-wrap:wrap}
+.sw{width:34px;height:34px;border-radius:6px;border:1px solid rgba(255,255,255,.14);position:relative}
+.sw::after{
+  content:attr(data-l);position:absolute;top:38px;left:50%;transform:translateX(-50%);
+  font-size:9.5px;color:#77797d;white-space:nowrap
+}
+.swatches{margin-bottom:30px}
+
+.frame{border-radius:12px;overflow:hidden;border:1px solid #2f3033}
+
+/* ═══════════════════════════════════════════════════════════════
+   MAQUETTE COMMUNE — le même écran, rendu 4 fois.
+   Fragment du Viewer : barre de navigation, barre d'outils avec
+   jetons de filtre, colonne des collections, grille de médias à
+   ratios variés, et un panneau d'inspection.
+   ═══════════════════════════════════════════════════════════════ */
+.app{display:flex;flex-direction:column;min-height:460px;
+  background:var(--bg);color:var(--tx);font-family:var(--font)}
+.nav{display:flex;align-items:center;gap:var(--gap-nav);padding:0 14px;height:var(--h-nav);
+  background:var(--surface);border-bottom:var(--bw) solid var(--border)}
+.logo{display:flex;align-items:center;gap:8px;font-weight:var(--w-logo);
+  font-size:var(--fs-logo);letter-spacing:var(--ls-logo);text-transform:var(--tt-logo);color:var(--tx)}
+.logo span{width:18px;height:18px;border-radius:var(--r-logo);background:var(--accent);
+  display:grid;place-items:center;color:var(--on-accent);font-size:10px;font-weight:700}
+.nav a{color:var(--tx-2);text-decoration:none;font-size:var(--fs-nav);padding:5px 9px;
+  border-radius:var(--r-ctl);font-weight:var(--w-nav)}
+.nav a.on{color:var(--tx);background:var(--active)}
+.nav .sp{flex:1}
+.nav .k{font-size:11px;color:var(--tx-3);border:var(--bw) solid var(--border);
+  padding:3px 7px;border-radius:var(--r-ctl);font-family:var(--mono)}
+
+.bar{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--surface);
+  border-bottom:var(--bw) solid var(--border);flex-wrap:wrap}
+.btn{height:var(--h-btn);padding:0 12px;border-radius:var(--r-ctl);border:var(--bw) solid var(--border);
+  background:var(--surface-2);color:var(--tx);font-size:var(--fs-ui);font-weight:500;
+  font-family:var(--font);display:inline-flex;align-items:center;gap:6px;cursor:default;
+  text-transform:var(--tt-btn);letter-spacing:var(--ls-btn)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
+.search{height:var(--h-btn);flex:1;min-width:130px;padding:0 11px;border-radius:var(--r-ctl);
+  border:var(--bw) solid var(--border);background:var(--input);color:var(--tx-3);
+  font-size:var(--fs-ui);display:flex;align-items:center;font-family:var(--font)}
+.chip{height:24px;padding:0 9px;border-radius:var(--r-pill);background:var(--accent-soft);
+  color:var(--accent-tx);border:var(--bw) solid var(--accent-bd);font-size:12px;font-weight:500;
+  display:inline-flex;align-items:center;gap:6px}
+.chip x{opacity:.55;font-style:normal}
+.count{font-size:var(--fs-ui);color:var(--tx-3);font-variant-numeric:tabular-nums}
+
+.body{display:flex;flex:1;min-height:0}
+.side{width:168px;flex:none;padding:12px 10px;background:var(--surface);
+  border-right:var(--bw) solid var(--border)}
+.side h4{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--tx-3);
+  margin-bottom:9px;font-weight:600}
+.side .it{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;
+  border-radius:var(--r-ctl);font-size:var(--fs-ui);color:var(--tx-2);margin-bottom:1px}
+.side .it.on{background:var(--active);color:var(--tx);font-weight:500}
+.side .it b{font-weight:500;font-variant-numeric:tabular-nums;color:var(--tx-3);font-size:11.5px}
+
+.grid{flex:1;padding:12px;display:grid;grid-template-columns:repeat(4,1fr);
+  gap:var(--gap-grid);align-content:start}
+.m{border-radius:var(--r-media);overflow:hidden;position:relative;background:var(--surface-2);
+  border:var(--bw-media) solid var(--border)}
+.m i{position:absolute;left:6px;bottom:6px;font-style:normal;font-size:10px;font-weight:600;
+  padding:2px 6px;border-radius:var(--r-pill);background:var(--badge);color:var(--badge-tx);
+  backdrop-filter:blur(6px)}
+.insp{width:172px;flex:none;padding:12px;background:var(--surface);
+  border-left:var(--bw) solid var(--border)}
+.insp h4{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--tx-3);
+  margin-bottom:10px;font-weight:600}
+.insp .row{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;
+  border-bottom:var(--bw) solid var(--border)}
+.insp .row span:first-child{color:var(--tx-3)}
+.insp .row span:last-child{color:var(--tx-2);font-variant-numeric:tabular-nums}
+.insp .st{margin-top:12px;display:flex;gap:5px;flex-wrap:wrap}
+.insp .st b{font-size:10.5px;font-weight:500;padding:2.5px 7px;border-radius:var(--r-pill);
+  background:var(--surface-2);color:var(--tx-2);border:var(--bw) solid var(--border)}
+.ok{color:var(--ok)!important}
+@media(max-width:820px){.insp{display:none}.grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:560px){.side{display:none}.grid{grid-template-columns:repeat(2,1fr)}}
+
+/* ── 1. ACTUELLE : sombre technique, accent bleu ─────────────── */
+.v1{
+  --font:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --bg:#08090a; --surface:#0f1011; --surface-2:#18191b; --input:#141517;
+  --border:#232427; --active:#232427;
+  --tx:#f7f8f8; --tx-2:#8a8f98; --tx-3:#62666d;
+  --accent:#5e6ad2; --on-accent:#fff; --accent-soft:#5e6ad226; --accent-tx:#8f97e8; --accent-bd:#5e6ad24d;
+  --ok:#4cb782; --badge:#000000a6; --badge-tx:#f7f8f8;
+  --r-ctl:4px; --r-pill:999px; --r-media:4px; --r-logo:4px;
+  --h-nav:44px; --h-btn:30px; --gap-nav:4px; --gap-grid:6px;
+  --bw:1px; --bw-media:0px;
+  --fs-ui:13px; --fs-nav:13px; --fs-logo:13px;
+  --ls-logo:-.01em; --tt-logo:none; --w-logo:600; --w-nav:450;
+  --tt-btn:none; --ls-btn:0;
+}
+/* ── 2. ÉDITORIAL CHAUD : anthracite chaud, accent ambre ─────── */
+.v2{
+  --font:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --mono:ui-monospace,Menlo,monospace;
+  --bg:#16130f; --surface:#1d1a15; --surface-2:#26221c; --input:#211d18;
+  --border:#332e26; --active:#2e2921;
+  --tx:#f2ede4; --tx-2:#a89f90; --tx-3:#7d7566;
+  --accent:#d99a2b; --on-accent:#1a1610; --accent-soft:#d99a2b22; --accent-tx:#e0ad52; --accent-bd:#d99a2b40;
+  --ok:#87a96b; --badge:#16130fbf; --badge-tx:#f2ede4;
+  --r-ctl:6px; --r-pill:999px; --r-media:6px; --r-logo:50%;
+  --h-nav:50px; --h-btn:32px; --gap-nav:6px; --gap-grid:10px;
+  --bw:1px; --bw-media:0px;
+  --fs-ui:13.5px; --fs-nav:14px; --fs-logo:15px;
+  --ls-logo:.02em; --tt-logo:none; --w-logo:600; --w-nav:400;
+  --tt-btn:none; --ls-btn:0;
+}
+/* ── 3. PAPIER : clair, contrasté, l'image d'abord ───────────── */
+.v3{
+  --font:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --bg:#fbfbfa; --surface:#ffffff; --surface-2:#f2f2f0; --input:#f7f7f6;
+  --border:#e2e2df; --active:#ececeb;
+  --tx:#191918; --tx-2:#5f5f5c; --tx-3:#8b8b87;
+  --accent:#1a1a19; --on-accent:#fff; --accent-soft:#1a1a190f; --accent-tx:#191918; --accent-bd:#19191826;
+  --ok:#2f7d54; --badge:#ffffffdd; --badge-tx:#191918;
+  --r-ctl:5px; --r-pill:999px; --r-media:5px; --r-logo:4px;
+  --h-nav:46px; --h-btn:30px; --gap-nav:4px; --gap-grid:8px;
+  --bw:1px; --bw-media:1px;
+  --fs-ui:13px; --fs-nav:13px; --fs-logo:13px;
+  --ls-logo:-.01em; --tt-logo:none; --w-logo:600; --w-nav:450;
+  --tt-btn:none; --ls-btn:0;
+}
+/* ── 4. SAMOURAÏ : noir dur, rouge du logo, arêtes vives ─────── */
+.v4{
+  --font:"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,Menlo,monospace;
+  --bg:#000000; --surface:#0a0a0a; --surface-2:#151515; --input:#111111;
+  --border:#282828; --active:#1e1e1e;
+  --tx:#ffffff; --tx-2:#9c9c9c; --tx-3:#6b6b6b;
+  --accent:#e11d1d; --on-accent:#fff; --accent-soft:#e11d1d1f; --accent-tx:#ff5c5c; --accent-bd:#e11d1d4d;
+  --ok:#3ecf6e; --badge:#000000cc; --badge-tx:#fff;
+  --r-ctl:0px; --r-pill:0px; --r-media:0px; --r-logo:0px;
+  --h-nav:46px; --h-btn:30px; --gap-nav:2px; --gap-grid:3px;
+  --bw:1px; --bw-media:0px;
+  --fs-ui:12.5px; --fs-nav:12px; --fs-logo:13px;
+  --ls-logo:.14em; --tt-logo:uppercase; --w-logo:700; --w-nav:600;
+  --tt-btn:uppercase; --ls-btn:.05em;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="intro">
+  <h1>Quatre directions esthétiques, le même écran</h1>
+  <p>Chaque bloc ci-dessous rend <strong>exactement la même maquette</strong> — un fragment du Viewer avec
+  sa navigation, ses jetons de filtre, sa colonne de collections, une grille de médias aux proportions
+  variées et un panneau d'inspection. Seule change la direction esthétique. Le cadre de cette page est
+  volontairement neutre pour ne pas influencer ton jugement.</p>
+  <p><strong>Ce que je te demande :</strong> laquelle te donne envie d'ouvrir l'application. Tu peux
+  aussi piocher — « la 4 mais avec les coins arrondis de la 2 », c'est une réponse parfaitement valable.</p>
+  <div class="jump">
+    <a href="#v1"><i style="background:#5e6ad2"></i>1 · Actuelle</a>
+    <a href="#v2"><i style="background:#d99a2b"></i>2 · Éditorial chaud</a>
+    <a href="#v3"><i style="background:#191918;box-shadow:0 0 0 1px #666"></i>3 · Papier</a>
+    <a href="#v4"><i style="background:#e11d1d"></i>4 · Samouraï</a>
+  </div>
+</div>
+
+<!-- ══════════════ 1 ══════════════ -->
+<div class="variant" id="v1">
+  <div class="vhead"><h2>1 · Actuelle</h2><span class="tag">déployée aujourd'hui</span></div>
+  <p class="vdesc">Le système de Linear : fond quasi noir, accent indigo-bleu, échelle courte, angles
+  discrets, hiérarchie portée par un escalier de surfaces plutôt que par des ombres.</p>
+  <div class="swatches">
+    <div class="sw" style="background:#08090a" data-l="fond"></div>
+    <div class="sw" style="background:#0f1011" data-l="surface"></div>
+    <div class="sw" style="background:#232427" data-l="filet"></div>
+    <div class="sw" style="background:#5e6ad2" data-l="accent"></div>
+    <div class="sw" style="background:#f7f8f8" data-l="texte"></div>
+  </div>
+  <div class="vargs">
+    <div class="varg pour"><b>Ce qu'elle a pour elle</b>Sobre, lisible, elle s'efface derrière tes
+      images. C'est la référence des outils de travail quotidien.</div>
+    <div class="varg contre"><b>Ce qu'on lui reproche</b>Générique. Ce bleu-indigo sur fond noir est
+      devenu le costume par défaut de tous les outils depuis trois ans. Rien ne dit SAMOURAIS.</div>
+  </div>
+  <div class="frame"><div class="app v1">
+    <div class="nav"><div class="logo"><span>◆</span>SAMOURAIS</div>
+      <a>Profils</a><a class="on">Médias</a><a>Éditeur</a><a>Calendrier</a><a>Analytics</a>
+      <div class="sp"></div><div class="k">⌘K</div></div>
+    <div class="bar"><div class="search">Rechercher…</div>
+      <span class="chip">instagram <x>×</x></span><span class="chip">noté ≥ 4 <x>×</x></span>
+      <button class="btn">Filtres</button><button class="btn">Doublons</button>
+      <button class="btn pri">Nouvelle collection</button><span class="count">147 médias</span></div>
+    <div class="body">
+      <div class="side"><h4>Collections</h4>
+        <div class="it on">Toute la bibliothèque <b>147</b></div>
+        <div class="it">Best of 2026 <b>23</b></div><div class="it">À retravailler <b>8</b></div>
+        <div class="it">Références <b>41</b></div></div>
+      <div class="grid">
+        <div class="m" style="height:104px;background:linear-gradient(135deg,#3a4a6b,#1e2740)"><i>4:5</i></div>
+        <div class="m" style="height:72px;background:linear-gradient(135deg,#6b4a3a,#402a1e)"><i>16:9</i></div>
+        <div class="m" style="height:88px;background:linear-gradient(135deg,#3a6b52,#1e402f)"><i>1:1</i></div>
+        <div class="m" style="height:118px;background:linear-gradient(135deg,#5a3a6b,#361e40)"><i>9:16</i></div>
+        <div class="m" style="height:82px;background:linear-gradient(135deg,#6b5a3a,#40361e)"><i>1:1</i></div>
+        <div class="m" style="height:110px;background:linear-gradient(135deg,#3a5a6b,#1e3640)"><i>4:5</i></div>
+        <div class="m" style="height:70px;background:linear-gradient(135deg,#6b3a4a,#401e27)"><i>16:9</i></div>
+        <div class="m" style="height:94px;background:linear-gradient(135deg,#4a6b3a,#2a401e)"><i>1:1</i></div>
+      </div>
+      <div class="insp"><h4>Inspection</h4>
+        <div class="row"><span>Format</span><span>JPEG</span></div>
+        <div class="row"><span>Dimensions</span><span>1080×1350</span></div>
+        <div class="row"><span>Poids</span><span>412 Ko</span></div>
+        <div class="row"><span>Source</span><span>@yugnat999</span></div>
+        <div class="row"><span>Statut</span><span class="ok">Publié</span></div>
+        <div class="st"><b>meme</b><b>2026</b><b>à garder</b></div></div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ══════════════ 2 ══════════════ -->
+<div class="variant" id="v2">
+  <div class="vhead"><h2>2 · Éditorial chaud</h2><span class="tag">studio créatif</span></div>
+  <p class="vdesc">Anthracite chaud plutôt que noir froid, accent ambre, typographie à empattements
+  pour l'interface. L'ambiance d'une table de montage ou d'une revue, pas d'un tableau de bord.</p>
+  <div class="swatches">
+    <div class="sw" style="background:#16130f" data-l="fond"></div>
+    <div class="sw" style="background:#1d1a15" data-l="surface"></div>
+    <div class="sw" style="background:#332e26" data-l="filet"></div>
+    <div class="sw" style="background:#d99a2b" data-l="accent"></div>
+    <div class="sw" style="background:#f2ede4" data-l="texte"></div>
+  </div>
+  <div class="vargs">
+    <div class="varg pour"><b>Ce qu'elle a pour elle</b>Du caractère, et une chaleur qui va bien à un
+      outil de création. L'ambre ne rentre en concurrence avec aucune de tes images.</div>
+    <div class="varg contre"><b>Ce qu'on lui reproche</b>Les empattements dans une interface dense
+      fatiguent à la longue. Et le ton chaud teinte la perception de tes couleurs.</div>
+  </div>
+  <div class="frame"><div class="app v2">
+    <div class="nav"><div class="logo"><span>◆</span>SAMOURAIS</div>
+      <a>Profils</a><a class="on">Médias</a><a>Éditeur</a><a>Calendrier</a><a>Analytics</a>
+      <div class="sp"></div><div class="k">⌘K</div></div>
+    <div class="bar"><div class="search">Rechercher…</div>
+      <span class="chip">instagram <x>×</x></span><span class="chip">noté ≥ 4 <x>×</x></span>
+      <button class="btn">Filtres</button><button class="btn">Doublons</button>
+      <button class="btn pri">Nouvelle collection</button><span class="count">147 médias</span></div>
+    <div class="body">
+      <div class="side"><h4>Collections</h4>
+        <div class="it on">Toute la bibliothèque <b>147</b></div>
+        <div class="it">Best of 2026 <b>23</b></div><div class="it">À retravailler <b>8</b></div>
+        <div class="it">Références <b>41</b></div></div>
+      <div class="grid">
+        <div class="m" style="height:104px;background:linear-gradient(135deg,#3a4a6b,#1e2740)"><i>4:5</i></div>
+        <div class="m" style="height:72px;background:linear-gradient(135deg,#6b4a3a,#402a1e)"><i>16:9</i></div>
+        <div class="m" style="height:88px;background:linear-gradient(135deg,#3a6b52,#1e402f)"><i>1:1</i></div>
+        <div class="m" style="height:118px;background:linear-gradient(135deg,#5a3a6b,#361e40)"><i>9:16</i></div>
+        <div class="m" style="height:82px;background:linear-gradient(135deg,#6b5a3a,#40361e)"><i>1:1</i></div>
+        <div class="m" style="height:110px;background:linear-gradient(135deg,#3a5a6b,#1e3640)"><i>4:5</i></div>
+        <div class="m" style="height:70px;background:linear-gradient(135deg,#6b3a4a,#401e27)"><i>16:9</i></div>
+        <div class="m" style="height:94px;background:linear-gradient(135deg,#4a6b3a,#2a401e)"><i>1:1</i></div>
+      </div>
+      <div class="insp"><h4>Inspection</h4>
+        <div class="row"><span>Format</span><span>JPEG</span></div>
+        <div class="row"><span>Dimensions</span><span>1080×1350</span></div>
+        <div class="row"><span>Poids</span><span>412 Ko</span></div>
+        <div class="row"><span>Source</span><span>@yugnat999</span></div>
+        <div class="row"><span>Statut</span><span class="ok">Publié</span></div>
+        <div class="st"><b>meme</b><b>2026</b><b>à garder</b></div></div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ══════════════ 3 ══════════════ -->
+<div class="variant" id="v3">
+  <div class="vhead"><h2>3 · Papier</h2><span class="tag">l'image d'abord</span></div>
+  <p class="vdesc">Clair, très contrasté, filets fins, accent quasi noir. L'interface disparaît au
+  profit des images — c'est le parti pris des bibliothèques photo et des outils d'écriture.</p>
+  <div class="swatches">
+    <div class="sw" style="background:#fbfbfa" data-l="fond"></div>
+    <div class="sw" style="background:#ffffff" data-l="surface"></div>
+    <div class="sw" style="background:#e2e2df" data-l="filet"></div>
+    <div class="sw" style="background:#191918" data-l="accent"></div>
+    <div class="sw" style="background:#5f5f5c" data-l="texte 2"></div>
+  </div>
+  <div class="vargs">
+    <div class="varg pour"><b>Ce qu'elle a pour elle</b>Tes images ressortent nettement mieux sur fond
+      clair, et rien ne fatigue en plein jour. C'est le choix des outils qu'on ouvre huit heures d'affilée.</div>
+    <div class="varg contre"><b>Ce qu'on lui reproche</b>Moins spectaculaire, et le soir un grand
+      aplat clair pique. Il faudra un thème sombre irréprochable en regard.</div>
+  </div>
+  <div class="frame"><div class="app v3">
+    <div class="nav"><div class="logo"><span>◆</span>SAMOURAIS</div>
+      <a>Profils</a><a class="on">Médias</a><a>Éditeur</a><a>Calendrier</a><a>Analytics</a>
+      <div class="sp"></div><div class="k">⌘K</div></div>
+    <div class="bar"><div class="search">Rechercher…</div>
+      <span class="chip">instagram <x>×</x></span><span class="chip">noté ≥ 4 <x>×</x></span>
+      <button class="btn">Filtres</button><button class="btn">Doublons</button>
+      <button class="btn pri">Nouvelle collection</button><span class="count">147 médias</span></div>
+    <div class="body">
+      <div class="side"><h4>Collections</h4>
+        <div class="it on">Toute la bibliothèque <b>147</b></div>
+        <div class="it">Best of 2026 <b>23</b></div><div class="it">À retravailler <b>8</b></div>
+        <div class="it">Références <b>41</b></div></div>
+      <div class="grid">
+        <div class="m" style="height:104px;background:linear-gradient(135deg,#5c7099,#33415e)"><i>4:5</i></div>
+        <div class="m" style="height:72px;background:linear-gradient(135deg,#997059,#5e4133)"><i>16:9</i></div>
+        <div class="m" style="height:88px;background:linear-gradient(135deg,#59997a,#335e49)"><i>1:1</i></div>
+        <div class="m" style="height:118px;background:linear-gradient(135deg,#875999,#523360)"><i>9:16</i></div>
+        <div class="m" style="height:82px;background:linear-gradient(135deg,#998759,#5e5233)"><i>1:1</i></div>
+        <div class="m" style="height:110px;background:linear-gradient(135deg,#598799,#33525e)"><i>4:5</i></div>
+        <div class="m" style="height:70px;background:linear-gradient(135deg,#995970,#5e3341)"><i>16:9</i></div>
+        <div class="m" style="height:94px;background:linear-gradient(135deg,#709959,#415e33)"><i>1:1</i></div>
+      </div>
+      <div class="insp"><h4>Inspection</h4>
+        <div class="row"><span>Format</span><span>JPEG</span></div>
+        <div class="row"><span>Dimensions</span><span>1080×1350</span></div>
+        <div class="row"><span>Poids</span><span>412 Ko</span></div>
+        <div class="row"><span>Source</span><span>@yugnat999</span></div>
+        <div class="row"><span>Statut</span><span class="ok">Publié</span></div>
+        <div class="st"><b>meme</b><b>2026</b><b>à garder</b></div></div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ══════════════ 4 ══════════════ -->
+<div class="variant" id="v4">
+  <div class="vhead"><h2>4 · Samouraï</h2><span class="tag">le rouge du logo</span></div>
+  <p class="vdesc">Noir absolu, rouge franc repris de ton logo, aucun arrondi, capitales espacées,
+  gouttières minimales. Un parti pris assumé, proche de la culture visuelle du contenu que tu manipules.</p>
+  <div class="swatches">
+    <div class="sw" style="background:#000000" data-l="fond"></div>
+    <div class="sw" style="background:#0a0a0a" data-l="surface"></div>
+    <div class="sw" style="background:#282828" data-l="filet"></div>
+    <div class="sw" style="background:#e11d1d" data-l="accent"></div>
+    <div class="sw" style="background:#ffffff" data-l="texte"></div>
+  </div>
+  <div class="vargs">
+    <div class="varg pour"><b>Ce qu'elle a pour elle</b>Identitaire immédiatement, et la densité la
+      plus forte des quatre — gouttières de 3 px, angles vifs, on tient plus d'images à l'écran.</div>
+    <div class="varg contre"><b>Ce qu'on lui reproche</b>Le rouge est déjà pris par les erreurs : il
+      faudra une autre couleur pour les alertes, sinon plus rien ne se distingue. Et le noir absolu
+      manque de relief pour hiérarchiser.</div>
+  </div>
+  <div class="frame"><div class="app v4">
+    <div class="nav"><div class="logo"><span>◆</span>SAMOURAIS</div>
+      <a>Profils</a><a class="on">Médias</a><a>Éditeur</a><a>Calendrier</a><a>Analytics</a>
+      <div class="sp"></div><div class="k">⌘K</div></div>
+    <div class="bar"><div class="search">Rechercher…</div>
+      <span class="chip">instagram <x>×</x></span><span class="chip">noté ≥ 4 <x>×</x></span>
+      <button class="btn">Filtres</button><button class="btn">Doublons</button>
+      <button class="btn pri">Nouvelle collection</button><span class="count">147 médias</span></div>
+    <div class="body">
+      <div class="side"><h4>Collections</h4>
+        <div class="it on">Toute la bibliothèque <b>147</b></div>
+        <div class="it">Best of 2026 <b>23</b></div><div class="it">À retravailler <b>8</b></div>
+        <div class="it">Références <b>41</b></div></div>
+      <div class="grid">
+        <div class="m" style="height:104px;background:linear-gradient(135deg,#3a4a6b,#1e2740)"><i>4:5</i></div>
+        <div class="m" style="height:72px;background:linear-gradient(135deg,#6b4a3a,#402a1e)"><i>16:9</i></div>
+        <div class="m" style="height:88px;background:linear-gradient(135deg,#3a6b52,#1e402f)"><i>1:1</i></div>
+        <div class="m" style="height:118px;background:linear-gradient(135deg,#5a3a6b,#361e40)"><i>9:16</i></div>
+        <div class="m" style="height:82px;background:linear-gradient(135deg,#6b5a3a,#40361e)"><i>1:1</i></div>
+        <div class="m" style="height:110px;background:linear-gradient(135deg,#3a5a6b,#1e3640)"><i>4:5</i></div>
+        <div class="m" style="height:70px;background:linear-gradient(135deg,#6b3a4a,#401e27)"><i>16:9</i></div>
+        <div class="m" style="height:94px;background:linear-gradient(135deg,#4a6b3a,#2a401e)"><i>1:1</i></div>
+      </div>
+      <div class="insp"><h4>Inspection</h4>
+        <div class="row"><span>Format</span><span>JPEG</span></div>
+        <div class="row"><span>Dimensions</span><span>1080×1350</span></div>
+        <div class="row"><span>Poids</span><span>412 Ko</span></div>
+        <div class="row"><span>Source</span><span>@yugnat999</span></div>
+        <div class="row"><span>Statut</span><span class="ok">Publié</span></div>
+        <div class="st"><b>meme</b><b>2026</b><b>à garder</b></div></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="intro" style="border-bottom:0;border-top:1px solid #2a2b2d;margin-top:8px">
+  <h1 style="font-size:17px">Mon avis, si tu le veux</h1>
+  <p>La <strong>4</strong> est celle qui donne une identité au produit, et sa densité sert directement
+  ton usage principal : voir beaucoup d'images d'un coup. Son défaut est réel mais réparable — il suffit
+  de déplacer les alertes vers l'orange et de réserver le rouge à l'accent.</p>
+  <p>La <strong>3</strong> est objectivement la meilleure pour <em>regarder des images</em> : sur fond
+  clair, tes visuels ressortent sans que l'interface leur dispute l'attention.</p>
+  <p>La <strong>2</strong> a du charme mais je la déconseille sur un écran dense : les empattements
+  tiennent mal à 12 px sur des colonnes de métadonnées.</p>
+  <p>Rien ne t'oblige à en prendre une entière. Dis-moi ce qui t'attire dans chacune et je compose.</p>
+</div>
+
+</div>
+</body>
+</html>

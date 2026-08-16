@@ -677,34 +677,46 @@ def test_le_succes_a_la_seconde_tentative_ne_dort_quune_fois(
 
 @pytest.mark.downloader
 @pytest.mark.parametrize("code", [403, 404, 410])
-def test_une_url_cdn_expiree_est_retentee_comme_une_panne_transitoire(
-    code, download_dir, http_mock, sleeps
-):
-    """CARACTÉRISATION (§3 ligne 158) : 403/404/410 passent 3 fois dans la boucle.
+def test_une_url_cdn_expiree_nest_plus_retentee(code, download_dir, http_mock, sleeps):
+    """NON-RÉGRESSION lot 3.4 (ancienne caractérisation §3 ligne 158).
 
-    Une URL CDN signée expirée ne redeviendra jamais valide : les 2 tentatives
-    supplémentaires et les 6 secondes de backoff sont perdues, et pendant ce
-    temps le sémaphore de scrape reste tenu (risque #60).
+    Avant le lot 3.4, 403/404/410 passaient 3 fois dans la boucle : 2 tentatives
+    et 6 secondes de backoff perdues, sémaphore de scrape tenu pendant ce temps
+    (risque #60). Une URL CDN signée expirée ne redevenant jamais valide, ces
+    codes sont désormais définitifs.
     """
     etat = http_mock(lambda request: httpx.Response(code, content=b"expire"))
 
-    with pytest.raises(RuntimeError, match="after 3 attempts"):
+    with pytest.raises(RuntimeError):
         downloaders.download_media("https://cdn.invalid/expire.jpg")
+
+    assert len(etat.requests) == 1
+    assert sleeps == []
+
+
+@pytest.mark.downloader
+@pytest.mark.parametrize("code", [429, 500, 503])
+def test_une_panne_reellement_transitoire_reste_retentee(
+    code, download_dir, http_mock, sleeps
+):
+    """Contrôle négatif du test précédent : 429/5xx gardent bien leurs 3 essais.
+
+    Sans lui, « ne plus jamais retenter » ferait passer le test ci-dessus.
+    """
+    etat = http_mock(lambda request: httpx.Response(code, content=b"reessayez"))
+
+    with pytest.raises(RuntimeError, match="after 3 attempts"):
+        downloaders.download_media("https://cdn.invalid/transitoire.jpg")
 
     assert len(etat.requests) == 3
     assert sleeps == [2, 4]
 
 
 @pytest.mark.downloader
-@pytest.mark.xfail(
-    strict=True,
-    reason="T11 §7.4 AUDIT.md (« 403 non retryable ») + tableau §3 ligne 158 — "
-    "aucun risque numéroté dédié ; à rattacher au lot 3.4",
-)
 def test_une_erreur_definitive_ne_devrait_pas_etre_retentee(
     download_dir, http_mock, sleeps
 ):
-    """COMPORTEMENT ATTENDU : un 403 est définitif, une seule tentative suffit."""
+    """NON-RÉGRESSION lot 3.4 : un 403 est définitif, une seule tentative suffit."""
     etat = http_mock(lambda request: httpx.Response(403, content=b"expire"))
 
     with pytest.raises(RuntimeError):
@@ -738,42 +750,17 @@ def test_un_corps_vide_est_rejete_et_ne_laisse_aucun_fichier(
 
 
 @pytest.mark.downloader
-def test_une_page_derreur_html_est_stockee_comme_un_media_valide(
-    download_dir, http_mock, sleeps
-):
-    """CARACTÉRISATION §6.6 : 2 Ko de HTML deviennent un « média » de la bibliothèque.
+def test_une_page_derreur_html_doit_etre_rejetee(download_dir, http_mock, sleeps):
+    """NON-RÉGRESSION lot 2.5 : une page HTML n'est pas un média, on refuse.
 
-    Le CDN répond 200 avec une page d'erreur ; le code ne regarde ni le
-    content-type ni les magic bytes. Le fichier est écrit en `.html`
-    (`mimetypes.guess_extension('text/html')`), servi ensuite INLINE par
-    `/media/file/<nom>.html` sur l'origine de l'application → XSS stockée.
+    Avant le lot 2.5, ces 2 Ko de HTML devenaient un « média » de la
+    bibliothèque : écrit en `.html` (`mimetypes.guess_extension('text/html')`)
+    puis servi INLINE par `/media/file/<nom>.html` sur l'origine de
+    l'application — XSS stockée (§6.6 / T10).
     """
     page = ("<html><body>" + "Access denied. " * 130 + "</body></html>").encode()
     assert 1500 < len(page) < 3000  # ~2 Ko, comme une vraie page d'erreur
 
-    http_mock(
-        lambda request: httpx.Response(
-            200, headers={"content-type": "text/html; charset=utf-8"}, content=page
-        )
-    )
-
-    resultat = downloaders.download_media("https://cdn.invalid/video.mp4")
-
-    assert resultat.local_path.endswith(".html")
-    assert resultat.mime_type == "text/html"
-    assert resultat.file_size == len(page)
-    assert Path(resultat.local_path).is_file()
-
-
-@pytest.mark.downloader
-@pytest.mark.xfail(
-    strict=True,
-    reason="§6.6 / T10 AUDIT.md — aucune validation d'intégrité du contenu "
-    "téléchargé (ni content-type, ni magic bytes) ; lot 2.5",
-)
-def test_une_page_derreur_html_doit_etre_rejetee(download_dir, http_mock, sleeps):
-    """COMPORTEMENT ATTENDU : une page HTML n'est pas un média, on refuse."""
-    page = ("<html><body>" + "Access denied. " * 130 + "</body></html>").encode()
     http_mock(
         lambda request: httpx.Response(
             200, headers={"content-type": "text/html; charset=utf-8"}, content=page
@@ -787,29 +774,105 @@ def test_une_page_derreur_html_doit_etre_rejetee(download_dir, http_mock, sleeps
 
 
 @pytest.mark.downloader
-@pytest.mark.security
-def test_guess_extension_actuelle_suit_aveuglement_le_content_type():
-    """CARACTÉRISATION §6.6 : `text/html` → `.html`, `image/svg+xml` → `.svg`."""
-    assert downloaders._guess_extension("https://x.invalid/a", "text/html") == ".html"
-    assert (
-        downloaders._guess_extension("https://x.invalid/a", "image/svg+xml") == ".svg"
+def test_un_refus_json_est_rejete_sur_son_content_type(
+    download_dir, http_mock, sleeps
+):
+    """Le volet « Content-Type » du lot 2.5, isolé de celui des magic bytes.
+
+    Un JSON de refus (`{"error": …}`) ne commence par aucune signature HTML :
+    seul le contrôle du type de contenu peut l'arrêter. Sans ce test, retirer
+    ce contrôle laisserait la suite verte — la page HTML du test voisin étant
+    déjà rattrapée par ses premiers octets.
+    """
+    http_mock(
+        lambda request: httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            content=b'{"error": "rate limited", "retry_after": 900}',
+        )
     )
-    # Sans content-type, l'extension vient du chemin de l'URL.
-    assert downloaders._guess_extension("https://x.invalid/a.mp4", None) == ".mp4"
-    assert downloaders._guess_extension("https://x.invalid/a", None) == ".bin"
+
+    with pytest.raises((RuntimeError, ValueError)):
+        downloaders.download_media("https://cdn.invalid/video.mp4")
+
+    assert _files_in(download_dir) == []
+
+
+@pytest.mark.downloader
+def test_une_page_html_deguisee_en_image_est_rejetee_sur_ses_magic_bytes(
+    download_dir, http_mock, sleeps
+):
+    """Second volet du lot 2.5 : le CDN peut mentir sur son `Content-Type`.
+
+    Sans le contrôle des premiers octets, il suffirait d'annoncer `image/jpeg`
+    pour faire écrire la page de refus en `.jpg`.
+    """
+    page = b"\n  <!DOCTYPE html><html><body>Access denied</body></html>"
+    http_mock(
+        lambda request: httpx.Response(
+            200, headers={"content-type": "image/jpeg"}, content=page
+        )
+    )
+
+    with pytest.raises((RuntimeError, ValueError)):
+        downloaders.download_media("https://cdn.invalid/photo.jpg")
+
+    assert _files_in(download_dir) == []
+
+
+@pytest.mark.downloader
+def test_une_reponse_tronquee_est_rejetee_et_retentee(
+    download_dir, http_mock, sleeps
+):
+    """Troisième volet du lot 2.5 : `Content-Length` non tenu = média incomplet.
+
+    Un JPEG amputé s'affiche à moitié dans la bibliothèque et n'est jamais
+    retéléchargé, faute d'être détecté.
+    """
+
+    def _tronque(request):
+        return httpx.Response(
+            200,
+            headers={"content-type": "image/jpeg", "content-length": "5000"},
+            content=b"\xff\xd8\xff" + b"pixels" * 100,  # 603 octets seulement
+        )
+
+    etat = http_mock(_tronque)
+
+    with pytest.raises(RuntimeError, match="after 3 attempts"):
+        downloaders.download_media("https://cdn.invalid/photo.jpg")
+
+    assert len(etat.requests) == 3  # une troncature est transitoire : on retente
+    assert _files_in(download_dir) == []
 
 
 @pytest.mark.downloader
 @pytest.mark.security
-@pytest.mark.xfail(
-    strict=True,
-    reason="§6.6 / T10 AUDIT.md — XSS stockée same-origin via l'extension "
-    "issue du Content-Type distant ; lot 2.5 (liste blanche d'extensions)",
-)
 def test_guess_extension_devrait_appliquer_une_liste_blanche():
-    """COMPORTEMENT ATTENDU : hors médias reconnus, `.bin`."""
+    """NON-RÉGRESSION lot 2.5 : hors médias reconnus, `.bin`.
+
+    Avant le lot 2.5, `text/html` donnait `.html` et `image/svg+xml` donnait
+    `.svg` — deux documents exécutables servis same-origin (§6.6 / T10).
+    """
     assert downloaders._guess_extension("https://x.invalid/a", "text/html") == ".bin"
     assert downloaders._guess_extension("https://x.invalid/a", "image/svg+xml") == ".bin"
+    # Le chemin de l'URL est filtré par la même liste blanche.
+    assert downloaders._guess_extension("https://x.invalid/a.html", None) == ".bin"
+    assert downloaders._guess_extension("https://x.invalid/a.svg", None) == ".bin"
+
+
+@pytest.mark.downloader
+@pytest.mark.security
+def test_guess_extension_laisse_passer_les_vrais_medias():
+    """Contrôle négatif : la liste blanche ne dégrade pas les cas légitimes.
+
+    Sans lui, un `return ".bin"` inconditionnel ferait passer le test ci-dessus.
+    """
+    assert downloaders._guess_extension("https://x.invalid/a", "image/jpeg") == ".jpg"
+    assert downloaders._guess_extension("https://x.invalid/a", "video/mp4") == ".mp4"
+    # Sans content-type, l'extension vient du chemin de l'URL.
+    assert downloaders._guess_extension("https://x.invalid/a.mp4", None) == ".mp4"
+    assert downloaders._guess_extension("https://x.invalid/a", None) == ".bin"
 
 
 # ===========================================================================
@@ -835,41 +898,23 @@ def _reponse_qui_coupe_en_plein_flux(request):
 
 
 @pytest.mark.downloader
-def test_une_coupure_en_plein_flux_laisse_trois_fichiers_partiels(
+def test_aucun_fichier_partiel_ne_doit_survivre_a_trois_tentatives_ratees(
     download_dir, http_mock, sleeps
 ):
-    """CARACTÉRISATION risque #14 : 3 orphelins invisibles pour un seul média.
+    """NON-RÉGRESSION lot 3.4 (risque #14) : critère de succès, mot pour mot.
 
-    Chaque tentative ouvre un NOUVEAU nom nanoid (downloaders.py:130-132) et
-    l'`except` de :159 ne supprime rien : trois fichiers partiels restent, sans
-    ligne `MediaItem`, récupérés au mieux 24 h plus tard par cleanup_temp_files.
+    Avant le lot 3.4, chaque tentative ouvrait un NOUVEAU nom nanoid et rien ne
+    supprimait le fichier commencé : une seule URL coupée laissait TROIS
+    orphelins sans ligne `MediaItem`, récupérés au mieux 24 h plus tard par
+    `cleanup_temp_files`. Le compte de tentatives est vérifié ici pour que la
+    disparition des résidus ne puisse pas venir d'une boucle qui ne tourne plus.
     """
     etat = http_mock(_reponse_qui_coupe_en_plein_flux)
 
     with pytest.raises(RuntimeError, match="after 3 attempts"):
         downloaders.download_media("https://cdn.invalid/video.mp4")
 
-    orphelins = _files_in(download_dir)
     assert len(etat.requests) == 3
-    assert len(orphelins) == 3
-    assert all(p.stat().st_size >= downloaders._CHUNK_SIZE for p in orphelins)
-
-
-@pytest.mark.downloader
-@pytest.mark.xfail(
-    strict=True,
-    reason="risque #14 AUDIT.md — aucun try/finally ne supprime `dest` quand "
-    "iter_bytes lève ; lot 3.4",
-)
-def test_aucun_fichier_partiel_ne_doit_survivre_a_trois_tentatives_ratees(
-    download_dir, http_mock, sleeps
-):
-    """COMPORTEMENT ATTENDU : critère de succès du lot 3.4, mot pour mot."""
-    http_mock(_reponse_qui_coupe_en_plein_flux)
-
-    with pytest.raises(RuntimeError):
-        downloaders.download_media("https://cdn.invalid/video.mp4")
-
     assert _files_in(download_dir) == []
 
 
@@ -910,16 +955,17 @@ def disque_plein(monkeypatch):
 
 
 @pytest.mark.downloader
-def test_enospc_remonte_brut_sans_retry_et_laisse_le_fichier(
+def test_enospc_remonte_brut_sans_retry(
     download_dir, http_mock, sleeps, disque_plein
 ):
-    """CARACTÉRISATION §4.10 : `OSError` n'est pas dans le tuple de :159.
+    """§4.10 : un disque plein ne se retente pas et reste lisible en base.
 
-    Conséquences observables : (a) l'exception traverse la boucle sans être
-    retentée ni traduite, (b) un fichier vide est abandonné sur un disque déjà
-    plein. Le pipeline la rattrape en `except Exception` (pipeline.py:295) et
-    écrit « No space left on device » dans `error_message` — c'est le seul
-    endroit de l'application où le disque plein est visible.
+    `OSError` n'est volontairement pas dans le tuple retenté : l'exception
+    traverse la boucle sans être traduite, le pipeline la rattrape en
+    `except Exception` (pipeline.py:295) et écrit « No space left on device »
+    dans `error_message` — c'est le seul endroit de l'application où le disque
+    plein est visible. Le fichier abandonné, lui, a disparu avec le lot 3.4
+    (cf. `test_enospc_ne_doit_laisser_aucun_fichier_derriere_lui`).
     """
     etat = http_mock(
         lambda request: httpx.Response(
@@ -933,19 +979,17 @@ def test_enospc_remonte_brut_sans_retry_et_laisse_le_fichier(
     assert exc_info.value.errno == errno.ENOSPC
     assert len(etat.requests) == 1  # aucun retry
     assert sleeps == []
-    assert len(_files_in(download_dir)) == 1  # orphelin de 0 octet
 
 
 @pytest.mark.downloader
-@pytest.mark.xfail(
-    strict=True,
-    reason="risque #14 / §4.10 AUDIT.md — ENOSPC hors du tuple capturé "
-    "(downloaders.py:159), aucun nettoyage du fichier ; lot 3.4",
-)
 def test_enospc_ne_doit_laisser_aucun_fichier_derriere_lui(
     download_dir, http_mock, sleeps, disque_plein
 ):
-    """COMPORTEMENT ATTENDU : sur disque plein, surtout ne rien laisser."""
+    """NON-RÉGRESSION lot 3.4 : sur disque plein, surtout ne rien laisser.
+
+    Avant le lot 3.4, `ENOSPC` abandonnait un orphelin de 0 octet sur un volume
+    déjà saturé (risque #14 / §4.10).
+    """
     http_mock(
         lambda request: httpx.Response(
             200, headers={"content-type": "video/mp4"}, content=b"x" * 1024
@@ -959,15 +1003,10 @@ def test_enospc_ne_doit_laisser_aucun_fichier_derriere_lui(
 
 
 @pytest.mark.downloader
-@pytest.mark.xfail(
-    strict=True,
-    reason="risque #14 / §4.10 AUDIT.md — aucun contrôle d'espace disque avant "
-    "écriture (statvfs seulement dans run.py:38 et web/api.py:438) ; lot 3.4",
-)
 def test_download_media_doit_verifier_lespace_disque_avant_decrire(
     download_dir, http_mock, sleeps, monkeypatch
 ):
-    """COMPORTEMENT ATTENDU : un garde `os.statvfs` en tête de `download_media`.
+    """NON-RÉGRESSION lot 3.4 : un garde `os.statvfs` en tête de `download_media`.
 
     On n'assère PAS « statvfs a été appelé quelque part » : un correctif qui
     interrogerait le disque APRÈS l'écriture, ou sans jamais refuser, ferait
@@ -1083,39 +1122,32 @@ def test_hls_sans_ffmpeg_installe_leve_immediatement(download_dir, monkeypatch):
 
 
 @pytest.mark.downloader
-def test_hls_echec_ffmpeg_leve_des_la_premiere_tentative(
+def test_hls_un_echec_ffmpeg_ne_laisse_aucun_residu(
     download_dir, ffmpeg_simule, sleeps
 ):
-    """CARACTÉRISATION risque #64 : aucune boucle de retry dans `_download_hls`.
+    """Le `finally` de `_download_hls_once` nettoie le temporaire à CHAQUE passe.
 
-    Le pipeline marque alors l'item `download_failed` (pipeline.py:302) et le
-    seul rattrapage est un scrape complet AVEC NAVIGATEUR 2 h plus tard
-    (scheduler.py:304-318), au lieu d'un retry en processus de 2 secondes.
+    C'est ce qui rend la boucle de reprise du lot 3.4b sûre : trois tentatives
+    ratées ne laissent pas trois `.mp4` temporaires derrière elles.
     """
     ffmpeg_simule.returncode = 1
 
-    with pytest.raises(RuntimeError, match="ffmpeg exited 1"):
+    with pytest.raises(RuntimeError, match="after 3 attempts"):
         downloaders.download_media("https://cdn.invalid/master.m3u8")
 
-    assert len(ffmpeg_simule.commandes) == 1
-    assert sleeps == []
-    # Le `finally` (downloaders.py:241-243) nettoie bien le temporaire.
     assert _files_in(download_dir) == []
 
 
 @pytest.mark.downloader
-@pytest.mark.xfail(
-    strict=True,
-    reason="risque #64 AUDIT.md — _download_hls n'a pas la boucle _MAX_RETRIES "
-    "ni le backoff de _download_direct ; lot 3.4b",
-)
 def test_hls_doit_retenter_comme_le_telechargement_direct(
     download_dir, ffmpeg_simule, sleeps
 ):
-    """COMPORTEMENT ATTENDU : symétrie stricte avec `_download_direct`.
+    """NON-RÉGRESSION lot 3.4b (risque #64) : symétrie avec `_download_direct`.
 
-    Même nombre de tentatives, même backoff — le `finally` de :241-243 nettoie
-    déjà le temporaire à chaque passe, la boucle est donc sûre.
+    Avant le lot 3.4b, une sortie ffmpeg non nulle marquait l'item
+    `download_failed` (pipeline.py:302) dès la première tentative, et le seul
+    rattrapage était un scrape complet AVEC NAVIGATEUR 2 h plus tard
+    (scheduler.py:304-318) au lieu d'un retry en processus de 2 secondes.
     """
     ffmpeg_simule.returncode = 1
 
@@ -1127,20 +1159,40 @@ def test_hls_doit_retenter_comme_le_telechargement_direct(
 
 
 @pytest.mark.downloader
-@pytest.mark.xfail(
-    strict=True,
-    reason="risque #64 AUDIT.md — un ffmpeg vide lève sans retry ; lot 3.4b",
-)
 def test_hls_un_fichier_vide_doit_aussi_etre_retente(
     download_dir, ffmpeg_simule, sleeps
 ):
-    """COMPORTEMENT ATTENDU : la sortie vide est transitoire, elle se retente."""
+    """NON-RÉGRESSION lot 3.4b : la sortie vide est transitoire, elle se retente."""
     ffmpeg_simule.ecrit = b""
 
     with pytest.raises(RuntimeError):
         downloaders.download_media("https://cdn.invalid/master.m3u8")
 
     assert len(ffmpeg_simule.commandes) == downloaders._MAX_RETRIES
+
+
+@pytest.mark.downloader
+def test_hls_un_timeout_ffmpeg_nest_jamais_retente(
+    download_dir, ffmpeg_simule, monkeypatch
+):
+    """Limite explicite de la boucle du lot 3.4b : le timeout reste définitif.
+
+    Dix minutes ont déjà été consommées et le sémaphore de scrape est tenu
+    pendant ce temps : retenter coûterait une demi-heure par média. Ce test n'a
+    volontairement PAS la fixture `sleeps` — s'il devenait retenté, le backoff
+    serait un vrai `time.sleep` et la suite ralentirait de six secondes.
+    """
+
+    def run_qui_pend(cmd, capture_output=False, text=False, timeout=None):
+        ffmpeg_simule.commandes.append(cmd)
+        raise subprocess.TimeoutExpired(cmd, timeout or 1)
+
+    monkeypatch.setattr(downloaders.subprocess, "run", run_qui_pend)
+
+    with pytest.raises(RuntimeError, match="timed out"):
+        downloaders.download_media("https://cdn.invalid/master.m3u8")
+
+    assert len(ffmpeg_simule.commandes) == 1
 
 
 # ===========================================================================
@@ -1267,11 +1319,12 @@ def test_le_menage_ne_leve_pas_si_le_repertoire_nexiste_pas(tmp_path, monkeypatc
 
 @pytest.mark.storage
 @pytest.mark.scheduler
-def test_le_menage_saute_tout_ce_qui_nest_pas_un_fichier(menage):
-    """CARACTÉRISATION risque #14 : `if not entry.is_file(): continue` (:398).
+def test_le_menage_ne_supprime_jamais_un_repertoire(menage):
+    """Le balayage récursif du lot 3.4 ne s'en prend qu'aux FICHIERS.
 
-    Ce `continue` est la raison pour laquelle `.thumbs` — un RÉPERTOIRE — n'est
-    jamais visité, et donc jamais purgé.
+    `.thumbs` reste un répertoire même vidé de son contenu : `serve_media_thumbnail`
+    le recrée au besoin, mais un `os.unlink` sur un répertoire ferait remonter
+    une `OSError` à chaque passage du ménage.
     """
     thumbs = menage.dir / ".thumbs"
     vignette = menage.fichier(thumbs / "abc.jpg", age_heures=200)
@@ -1279,19 +1332,32 @@ def test_le_menage_saute_tout_ce_qui_nest_pas_un_fichier(menage):
     scheduler.cleanup_temp_files()
 
     assert thumbs.is_dir()
-    assert vignette.exists()
+    assert not vignette.exists()
 
 
 @pytest.mark.storage
 @pytest.mark.scheduler
-@pytest.mark.xfail(
-    strict=True,
-    reason="risque #14 AUDIT.md — le ménage saute le répertoire .thumbs "
-    "(scheduler.py:397-398), les vignettes de médias supprimés y restent "
-    "indéfiniment (risque #51) ; lot 3.4",
-)
+def test_le_menage_epargne_les_fichiers_de_service(menage):
+    """`.gitkeep` (versionné) et consorts ne sont jamais balayés.
+
+    Les supprimer ne libère rien et fait disparaître l'arborescence du dépôt.
+    """
+    garde = menage.fichier(menage.dir / ".gitkeep", age_heures=10_000)
+
+    scheduler.cleanup_temp_files()
+
+    assert garde.exists()
+
+
+@pytest.mark.storage
+@pytest.mark.scheduler
 def test_le_menage_doit_purger_les_vignettes_orphelines(menage):
-    """COMPORTEMENT ATTENDU : `.thumbs` est balayé comme le reste."""
+    """NON-RÉGRESSION lot 3.4 : `.thumbs` est balayé comme le reste.
+
+    Avant le lot 3.4, `if not entry.is_file(): continue` empêchait d'entrer
+    dans le répertoire `.thumbs` : les vignettes de médias supprimés y
+    restaient indéfiniment (risque #51).
+    """
     vignette = menage.fichier(menage.dir / ".thumbs" / "abc.jpg", age_heures=200)
 
     scheduler.cleanup_temp_files()
@@ -1301,16 +1367,35 @@ def test_le_menage_doit_purger_les_vignettes_orphelines(menage):
 
 @pytest.mark.storage
 @pytest.mark.scheduler
+def test_le_menage_epargne_la_vignette_dun_media_vivant(menage, make_media_item):
+    """Contrôle négatif : purger `.thumbs` ne doit pas purger la bibliothèque.
+
+    `.thumbs/<nanoid>.jpg` n'est jamais référencé en base — seul le média
+    `<nanoid>.mp4` l'est. Sans la garde sur le radical, le ménage détruirait
+    chaque nuit les vignettes de TOUS les médias vivants, à regénérer une par
+    une à coups de ffmpeg au prochain affichage.
+    """
+    media = menage.fichier(menage.dir / "vivant.mp4", age_heures=200)
+    make_media_item(status="uploaded", local_path=str(media))
+    vignette = menage.fichier(menage.dir / ".thumbs" / "vivant.jpg", age_heures=200)
+
+    scheduler.cleanup_temp_files()
+
+    assert media.exists()
+    assert vignette.exists()
+
+
+@pytest.mark.storage
+@pytest.mark.scheduler
 @pytest.mark.editor
-@pytest.mark.xfail(
-    strict=True,
-    reason="risque #14 AUDIT.md — le ménage ne balaie que DOWNLOAD_DIR ; "
-    "EDITOR_UPLOAD_DIR et EDITOR_OUTPUT_DIR grossissent sans limite ; lot 3.4",
-)
 def test_le_menage_doit_purger_les_repertoires_de_lediteur(
     menage, orphelin_dans_data_dir
 ):
-    """COMPORTEMENT ATTENDU : critère de succès du lot 3.4 (T13)."""
+    """NON-RÉGRESSION lot 3.4 (T13) : les répertoires de l'éditeur sont balayés.
+
+    Avant le lot 3.4, le ménage ne connaissait que `DOWNLOAD_DIR` :
+    `EDITOR_UPLOAD_DIR` et `EDITOR_OUTPUT_DIR` grossissaient sans limite.
+    """
     entree = orphelin_dans_data_dir(
         app_config.EDITOR_UPLOAD_DIR, "upload-mort.mp4", age_heures=200
     )
@@ -1327,18 +1412,14 @@ def test_le_menage_doit_purger_les_repertoires_de_lediteur(
 @pytest.mark.storage
 @pytest.mark.scheduler
 @pytest.mark.calendar
-@pytest.mark.xfail(
-    strict=True,
-    reason="risque #56 AUDIT.md — CALENDAR_DIR (config.py:63) n'est balayé par "
-    "AUCUN chemin de code ; lot 3.4",
-)
 def test_le_menage_doit_purger_les_medias_du_calendrier(
     menage, orphelin_dans_data_dir
 ):
-    """COMPORTEMENT ATTENDU : `DATA_DIR/calendar` cesse de croître indéfiniment.
+    """NON-RÉGRESSION lot 3.4 (risque #56) : `DATA_DIR/calendar` est balayé.
 
-    Rappel : ces fichiers sont écrits AVANT le commit (`calendar/api.py:144`)
-    et ne sont pas supprimés sur rollback — d'où des orphelins définitifs.
+    Ces fichiers sont écrits AVANT le commit (`calendar/api.py:144`) et ne sont
+    pas supprimés sur rollback — d'où des orphelins définitifs, qu'AUCUN chemin
+    de code ne ramassait avant ce lot.
     """
     media = orphelin_dans_data_dir(
         app_config.CALENDAR_DIR / "media", "post-annule.jpg", age_heures=200
@@ -1347,6 +1428,28 @@ def test_le_menage_doit_purger_les_medias_du_calendrier(
     scheduler.cleanup_temp_files()
 
     assert not media.exists()
+
+
+@pytest.mark.storage
+@pytest.mark.scheduler
+@pytest.mark.calendar
+def test_le_menage_epargne_le_visuel_dun_post_programme(
+    menage, orphelin_dans_data_dir, make_scheduled_post
+):
+    """Contrôle négatif : un visuel encore référencé par un post survit.
+
+    Étendre le balayage au calendrier et à l'éditeur sans lire
+    `ScheduledPost.media_path` / `SavedMeme.file_path` détruirait des fichiers
+    ENCORE UTILISÉS — un post programmé sans son image se publierait vide.
+    """
+    visuel = orphelin_dans_data_dir(
+        app_config.CALENDAR_DIR / "media", "post-vivant.jpg", age_heures=200
+    )
+    make_scheduled_post(media_path=str(visuel))
+
+    scheduler.cleanup_temp_files()
+
+    assert visuel.exists()
 
 
 @pytest.mark.storage

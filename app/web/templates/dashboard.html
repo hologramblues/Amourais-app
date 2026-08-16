@@ -1,7 +1,21 @@
 {% extends "layout.html" %}
 
 {% block content %}
+{%- set _dot = {'ok': 's-dot-green', 'warn': 's-dot-orange', 'danger': 's-dot-red', 'neutre': 's-dot-gray'} -%}
 <h1>Dashboard</h1>
+
+{# ===== SESSION MORTE : le bandeau passe AVANT tout le reste =====
+   Une session déconnectée arrête le produit entier — plus un seul média ne
+   rentre. Elle ne peut donc pas attendre qu'on ouvre les Réglages. Le bandeau
+   ne s'affiche que s'il y a quelque chose à faire : il n'existe pas en régime
+   normal, et n'a donc aucune chance de devenir un décor qu'on ne lit plus. #}
+{% for s in sessions_resume.en_panne %}
+<div class="s-alert {{ 's-alert-error' if s.ton == 'danger' else 's-alert-warning' }} s-alert--session">
+  <strong>Session {{ s.nom }} {{ s.libelle|lower }}</strong> — {{ s.message }}
+  <span class="s-alert__geste">{{ s.geste }}</span>
+  <a href="/settings#session-{{ s.plateforme }}" class="s-btn s-btn-sm s-alert__action">Réparer la session {{ s.nom }}</a>
+</div>
+{% endfor %}
 
 {% if storage_mode == "local" %}
 <div class="s-alert">
@@ -32,6 +46,34 @@
     <div class="s-card-value">{{ stats.pendingMedia }}</div>
     <div class="s-card-sub">médias à traiter</div>
   </div>
+</div>
+
+{# ===== SANTÉ DES SESSIONS =====
+   Compté ET cliquable : chaque pastille mène au geste correctif dans les
+   Réglages, pas à un chiffre inerte de plus. #}
+<div class="s-card s-sessions-kpi" data-ton="{{ sessions_resume.ton }}">
+  <a class="s-sessions-kpi__chiffre" href="/settings#sessions">
+    <span class="s-sessions-kpi__valeur">{{ sessions_resume.valeur }}</span>
+    <span class="s-sessions-kpi__titre">
+      <span class="s-dot {{ _dot[sessions_resume.ton] }}" aria-hidden="true"></span>{{ sessions_resume.titre }}
+    </span>
+    <span class="s-sessions-kpi__detail">{{ sessions_resume.detail }}</span>
+  </a>
+
+  <ul class="s-sessions-kpi__liste">
+    {% for s in sessions_sante %}
+    <li>
+      <a href="/settings#session-{{ s.plateforme }}" class="s-sessions-chip" data-ton="{{ s.ton }}"
+         title="{{ s.message }}">
+        <span class="s-dot {{ _dot[s.ton] }}" aria-hidden="true"></span>
+        <span class="s-sessions-chip__nom">{{ s.nom }}</span>
+        <span class="s-sessions-chip__etat">{{ s.libelle }}</span>
+      </a>
+    </li>
+    {% else %}
+    <li class="text-muted">État des sessions indisponible.</li>
+    {% endfor %}
+  </ul>
 </div>
 
 <!-- Quick Download -->

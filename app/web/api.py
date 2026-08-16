@@ -1000,6 +1000,95 @@ def upload_session():
 
 
 # ===========================================================================
+# Santé de session (lot « moteur de santé de session »)
+# ===========================================================================
+# Deux endpoints, deux coûts très différents :
+#   * GET  /api/sessions/health          — gratuit, instantané, sans réseau.
+#     Il rend le SIGNAL PASSIF (cookies + historique des jobs) fusionné avec le
+#     dernier verdict de sonde stocké. C'est ce que l'UI interroge.
+#   * POST /api/sessions/<plateforme>/probe — lance la SONDE ACTIVE.
+#     Elle démarre un navigateur : la requête HTTP ne l'attend PAS. Elle part
+#     dans un thread démon et répond 202 immédiatement ; le résultat se lit
+#     ensuite par le GET. Une requête web ne doit jamais pendre des minutes.
+
+
+@api_bp.route("/sessions/health")
+def sessions_health():
+    """État de session de toutes les plateformes, les plus urgents d'abord."""
+    from app.scraper import session_health as sante
+
+    try:
+        etats = sante.etats_de_toutes_les_plateformes()
+    except Exception as exc:
+        logger.exception("Lecture de la sante des sessions impossible: {}", exc)
+        return jsonify({"ok": False, "error": "Erreur serveur"}), 500
+
+    return jsonify({
+        "ok": True,
+        "sonde_en_cours": sante.sonde_en_cours(),
+        "etats": etats,
+        "alertes": [e for e in etats if e["urgent"] or e["alerte"]],
+    })
+
+
+@api_bp.route("/sessions/<platform>/health")
+def session_health_detail(platform: str):
+    """Verdict retenu POUR UNE plateforme, avec les deux signaux séparés."""
+    from app.scraper import session_health as sante
+
+    if platform not in sante.PLATEFORMES:
+        return jsonify({"ok": False, "error": "Plateforme inconnue"}), 404
+    try:
+        return jsonify({"ok": True, **sante.etats_detailles(platform)})
+    except Exception as exc:
+        logger.exception("Sante de session illisible pour {}: {}", platform, exc)
+        return jsonify({"ok": False, "error": "Erreur serveur"}), 500
+
+
+@api_bp.route("/sessions/<platform>/probe", methods=["POST"])
+def session_probe(platform: str):
+    """Déclenche la sonde active en arrière-plan. Répond tout de suite (202).
+
+    La réponse porte l'état CONNU au moment de l'appel : l'interface peut
+    l'afficher sans attendre, puis rafraîchir via `GET /api/sessions/health`.
+    """
+    from app.scraper import session_health as sante
+
+    if platform not in sante.PLATEFORMES:
+        return jsonify({"ok": False, "error": "Plateforme inconnue"}), 404
+
+    if sante.sonde_en_cours():
+        return jsonify({
+            "ok": False,
+            "lancee": False,
+            "error": "Une sonde est déjà en cours, réessayez dans un instant.",
+        }), 409
+
+    def _sonder():
+        try:
+            sante.sonder_si_libre(platform)
+        except sante.SondeOccupee:
+            logger.info("Sonde {} ignoree: une sonde tourne deja", platform)
+        except Exception as exc:  # la sonde ne doit jamais tuer son thread
+            logger.error("Sonde {} en echec: {}", platform, exc)
+
+    threading.Thread(target=_sonder, daemon=True, name=f"sonde-{platform}").start()
+
+    try:
+        etat_connu = sante.etat_courant(platform).en_dict()
+    except Exception:
+        etat_connu = None
+
+    return jsonify({
+        "ok": True,
+        "lancee": True,
+        "plateforme": platform,
+        "message": "Sonde lancée — le résultat apparaîtra dans quelques instants.",
+        "etat_connu": etat_connu,
+    }), 202
+
+
+# ===========================================================================
 # Quick Download (single URL)
 # ===========================================================================
 # Each quick download spawns a headless chromium. Without a cap, holding the
