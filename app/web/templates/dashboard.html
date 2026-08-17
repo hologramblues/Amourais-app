@@ -1,24 +1,38 @@
 {% extends "layout.html" %}
 
 {% block content %}
+{%- set _dot = {'ok': 's-dot-green', 'warn': 's-dot-orange', 'danger': 's-dot-red', 'neutre': 's-dot-gray'} -%}
 <h1>Dashboard</h1>
+
+{# ===== SESSION MORTE : le bandeau passe AVANT tout le reste =====
+   Une session déconnectée arrête le produit entier — plus un seul média ne
+   rentre. Elle ne peut donc pas attendre qu'on ouvre les Réglages. Le bandeau
+   ne s'affiche que s'il y a quelque chose à faire : il n'existe pas en régime
+   normal, et n'a donc aucune chance de devenir un décor qu'on ne lit plus. #}
+{% for s in sessions_resume.en_panne %}
+<div class="s-alert {{ 's-alert-error' if s.ton == 'danger' else 's-alert-warning' }} s-alert--session">
+  <strong>Session {{ s.nom }} {{ s.libelle|lower }}</strong> — {{ s.message }}
+  <span class="s-alert__geste">{{ s.geste }}</span>
+  <a href="/settings#session-{{ s.plateforme }}" class="s-btn s-btn-sm s-alert__action">Réparer la session {{ s.nom }}</a>
+</div>
+{% endfor %}
 
 {% if storage_mode == "local" %}
 <div class="s-alert">
-  <strong>Mode local</strong> — Les medias sont sauvegardes dans <code>{{ data_dir }}/downloads/</code>.
-  Pour activer Google Drive, configurez vos credentials dans <a href="/settings">Settings</a>.
+  <strong>Mode local</strong> — Les médias sont sauvegardés dans <code>{{ data_dir }}/downloads/</code>.
+  Pour activer Google Drive, configurez vos identifiants dans <a href="/settings">Réglages</a>.
 </div>
 {% endif %}
 
 <!-- KPI Cards -->
 <div class="s-grid-4">
   <div class="s-card">
-    <div class="s-card-header"><h5>Profiles</h5></div>
+    <div class="s-card-header"><h5>Profils</h5></div>
     <div class="s-card-value">{{ stats.totalProfiles }}</div>
     <div class="s-card-sub">{{ stats.activeProfiles }} actifs</div>
   </div>
   <div class="s-card">
-    <div class="s-card-header"><h5>Media total</h5></div>
+    <div class="s-card-header"><h5>Médias au total</h5></div>
     <div class="s-card-value">{{ stats.totalMedia }}</div>
     <div class="s-card-sub">{{ stats.uploadedMedia }} uploaded</div>
   </div>
@@ -30,14 +44,42 @@
   <div class="s-card">
     <div class="s-card-header"><h5>En attente</h5></div>
     <div class="s-card-value">{{ stats.pendingMedia }}</div>
-    <div class="s-card-sub">media a traiter</div>
+    <div class="s-card-sub">médias à traiter</div>
   </div>
+</div>
+
+{# ===== SANTÉ DES SESSIONS =====
+   Compté ET cliquable : chaque pastille mène au geste correctif dans les
+   Réglages, pas à un chiffre inerte de plus. #}
+<div class="s-card s-sessions-kpi" data-ton="{{ sessions_resume.ton }}">
+  <a class="s-sessions-kpi__chiffre" href="/settings#sessions">
+    <span class="s-sessions-kpi__valeur">{{ sessions_resume.valeur }}</span>
+    <span class="s-sessions-kpi__titre">
+      <span class="s-dot {{ _dot[sessions_resume.ton] }}" aria-hidden="true"></span>{{ sessions_resume.titre }}
+    </span>
+    <span class="s-sessions-kpi__detail">{{ sessions_resume.detail }}</span>
+  </a>
+
+  <ul class="s-sessions-kpi__liste">
+    {% for s in sessions_sante %}
+    <li>
+      <a href="/settings#session-{{ s.plateforme }}" class="s-sessions-chip" data-ton="{{ s.ton }}"
+         title="{{ s.message }}">
+        <span class="s-dot {{ _dot[s.ton] }}" aria-hidden="true"></span>
+        <span class="s-sessions-chip__nom">{{ s.nom }}</span>
+        <span class="s-sessions-chip__etat">{{ s.libelle }}</span>
+      </a>
+    </li>
+    {% else %}
+    <li class="text-muted">État des sessions indisponible.</li>
+    {% endfor %}
+  </ul>
 </div>
 
 <!-- Quick Download -->
 <div class="s-section">
   <h2>Quick Download</h2>
-  <p>Colle un lien Instagram, TikTok, Twitter/X ou Reddit pour telecharger le media.</p>
+  <p>Colle un lien Instagram, TikTok, Twitter/X ou Reddit pour télécharger le média.</p>
   <div class="s-input-group">
     <input
       type="url"
@@ -45,7 +87,7 @@
       placeholder="https://www.instagram.com/p/ABC123/ ..."
     >
     <button id="quick-dl-btn" onclick="quickDownload()" class="s-btn-primary">
-      Telecharger
+      Télécharger
     </button>
   </div>
   <div id="quick-dl-status" class="mt-1"></div>
@@ -82,17 +124,17 @@ function quickDownload() {
       const postId = data.post_id || '';
       statusDiv.innerHTML =
         `<small class="text-success">${data.message || 'Lancement OK'}</small>` +
-        `<br><small class="text-muted">${platform} — ${postId}. Le media apparaitra dans le Viewer.</small>`;
+        `<br><small class="text-muted">${platform} — ${postId}. Le média apparaîtra dans l'écran Médias.</small>`;
       urlInput.value = '';
     }
   })
   .catch(err => {
-    statusDiv.innerHTML = `<small class="text-error">Erreur reseau: ${err.message}</small>`;
+    statusDiv.innerHTML = `<small class="text-error">Erreur réseau : ${err.message}</small>`;
   })
   .finally(() => {
     btn.disabled = false;
     btn.removeAttribute('aria-busy');
-    btn.textContent = 'Telecharger';
+    btn.textContent = 'Télécharger';
   });
 }
 
@@ -107,7 +149,7 @@ document.getElementById('quick-dl-url').addEventListener('keydown', function(e) 
 <!-- Recent Jobs -->
 <div class="s-section">
   <div class="s-section-header">
-    <h2>Activite recente</h2>
+    <h2>Activité récente</h2>
   </div>
   <div hx-get="/api/jobs/recent" hx-trigger="load, every 10s" hx-target="#recent-jobs">
     <div id="recent-jobs">
@@ -119,16 +161,16 @@ document.getElementById('quick-dl-url').addEventListener('keydown', function(e) 
 <!-- Profiles -->
 <div class="s-section">
   <div class="s-section-header">
-    <h2>Profiles suivis</h2>
+    <h2>Profils suivis</h2>
     <a href="/profiles" class="s-btn s-btn-sm s-btn-ghost">Voir tout &rarr;</a>
   </div>
   <table>
     <thead>
       <tr>
         <th>Plateforme</th>
-        <th>Username</th>
-        <th>Dernier scrape</th>
-        <th>Status</th>
+        <th>Nom d'utilisateur</th>
+        <th>Dernière collecte</th>
+        <th>État</th>
         <th>Actions</th>
       </tr>
     </thead>

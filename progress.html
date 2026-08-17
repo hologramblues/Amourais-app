@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAMOURAIS SCRAPPER — Chantier</title>
+<style>
+:root{
+  --bg:#08090a; --surface:#0f1011; --surface-2:#151617; --surface-3:#1c1d1f;
+  --border:#232427; --border-strong:#2e3033;
+  --text:#f7f8f8; --text-2:#8a8f98; --text-3:#62666d;
+  --accent:#5e6ad2; --accent-soft:#5e6ad226;
+  --ok:#4cb782; --ok-soft:#4cb78222;
+  --warn:#f2c94c; --warn-soft:#f2c94c22;
+  --err:#eb5757; --err-soft:#eb575722;
+  --run:#5e9ed2; --run-soft:#5e9ed222;
+  --r:6px; --r-lg:10px;
+  --f:13px; --f-sm:11.5px; --f-lg:15px;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--text);
+  font:var(--f)/1.5 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased;padding:0 0 80px;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+header{border-bottom:1px solid var(--border);padding:28px 0 20px;margin-bottom:28px;
+  position:sticky;top:0;background:rgba(8,9,10,.86);backdrop-filter:blur(12px);z-index:10}
+.brand{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h1{font-size:19px;font-weight:600;letter-spacing:-.02em}
+.sub{color:var(--text-2);font-size:var(--f-sm)}
+.meta{display:flex;gap:20px;margin-top:14px;flex-wrap:wrap;font-size:var(--f-sm);color:var(--text-2)}
+.meta b{color:var(--text);font-weight:550;font-variant-numeric:tabular-nums}
+
+h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--text-2);margin:34px 0 12px;display:flex;align-items:center;gap:10px}
+h2::after{content:"";flex:1;height:1px;background:var(--border)}
+
+.bar{height:4px;border-radius:2px;background:var(--surface-3);overflow:hidden;margin:16px 0 4px;display:flex}
+.bar i{display:block;height:100%}
+.bar i.d{background:var(--ok)} .bar i.r{background:var(--run)} .bar i.b{background:var(--err)}
+.legend{display:flex;gap:16px;font-size:var(--f-sm);color:var(--text-2)}
+.legend span{display:flex;align-items:center;gap:6px}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.dot.d{background:var(--ok)} .dot.r{background:var(--run)}
+.dot.q{background:var(--text-3)} .dot.b{background:var(--err)}
+
+.grid{display:grid;gap:10px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
+  padding:14px 16px;transition:border-color .15s,background .15s}
+.card:hover{border-color:var(--border-strong);background:var(--surface-2)}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.card-t{font-weight:550;font-size:var(--f-lg);letter-spacing:-.01em}
+.card-d{color:var(--text-2);font-size:var(--f-sm);line-height:1.55}
+.num{font-family:var(--mono);font-size:var(--f-sm);color:var(--text-3);flex:none}
+
+.tag{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
+  padding:2.5px 7px;border-radius:4px;flex:none;line-height:1.4}
+.tag.d{background:var(--ok-soft);color:var(--ok)}
+.tag.r{background:var(--run-soft);color:var(--run)}
+.tag.q{background:var(--surface-3);color:var(--text-3)}
+.tag.b{background:var(--err-soft);color:var(--err)}
+.tag.w{background:var(--warn-soft);color:var(--warn)}
+.spacer{flex:1}
+
+table{width:100%;border-collapse:collapse;font-size:var(--f-sm)}
+th{text-align:left;font-weight:600;color:var(--text-2);font-size:10.5px;text-transform:uppercase;
+  letter-spacing:.06em;padding:0 12px 8px 0;border-bottom:1px solid var(--border)}
+td{padding:9px 12px 9px 0;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text-2)}
+td:first-child{color:var(--text);font-weight:500}
+tr:last-child td{border-bottom:0}
+code{font-family:var(--mono);font-size:11px;background:var(--surface-3);
+  padding:1.5px 5px;border-radius:4px;color:var(--text)}
+
+.rules{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.rule{background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--accent);
+  border-radius:var(--r);padding:11px 14px;font-size:var(--f-sm);color:var(--text-2)}
+.rule b{display:block;color:var(--text);font-size:var(--f);font-weight:550;margin-bottom:3px}
+
+.wave{border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;background:var(--surface)}
+.wave+.wave{margin-top:10px}
+.wave-h{display:flex;align-items:center;gap:11px;padding:13px 16px;background:var(--surface-2);
+  border-bottom:1px solid var(--border)}
+.wave-h .card-t{font-size:var(--f)}
+.wave ul{list-style:none;padding:6px 0}
+.wave li{display:flex;align-items:flex-start;gap:10px;padding:7px 16px;font-size:var(--f-sm);
+  color:var(--text-2);line-height:1.5}
+.wave li .dot{margin-top:6px}
+.wave li b{color:var(--text);font-weight:500}
+footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--border);
+  color:var(--text-3);font-size:var(--f-sm);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+@media(max-width:640px){
+  .wrap{padding:0 16px} .meta{gap:12px} h1{font-size:17px}
+  table{font-size:11px} td,th{padding-right:8px}
+}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="brand">
+    <h1>SAMOURAIS SCRAPPER — Chantier</h1>
+    <span class="sub">Robustesse · Refonte UI · Nouvelles fonctionnalités</span>
+  </div>
+  <div class="meta">
+    <span>Phase&nbsp;: <b>4 vagues livrées</b></span>
+    <span>Agents&nbsp;: <b id="agents">86</b></span>
+    <span>Tests&nbsp;: <b style="color:var(--ok)">542 verts</b> · 30 xfail</span>
+    <span>Bugs corrigés&nbsp;: <b style="color:var(--ok)">55</b></span>
+    <span>Données&nbsp;: <b style="color:var(--ok)">intactes</b></span>
+  </div>
+  <div class="bar"><i class="d" style="width:84%"></i></div>
+  <div class="legend">
+    <span><i class="dot d"></i>terminé</span>
+    <span><i class="dot r"></i>en cours</span>
+    <span><i class="dot q"></i>en attente</span>
+    <span><i class="dot b"></i>bloqué</span>
+  </div>
+</div></header>
+
+<div class="wrap">
+
+<h2>Phase 0 — Audit et socle</h2>
+<div class="grid">
+  <div class="card">
+    <div class="card-h"><span class="num">0.1</span><span class="card-t">Audit exhaustif du code</span>
+      <span class="spacer"></span><span class="tag r">synthèse</span></div>
+    <div class="card-d">10 auditeurs spécialisés en lecture seule&nbsp;: noyau/DB/config, scheduler et concurrence,
+      pipeline de scraping, extracteurs par plateforme, routes web et sécurité, viewer, éditeur,
+      calendrier et publication, analytics et Graph API, stockage/déploiement/socle front.
+      Cible prioritaire&nbsp;: les modes d'échec silencieux.
+      <code>AUDIT.md</code> livré, 831 lignes&nbsp;: <b style="color:var(--text)">177 risques, 27 critiques,
+      147 silencieux</b>, 22 modes d'échec silencieux documentés. Chaque affirmation porte une preuve
+      <code>fichier:ligne</code> et un marqueur de vérification.</div>
+  </div>
+  <div class="card">
+    <div class="card-h"><span class="num">0.2</span><span class="card-t">Validation par critics frais</span>
+      <span class="spacer"></span><span class="tag d">audit clos</span></div>
+    <div class="card-d">3 critics à contexte vierge vérifient chaque affirmation contre le code réel
+      (sécurité et routes / scraper et scheduler / données et publication). Une affirmation sans preuve
+      <code>fichier:ligne</code> est rejetée.
+      <b style="color:var(--text)">4 rounds, audit clos</b>&nbsp;: dernier round à 0 erreur fatale,
+      0 majeure, 4 mineures — imprécisions de comptage et de numéro de ligne, corrigées et recontrôlées
+      une à une. Les critics ont renversé deux conclusions&nbsp;: la publication au calendrier n'est pas
+      un stub mais un flux manuel assumé et câblé de bout en bout, et la traversée de chemin sur
+      les routes de fichiers est impossible.</div>
+  </div>
+  <div class="card">
+    <div class="card-h"><span class="num">0.3</span><span class="card-t">Dossier de références marché</span>
+      <span class="spacer"></span><span class="tag d">terminé</span></div>
+    <div class="card-d">7 enquêteurs produit&nbsp;: Buffer et Later (planification), Metricool (analytics),
+      Eagle et Raindrop et Google Photos (galerie et organisation), Linear (densité et qualité d'interface).
+      <code>REFERENCES.md</code> livré&nbsp;: <b style="color:var(--text)">239 critères de notation dont 79 bloquants</b>,
+      direction esthétique chiffrée et tokens CSS prêts à l'emploi, 197 sources.
+      Viewer&nbsp;: 32 critères. Calendrier&nbsp;: 18. Analytics&nbsp;: 14. Éditeur&nbsp;: 12.
+      Dashboard et Réglages&nbsp;: 10 chacun. Transversal&nbsp;: 38.</div>
+  </div>
+  <div class="card">
+    <div class="card-h"><span class="num">0.4</span><span class="card-t">Suite de non-régression</span>
+      <span class="spacer"></span><span class="tag d">347 verts</span></div>
+    <div class="card-d">Filet de sécurité avant toute modification&nbsp;: un socle isolé puis 6 modules —
+      schéma, scheduler, pipeline, contrat des extracteurs, web et sécurité, stockage. Chaque module est
+      jugé par un critic qui <b style="color:var(--text)">exécute réellement la suite</b> et teste par
+      mutation qu'un test prétendument couvrant devient bien rouge quand on casse le code visé.
+      Garde-fous mécaniques&nbsp;: toute tentative de connexion sortante ou d'écriture sous
+      <code>data/</code> fait échouer le test.
+      <br><br><b style="color:var(--text)">Mécanisme central&nbsp;:</b> chaque bug de l'audit devient un
+      test exprimant le comportement <i>correct</i>, marqué <code>xfail(strict=True)</code> avec son numéro
+      de risque. La suite reste verte aujourd'hui, et le jour où le bug est corrigé le test passe en XPASS
+      et fait échouer la suite en réclamant le retrait du marqueur. Chaque bug garde ainsi sa propre
+      correction.
+      <br><br><b style="color:var(--text)">Livré&nbsp;:</b> 8&nbsp;034 lignes de tests,
+      <b style="color:var(--ok)">347 verts, 85 xfail, 0 échec en 2,6&nbsp;s</b> — exécution revérifiée
+      à la main. Empreinte de <code>data/</code> identique au bit près, <code>app/</code> et
+      <code>run.py</code> intacts. Les critics ont tué 5 mutations sur 5 et éliminé un test qui restait
+      vert alors qu'on cassait le code qu'il prétendait couvrir.
+      <code>tests/README.md</code> porte la table des xfail organisée par lot&nbsp;:
+      «&nbsp;je livre le lot 1.3, je retire ces 5 marqueurs&nbsp;».</div>
+  </div>
+</div>
+
+<h2>À traiter en premier — issu de l'audit</h2>
+<div class="grid">
+  <div class="card" style="border-color:var(--err);background:linear-gradient(0deg,var(--err-soft),transparent)">
+    <div class="card-h"><span class="tag b">action requise</span><span class="card-t">Exposition de la production</span></div>
+    <div class="card-d"><code>APP_PASSWORD</code> n'est défini nulle part et
+      <code>_require_auth</code> rend la main immédiatement quand il est vide
+      (<code>app/web/app.py:81</code>)&nbsp;: <b style="color:var(--text)">toutes les routes sont publiques</b>,
+      seul <code>/health</code> devait l'être. S'y ajoute <code>FLASK_DEBUG=1</code> par défaut
+      (<code>app/config.py:24</code>) et un lancement par le serveur de développement Werkzeug
+      (<code>run.py:95</code>), sans utilisateur non-root dans le <code>Dockerfile</code>.
+      Correctif&nbsp;: définir <code>APP_PASSWORD</code> et <code>FLASK_DEBUG=0</code> dans les variables
+      Railway. Une minute, aucun déploiement de code.</div>
+  </div>
+  <div class="card">
+    <div class="card-h"><span class="tag w">piège</span><span class="card-t">Le volume écrase la plateforme</span></div>
+    <div class="card-d"><code>data/.env</code> est chargé avec <code>override=True</code>
+      (<code>app/config.py:20</code>) et écrase donc les variables injectées par Railway —
+      <code>PORT</code> compris, qui figure dans les clés autorisées à l'écriture depuis l'écran Réglages.
+      Enregistrer les réglages depuis l'interface peut donc tuer le déploiement. À corriger
+      <b style="color:var(--text)">avant</b> de définir le mot de passe par ce chemin&nbsp;:
+      passer par les variables Railway, pas par l'écran Réglages.</div>
+  </div>
+</div>
+
+<h2>Vague 1 — arrêter l'hémorragie <span class="tag d" style="margin-left:8px">55 bugs corrigés</span></h2>
+<div class="card" style="border-color:var(--ok);background:linear-gradient(0deg,var(--ok-soft),transparent);margin-bottom:10px">
+  <div class="card-d">Le compteur de marqueurs <code>xfail</code> a servi d'arbitre&nbsp;: <b style="color:var(--text)">85
+    au départ, 30 à l'arrivée</b>. Le décompte se referme exactement sur le contrat de
+    <code>tests/README.md</code> — aucun marqueur retiré à tort, aucun bug corrigé par accident.
+    Suite à 414 verts, déterministe sur 4 exécutions. L'application démarre, ses 57 routes répondent.
+    <b style="color:var(--text)">Base de production inchangée au bit près</b>, dernière écriture le
+    10 mars, cinq mois avant ce chantier.</div>
+</div>
+<div class="wave">
+  <div class="wave-h"><span class="card-t">5 lots sur fichiers disjoints</span>
+    <span class="spacer"></span><span class="num">branche chantier/vague-1-robustesse</span></div>
+  <ul>
+    <li><i class="dot d"></i><b>Sécurité web et boot</b> — fermeture du trou d'exécution de code&nbsp;:
+      validation du corps de <code>/api/quick-download</code>, gestionnaire d'erreurs global,
+      comparaison d'identifiants sur des octets, retrait des identifiants de la liste des clés
+      pilotables depuis l'interface, <code>FLASK_DEBUG</code> à 0 et reloader désactivé,
+      validation numérique des réglages.</li>
+    <li><i class="dot d"></i><b>Migrations de schéma</b> — colonnes de backfill absentes de toute
+      migration, et fin de l'avalement aveugle des erreurs SQLite qui laissait démarrer l'application
+      sur un schéma incomplet.</li>
+    <li><i class="dot d"></i><b>Cycle de vie des jobs</b> — les trois chemins par lesquels un job
+      reste gelé et bloque définitivement le scraping d'un profil, plus le compteur de tentatives
+      incrémenté deux fois qui plafonnait les reprises à 3 au lieu de 5.</li>
+    <li><i class="dot d"></i><b>Signal central du produit</b> — un échec de fetch devient
+      <code>failed</code> au lieu de se confondre avec «&nbsp;rien de neuf&nbsp;», l'horodatage cesse
+      de marteler les profils cassés, un doublon n'annule plus le lot entier, le backfill des trois
+      plateformes qui ne se terminait jamais, la déduplication Instagram et les légendes perdues.</li>
+    <li><i class="dot d"></i><b>Conteneur</b> — sonde de santé pointée sur l'endpoint public, et
+      <code>.dockerignore</code> pour cesser d'embarquer <code>venv/</code>, <code>data/</code>,
+      <code>.git/</code> et <code>.env</code> dans les couches de l'image.</li>
+  </ul>
+</div>
+<div class="rules" style="margin-top:10px">
+  <div class="rule"><b>Le compteur fait foi</b>La vague part de 85 marqueurs <code>xfail</code>.
+    Chaque bug réellement corrigé en libère un. L'écart entre le compte final et les corrections
+    annoncées révèle tout marqueur retiré à tort.</div>
+  <div class="rule"><b>Question imposée au critic</b>«&nbsp;La correction règle-t-elle le problème,
+    ou seulement le test&nbsp;?&nbsp;» — avec obligation de vérifier les chemins non couverts&nbsp;:
+    les 4 extracteurs et pas seulement celui que le test regarde. Aucun lot n'a été jugé superficiel.</div>
+  <div class="rule"><b>Le trou trouvé par le lissage</b><code>app/calendar/api.py</code> n'appartenait
+    au périmètre d'aucun des 5 lots et aucun test ne le gardait&nbsp;: un post ayant un titre mais pas
+    de légende s'affichait «&nbsp;Sans titre&nbsp;». C'est le second volet du lot 1.7, que personne
+    n'avait pris.</div>
+  <div class="rule"><b>Deux trous sans lot, traités depuis</b><code>/api/debug/volume</code> était
+    accessible sans authentification et cartographiait le volume&nbsp;: il rend maintenant 404 hors
+    mode développement. Et l'écran Réglages affichait «&nbsp;Sauvegarde effectuée&nbsp;» même sur un
+    refus du serveur, ce qui rendait la nouvelle validation invisible.</div>
+</div>
+
+<h2>Ce qui reste ouvert</h2>
+<div class="grid">
+  <div class="card" style="border-color:var(--err)">
+    <div class="card-h"><span class="tag b">action requise</span><span class="card-t">Sur Railway, par toi</span></div>
+    <div class="card-d">Définir <code>APP_PASSWORD</code> (en ASCII) et <code>FLASK_DEBUG=0</code> dans
+      les variables d'environnement du service. Par le tableau de bord, <b>pas</b> par l'écran Réglages
+      de l'application. Tant que ce n'est pas fait, la production reste ouverte à tous.</div>
+  </div>
+  <div class="card">
+    <div class="card-h"><span class="tag w">limite connue</span><span class="card-t">Doublons à grande échelle</span></div>
+    <div class="card-d">La déduplication se règle groupe par groupe. Sur 16 médias c'est confortable,
+      sur des milliers un scan remontant 300 groupes devient 300 dialogues — la fonctionnalité cesse
+      d'être utilisable au moment précis où elle devient nécessaire. Il manque une résolution en lot
+      gouvernée par une règle nommée, avec un récapitulatif chiffré et une seule confirmation.</div>
+  </div>
+  <div class="card">
+    <div class="card-h"><span class="tag w">limite connue</span><span class="card-t">Retouches non rejouables</span></div>
+    <div class="card-d">Recadrage, rotation et réglages ne survivent ni au rechargement ni à
+      l'enregistrement&nbsp;: on obtient une image aplatie qu'on ne peut plus rouvrir pour corriger.
+      Le socle est prêt — l'état est déjà sérialisable — mais la colonne qui le stockerait n'existe pas
+      encore. C'est aussi le préalable à un composeur avec aperçu par plateforme.</div>
+  </div>
+  <div class="card">
+    <div class="card-h"><span class="tag w">dette</span><span class="card-t">Composants partagés absents de 3 écrans</span></div>
+    <div class="card-d">Calendrier, analytics et éditeur chargent les tokens mais pas la bibliothèque
+      de composants. L'ajout a été <b>mesuré plutôt que supposé</b>&nbsp;: il modifierait 604 éléments
+      sur 650 de l'analytics, avec un décalage allant jusqu'à 533&nbsp;px. Ce n'est pas un ajustement
+      mais une refonte de trois écrans. Volontairement reporté à un lot dédié.</div>
+  </div>
+  <div class="card">
+    <div class="card-h"><span class="tag w">sécurité</span><span class="card-t">Téléchargement rapide</span></div>
+    <div class="card-d">La validation d'URL ne résout pas les noms de domaine, et la chaîne de
+      redirections n'est pas surveillée&nbsp;: un domaine pointant vers une adresse interne passe
+      encore. Demande un intercepteur dans les quatre chemins de récupération.</div>
+  </div>
+  <div class="card">
+    <div class="card-h"><span class="tag q">reporté</span><span class="card-t">30 bugs connus, sous garde</span></div>
+    <div class="card-d">Les 30 marqueurs restants sont autant de bugs documentés des vagues 3.x&nbsp;:
+      ménage du volume, reprises de téléchargement, index de base, clés étrangères, serveur de
+      production. Chacun a son test déjà écrit qui l'attend&nbsp;: le jour où il est corrigé, la suite
+      le signale d'elle-même.</div>
+  </div>
+</div>
+
+<h2>Vague 4 — les fonctionnalités <span class="tag d" style="margin-left:8px">terminée</span></h2>
+<div class="card" style="border-color:var(--ok);background:linear-gradient(0deg,var(--ok-soft),transparent);margin-bottom:10px">
+  <div class="card-d"><b style="color:var(--text)">Les 4 fonctionnalités manipulées pour de vrai, pas
+    seulement livrées.</b> Migration prouvée sans perte sur une copie neuve&nbsp;: 2 profils,
+    16 médias, 42 jobs, commentaire et note tous conservés, nouvelles tables créées vides,
+    intégrité <code>ok</code>, migration idempotente sur trois passages.
+    <br><br>Le lissage a trouvé une incohérence qu'aucun critic d'écran ne pouvait voir&nbsp;: le
+    viewer datait silencieusement 12 médias par leur date de <i>découverte</i> et affichait
+    «&nbsp;février 2026&nbsp;» avec aplomb, pendant que l'analytics refusait de les dater. Le viewer
+    l'avoue désormais à l'écran. Et un décompte de posts <b>négatif</b> se cachait dans le code même
+    qui rédige les phrases d'honnêteté.</div>
+</div>
+<div class="wave">
+  <div class="wave-h"><span class="card-t">3 lots, chacun jugé par un critic qui manipule vraiment</span></div>
+  <ul>
+    <li><i class="dot d"></i><b>Doublons et collections</b> — empreinte exacte et empreinte perceptuelle
+      calculées à l'ingestion, plus un calcul différé pour la bibliothèque existante sans quoi la
+      fonctionnalité serait vide. Deux modes nommés, seuil réglable <i>après</i> le scan sans relancer
+      le calcul, et un dialogue qui demande quel exemplaire garder avant toute suppression.
+      Collections en travers des profils, un média pouvant appartenir à plusieurs d'entre elles.</li>
+    <li><i class="dot d"></i><b>Croisement performance</b> — classer les médias scrapés par performance
+      réelle du post d'origine. Contrainte imposée&nbsp;: un média <i>non mesuré</i> ne doit jamais être
+      classé dernier comme s'il avait fait zéro.</li>
+    <li><i class="dot d"></i><b>Édition d'images</b> — export PNG et JPEG, recadrage aux ratios des
+      plateformes, rotation, filtres. Sur le fichier le plus risqué du dépôt&nbsp;: 2&nbsp;239 lignes
+      pilotant un canvas, presque pas couvertes par les tests.</li>
+  </ul>
+</div>
+
+<h2>Vague 3 — refonte des écrans <span class="tag d" style="margin-left:8px">terminée</span></h2>
+<div class="card" style="border-color:var(--ok);background:linear-gradient(0deg,var(--ok-soft),transparent);margin-bottom:10px">
+  <div class="card-d"><b style="color:var(--text)">Mesuré au navigateur, sur une copie de tes vraies
+    données.</b> Viewer&nbsp;: <b style="color:var(--text)">11 formats distincts, zéro carré
+    forcé</b> — les ratios d'origine sont préservés en disposition justifiée, contre 100&nbsp;% de
+    carrés 248×248 avant. Aucun débordement horizontal, thème sombre cohérent, console muette.
+    La palette de commandes ⌘K fonctionne. Le calendrier a gagné sa bibliothèque de médias en colonne
+    permanente avec glisser-déposer <i>et</i> une alternative au clavier, et affiche son fuseau horaire
+    en clair. L'analytics annonce désormais un jeton mort en toutes lettres et affiche des tirets, pas
+    des zéros trompeurs.
+    <br><br><b style="color:var(--warn)">Découvert en regardant, pas en testant&nbsp;:</b> l'écran
+    analytics était câblé en dur sur un compte <code>@samourais_</code> qui n'existe pas dans ta base.
+    Il n'avait donc jamais rien pu afficher. Il résout maintenant ton vrai profil.</div>
+</div>
+<div class="card" style="border-color:var(--warn);background:linear-gradient(0deg,var(--warn-soft),transparent);margin-bottom:10px">
+  <div class="card-d"><b style="color:var(--text)">Point de départ mesuré au navigateur, sur une copie
+    de tes vraies données.</b> Le viewer&nbsp;: tuiles forcées en carré 248×248&nbsp;px, donc ratios
+    d'origine détruits&nbsp;; environ <b style="color:var(--text)">10 vignettes visibles</b> là où la
+    référence Eagle en exige 30&nbsp;; fond blanc pendant que le dashboard est passé en sombre&nbsp;;
+    et un en-tête de semaine entier consommé pour un seul média.
+    <br><br>Surtout&nbsp;: <code>viewer.js</code> appelait un <code>prompt()</code> bloquant
+    <i>avant</i> de charger les médias. Dans un navigateur qui le refuse, l'écran le plus utilisé de
+    l'application <b style="color:var(--text)">ne chargeait rien du tout</b>. Aucune vérification par
+    code HTTP ne pouvait le voir&nbsp;: une page qui répond 200 avec un JavaScript mort reste une
+    page 200. Trouvé en regardant, pas en testant.</div>
+</div>
+<div class="wave">
+  <div class="wave-h"><span class="card-t">4 écrans, chacun jugé sur mesures</span></div>
+  <ul>
+    <li><i class="dot d"></i><b>Viewer</b> — densité, ratios préservés, thème, suppression des boîtes
+      système, et les filtres avancés avec état encodé dans l'URL.</li>
+    <li><i class="dot d"></i><b>Calendrier</b> — états des posts lisibles sans survol, actions de
+      reprise nommées sur les échecs, fuseau horaire affiché en clair, et la bibliothèque de médias
+      que j'avais pourtant reportée.</li>
+    <li><i class="dot d"></i><b>Analytics</b> — sélecteur de période unique, comparaison absente
+      plutôt que fausse, et un jeton expiré enfin annoncé à l'écran.</li>
+    <li><i class="dot d"></i><b>Éditeur</b> — CSS et gabarit seulement&nbsp;: ses 2&nbsp;239 lignes de
+      JavaScript pilotent un canvas et ne sont presque pas couvertes par les tests.</li>
+  </ul>
+</div>
+<div class="rules" style="margin-top:10px">
+  <div class="rule"><b>Consigne nouvelle</b>«&nbsp;Mesure, n'opine pas.&nbsp;» Chaque critère reçoit
+    une valeur relevée au navigateur&nbsp;: vignettes comptées, tuiles mesurées, contrastes calculés,
+    couleurs brutes dénombrées. Et la console est vérifiée sur chaque écran.</div>
+  <div class="rule"><b>Règle de rejet</b>Un seul critère bloquant non tenu et l'écran repart, quel que
+    soit le reste. Le critic doit ensuite nommer <i>le</i> plus gros écart restant, un seul, formulé
+    de façon actionnable.</div>
+</div>
+
+<h2>Vague 2 — socle du design system et sécurité <span class="tag d" style="margin-left:8px">terminée</span></h2>
+<div class="wave">
+  <div class="wave-h"><span class="card-t">2 lots en parallèle, fichiers disjoints</span></div>
+  <ul>
+    <li><i class="dot d"></i><b>Socle du design system</b> — un fichier de tokens comme source unique
+      de vérité, thème clair et sombre traités tous deux comme citoyens de premier rang, puis
+      reconstruction de la feuille commune sur ces tokens et des composants partagés dont les cinq
+      écrans auront besoin. Point de départ&nbsp;: 5 CSS indépendants, ~3&nbsp;700 lignes, sans aucun
+      système commun. Le critic doit compter les valeurs brutes restantes et mesurer les contrastes,
+      pas juger au ressenti.</li>
+    <li><i class="dot d"></i><b>Sécurité</b> — injection de variables dans le fichier de réglages,
+      écriture atomique pour supprimer la fenêtre où un scrape lit un fichier à moitié écrit,
+      protection contre les requêtes forgées depuis un autre site, sauvegarde des cookies avant
+      écrasement, et validation de l'URL de téléchargement rapide qui est aujourd'hui chargée par un
+      navigateur côté serveur sans aucun contrôle.</li>
+  </ul>
+</div>
+<div class="rules" style="margin-top:10px">
+  <div class="rule"><b>Consigne ajoutée aux agents</b>Interdiction absolue d'utiliser
+    <code>git checkout</code>, <code>restore</code>, <code>stash</code> ou <code>reset</code>&nbsp;:
+    le travail n'étant pas committé, <code>HEAD</code> contient la version d'avant les 55 correctifs.
+    Restauration par copie de fichier uniquement.</div>
+  <div class="rule"><b>Le socle avant les écrans</b>Les 6 écrans ne seront repris qu'une fois ce socle
+    validé, pour ne pas les bâtir deux fois. Le viewer passera en premier&nbsp;: c'est l'écran le plus
+    utilisé, donc celui qui doit être le meilleur.</div>
+</div>
+
+<h2>Chantiers</h2>
+<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(290px,1fr))">
+  <div class="card">
+    <div class="card-h"><span class="card-t">Robustesse</span><span class="spacer"></span><span class="tag q">à venir</span></div>
+    <div class="card-d">Rendre toute défaillance visible et récupérable&nbsp;: santé des sessions par plateforme
+      avec alerte avant expiration, distinction stricte entre «&nbsp;scrape réussi, zéro nouveau média&nbsp;» et
+      «&nbsp;scrape cassé&nbsp;», reprises et backoff sur les téléchargements, migrations de schéma versionnées,
+      protection de la base contre la concurrence, écran d'état système.</div>
+  </div>
+  <div class="card">
+    <div class="card-h"><span class="card-t">Refonte UI</span><span class="spacer"></span><span class="tag q">à venir</span></div>
+    <div class="card-d">Front repris intégralement sur une direction esthétique unique, dense sans être chargée,
+      rapide, utilisable sur mobile. Le Viewer est l'écran le plus utilisé&nbsp;: c'est celui qui doit être
+      le meilleur. Jugement en A/B aveugle contre la référence de chaque écran.</div>
+  </div>
+  <div class="card">
+    <div class="card-h"><span class="card-t">Fonctionnalités</span><span class="spacer"></span><span class="tag q">à venir</span></div>
+    <div class="card-d">Recherche et filtres avancés au viewer · détection de doublons et quasi-doublons ·
+      collections manuelles en travers des profils · croisement scraping et analytics pour classer les médias
+      par performance réelle · calendrier réellement multiplateforme avec prévisualisation et gestion des
+      échecs · édition d'images dans l'éditeur.</div>
+  </div>
+</div>
+
+<h2>Méthode</h2>
+<div class="rules">
+  <div class="rule"><b>Builder et critic séparés</b>Un critic à contexte vierge par pièce livrée. Il ne voit
+    ni l'historique ni les explications du builder&nbsp;: il inspecte le résultat réel.</div>
+  <div class="rule"><b>Jugement sur pièces</b>Application qui tourne, captures, journaux, temps de réponse
+    mesurés. Comparaison A/B aveugle contre la référence de l'écran.</div>
+  <div class="rule"><b>Boucle sans fin fixée</b>Si la référence gagne, le critic nomme le plus gros écart
+    restant et renvoie au builder. On recommence.</div>
+  <div class="rule"><b>Lissage après chaque vague</b>Un agent frais vérifie la cohérence d'ensemble et fait
+    tourner la suite de tests complète.</div>
+  <div class="rule"><b>La prod ne casse jamais</b>Chaque étape laisse l'application déployable.
+    Refactoring incrémental, aucune réécriture depuis zéro.</div>
+  <div class="rule"><b>Aucune perte de données</b>Le contenu de <code>data/</code> est sacré. Toute migration
+    est réversible et testée sur une copie.</div>
+</div>
+
+<h2>Journal</h2>
+<table>
+  <thead><tr><th style="width:130px">Horodatage</th><th style="width:120px">Étape</th><th>Événement</th></tr></thead>
+  <tbody>
+    <tr><td>13/08 · début</td><td>Cadrage</td>
+      <td>Reconnaissance du dépôt&nbsp;: ~9&nbsp;000 lignes Python, ~9&nbsp;600 lignes front,
+        <b style="color:var(--warn)">aucun test existant</b>. Volume de données local&nbsp;: 9,5&nbsp;Mo de
+        médias, base de 192&nbsp;Ko.</td></tr>
+    <tr><td>13/08 · +0</td><td>Audit</td>
+      <td>Lancement de 10 auditeurs en lecture seule, consigne stricte de non-modification et de preuve
+        <code>fichier:ligne</code> pour chaque affirmation.</td></tr>
+    <tr><td>13/08 · +0</td><td>Références</td>
+      <td>Lancement de 7 enquêteurs produit en parallèle pour constituer le barème de jugement des écrans.</td></tr>
+    <tr><td>13/08 · +22min</td><td>Références</td>
+      <td><b style="color:var(--ok)">Livré.</b> <code>REFERENCES.md</code>, 826 lignes&nbsp;: 239 critères binaires
+        (79 bloquants), direction esthétique chiffrée, tokens CSS. Règle de notation retenue&nbsp;:
+        un seul critère bloquant manquant et l'écran ne passe pas, quel que soit le reste.</td></tr>
+    <tr><td>13/08 · +25min</td><td>Audit</td>
+      <td>Les 10 auditeurs ont rendu&nbsp;: <b>177 risques</b> et <b>164 fonctionnalités</b> qualifiées
+        par preuve <code>fichier:ligne</code>. Passage en synthèse, puis boucle critic.</td></tr>
+    <tr><td>13/08 · +2h</td><td>Audit</td>
+      <td><b style="color:var(--ok)">CLOS.</b> 4 rounds de critics, 31 agents. Dernier round&nbsp;:
+        0 fatale, 0 majeure, 4 mineures — vérifiées et corrigées à la main, puis recontrôlées.
+        <b>147 des 177 risques sont silencieux</b>&nbsp;: l'application échoue en affichant du vert.</td></tr>
+    <tr><td>13/08 · +2h</td><td>Alerte</td>
+      <td>Remontée immédiate d'une exposition de la production&nbsp;: authentification désactivée
+        et débogueur Werkzeug armé. Correctif côté variables Railway, sans déploiement de code.</td></tr>
+    <tr><td>13/08 · +2h05</td><td>Vague 0</td>
+      <td>Empreinte de <code>data/</code> relevée (28 fichiers) pour prouver l'innocuité du chantier.
+        Lancement du socle de test et des 6 modules.</td></tr>
+    <tr><td>13/08 · +3h10</td><td>Vague 0</td>
+      <td><b style="color:var(--ok)">Suite livrée.</b> 347 verts, 85 xfail, 0 échec, 2,6&nbsp;s.
+        Innocuité prouvée&nbsp;: empreinte <code>data/</code> inchangée, <code>app/</code> et
+        <code>run.py</code> non modifiés. Contrôlé personnellement, pas seulement rapporté.</td></tr>
+    <tr><td>13/08 · +3h15</td><td>Vague 0</td>
+      <td>Le critic du module web est mort en cours d'exécution&nbsp;: 128 tests jamais jugés, sur la
+        surface la plus sensible. Relancé avec 5 mutations imposées — notamment l'introduction d'une
+        vraie traversée de chemin, pour vérifier que les tests censés la bloquer ne sont pas décoratifs.</td></tr>
+    <tr><td>13/08 · +4h30</td><td>Vague 1</td>
+      <td><b style="color:var(--ok)">55 bugs corrigés.</b> 85 marqueurs <code>xfail</code> au départ,
+        30 à l'arrivée, décompte refermé sur le contrat des tests. 15 fichiers touchés,
+        397 lignes ajoutées, 93 retirées.</td></tr>
+    <tr><td>13/08 · +4h35</td><td>Alerte</td>
+      <td>Fausse alerte sur les données&nbsp;: l'empreinte avait changé parce qu'elle incluait les
+        journaux temporaires de SQLite. Vérification personnelle&nbsp;: la base n'a pas été écrite
+        depuis le <b>10 mars</b>, <code>integrity_check</code> à <code>ok</code>, 2 profils, 16 médias
+        et 42 jobs tous présents. <b style="color:var(--text)">C'est l'empreinte qui était mal conçue,
+        pas les données qui ont bougé.</b> Empreinte corrigée pour la suite.</td></tr>
+    <tr><td>13/08 · +4h50</td><td>Correctif</td>
+      <td>Fermeture de <code>/api/debug/volume</code>, dernier accès non authentifié, et correction de
+        la bannière de l'écran Réglages qui annonçait un succès sur un refus du serveur.
+        Le test du premier est passé en XPASS et a fait échouer la suite pour réclamer le retrait de
+        son marqueur&nbsp;: le mécanisme fonctionne en conditions réelles.</td></tr>
+    <tr><td>13/08 · +12h</td><td>Vague 4</td>
+      <td><b style="color:var(--ok)">Les 4 fonctionnalités livrées et manipulées.</b> Doublons vérifiés
+        de bout en bout sur tes données&nbsp;: 16 empreintes calculées, bibliothèque déclarée
+        comparable, verdict «&nbsp;aucun doublon&nbsp;» exact. Migration prouvée sans perte.
+        542 tests verts. <b>17&nbsp;258 lignes ajoutées, 5&nbsp;900 retirées, 40 fichiers.</b></td></tr>
+    <tr><td>13/08 · +12h</td><td>Jugement</td>
+      <td>Le lissage a <b>mesuré au lieu de supposer</b> avant de charger les composants partagés sur
+        les trois écrans qui en manquent&nbsp;: 604 éléments modifiés sur 650 en analytics, décalage
+        jusqu'à 533&nbsp;px. Refus argumenté et report à un lot dédié plutôt qu'une régression en fin
+        de chantier.</td></tr>
+    <tr><td>13/08 · +9h30</td><td>Vague 3</td>
+      <td><b style="color:var(--ok)">Les 4 écrans refondus.</b> Viewer&nbsp;: ratios préservés,
+        11 formats distincts contre 100&nbsp;% de carrés forcés avant. Calendrier, analytics et viewer
+        n'ont plus une seule couleur brute. Découverte majeure en manipulant&nbsp;: l'analytics était
+        câblé sur un compte inexistant et n'avait donc <b>jamais rien pu afficher</b> chez toi.</td></tr>
+    <tr><td>13/08 · +9h40</td><td>Structure</td>
+      <td>Constaté moi-même&nbsp;: trois gabarits sur cinq chargent les tokens mais <b>pas la
+        bibliothèque de composants partagés</b>, et quatre dupliquent leur en-tête au lieu d'étendre le
+        gabarit commun. C'est la racine mécanique de la divergence que le socle devait supprimer.
+        Confié au lissage, à corriger uniquement si aucune régression visuelle n'apparaît.</td></tr>
+    <tr><td>13/08 · +7h</td><td>Vague 2</td>
+      <td><b style="color:var(--ok)">Socle et sécurité livrés.</b> 499 tests verts.
+        <code>samourais.css</code> ne contient plus <b>aucune couleur brute</b>.
+        La protection contre les requêtes inter-sites était <b style="color:var(--warn)">du code
+        mort</b>&nbsp;: écrite mais jamais branchée, donc le risque restait entier. Branchée puis
+        vérifiée par 168 requêtes — aucune requête légitime bloquée, aucune attaque passée.
+        27 fuites de messages d'erreur internes vers le client colmatées.</td></tr>
+    <tr><td>13/08 · +7h30</td><td>Migration</td>
+      <td><b style="color:var(--ok)">Validée sur une copie de tes données réelles.</b> Ta base était
+        bien privée des deux colonnes de backfill — c'est le risque n°1 de l'audit, confirmé en vrai.
+        Après migration&nbsp;: colonnes créées, <code>integrity_check</code> à <code>ok</code>,
+        2 profils, 16 médias et 42 jobs tous conservés.</td></tr>
+    <tr><td>13/08 · +5h</td><td>Vague 1</td>
+      <td><b style="color:var(--warn)">Le critic du scheduler, relancé, a rattrapé un défaut bloquant.</b>
+        Le chemin le plus grave du job gelé était corrigé dans le code mais <b>gardé par aucun test</b>&nbsp;:
+        on pouvait supprimer entièrement la protection sans un seul rouge. Et un troisième point de
+        démarrage de thread laissait intact, dans la même fonction, le bug que le lot prétendait
+        éliminer. Les deux réparés, 5 mutations sur 5 désormais tuées.</td></tr>
+    <tr><td>13/08 · +5h05</td><td>Méthode</td>
+      <td>Erreur de ma part corrigée&nbsp;: j'avais prescrit <code>git checkout</code> aux critics pour
+        annuler leurs mutations, alors que le travail n'est pas committé — la commande restaure donc la
+        version d'<i>avant</i> les correctifs. Déclenchée une fois, rattrapée depuis une sauvegarde.
+        Interdiction désormais explicite, et archive de sécurité prise.</td></tr>
+    <tr><td>13/08 · +3h15</td><td>Correctif</td>
+      <td><code>.gitignore</code>&nbsp;: <code>data/samourais.db</code> élargi en
+        <code>data/samourais.db*</code>. Le fichier <code>-shm</code> de la base de production était
+        visible de git et partait au premier <code>git add -A</code>. Lot 1.8 de l'audit, appliqué
+        d'avance car sans risque.</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  <span>Page de suivi mise à jour à chaque vague · <code>progress.html</code></span>
+  <span>Phase 0 sur 0 — aucune ligne de l'application modifiée à ce stade</span>
+</footer>
+</div>
+</body>
+</html>

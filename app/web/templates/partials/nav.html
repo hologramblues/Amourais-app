@@ -1,29 +1,541 @@
+{#- ============================================================
+    BARRE DE NAVIGATION — définition unique
+    ------------------------------------------------------------
+    Incluse par layout.html (dashboard, profiles, jobs, settings)
+    ET par les 4 écrans autonomes (viewer, editor, calendar,
+    analytics) qui ne chargent PAS tokens.css / samourais.css.
+
+    D'où la règle de ce fichier : chaque couleur et chaque mesure
+    s'écrit var(--jeton, repli). Sur les pages qui chargent
+    tokens.css, les jetons --nav-* gagnent et la barre suit le
+    thème clair/sombre. Sur les 4 écrans historiques, le repli
+    reproduit exactement l'ancien rendu (barre de 64px, accent
+    rouge) : aucune régression tant qu'ils ne sont pas repris.
+
+    Écran courant : `nav_active` (écrans autonomes) ou `page`
+    (gabarits qui étendent layout.html).
+    ============================================================ -#}
+{%- set _nav = (nav_active if nav_active is defined and nav_active else (page if page is defined and page else '')) -%}
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
-  .s-header{position:sticky;top:0;z-index:1000;height:64px;background:#fff;border-bottom:1px solid #e0e0e0;box-shadow:0 1px 3px rgba(0,0,0,0.04);display:flex;align-items:center;padding:0 2rem;gap:2.5rem}
-  .s-logo{font-family:'Space Grotesk',system-ui,sans-serif;font-weight:700;font-size:1.2rem;color:#E21B3C;text-decoration:none;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:.6rem;flex-shrink:0;white-space:nowrap}
-  .s-logo:hover{color:#c4162f}
-  .s-logo-mark{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;background:#E21B3C;color:#fff;font-size:1rem;line-height:1;border-radius:8px}
-  .s-nav{display:flex;align-items:center;gap:0;overflow-x:auto;flex:1;-ms-overflow-style:none;scrollbar-width:none}
-  .s-nav::-webkit-scrollbar{display:none}
-  .s-nav a{font-family:'DM Sans',system-ui,sans-serif;font-weight:500;font-size:.87rem;color:#717171;text-decoration:none;padding:0 .85rem;height:64px;display:flex;align-items:center;white-space:nowrap;position:relative;transition:color .15s ease}
-  .s-nav a:hover{color:#222}
-  .s-nav a.active{color:#222;font-weight:600}
-  .s-nav a.active::after{content:'';position:absolute;bottom:0;left:.85rem;right:.85rem;height:2px;background:#E21B3C;border-radius:1px}
+  /* L'@import de DM Sans a été RETIRÉ ici : il était le repli des 4
+     écrans historiques, et sa note disait « à retirer avec le
+     dernier ». Les quatre (viewer, éditeur, calendrier, analytics)
+     chargent désormais tokens.css et composent en Inter — plus une
+     seule règle du projet ne demande DM Sans. L'import restait
+     pourtant sur LES 8 PAGES : une famille complète téléchargée
+     pour rien, depuis un <style> en plein <body>, donc bloquante.
+     tokens.css garde "DM Sans" en 3e position de --font-ui : si
+     Inter tombe, la pile continue de dégrader proprement. */
+
+  .s-header {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-sticky, 100);
+    display: flex;
+    align-items: center;
+    gap: var(--sp-6, 16px);
+    height: var(--nav-h, 64px);
+    padding: 0 var(--sp-6, 16px);
+    background: var(--nav-bg, #ffffff);
+    border-bottom: var(--border-w, 1px) solid var(--nav-border, #e0e0e0);
+    font-family: var(--nav-font, 'DM Sans', system-ui, sans-serif);
+  }
+
+  /* ---- Marque : c'est aussi le lien vers le Dashboard ---- */
+  .s-logo {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4, 8px);
+    flex-shrink: 0;
+    height: var(--btn-h, 32px);
+    padding: 0 var(--sp-3, 6px);
+    border-radius: var(--nav-radius, 4px);
+    color: var(--nav-fg-strong, #222222);
+    font-size: var(--text-small, 0.8125rem);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .s-logo-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--sp-7, 24px);
+    height: var(--sp-7, 24px);
+    flex-shrink: 0;
+    border-radius: var(--nav-radius, 4px);
+    background: var(--nav-accent, #E21B3C);
+    color: #ffffff; /* toujours sur aplat accent : reste blanc dans les 2 thèmes */
+    font-size: var(--text-mini, 0.75rem);
+    line-height: 1;
+  }
+
+  /* ---- Liens ---- */
+  .s-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1, 2px);
+    flex: 1;
+    min-width: 0;
+  }
+  .s-nav a {
+    display: flex;
+    align-items: center;
+    height: var(--btn-h, 32px);
+    padding: 0 var(--sp-5, 12px);
+    border-radius: var(--nav-radius, 4px);
+    color: var(--nav-fg, #717171);
+    font-size: var(--text-small, 0.8125rem);
+    font-weight: 500;
+    letter-spacing: -0.011em;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background var(--t-quick, 100ms) var(--ease, ease),
+                color var(--t-quick, 100ms) var(--ease, ease);
+  }
+  @media (any-hover: hover) and (any-pointer: fine) {
+    .s-nav a:hover { background: var(--nav-hover-bg, #f7f7f7); color: var(--nav-fg-hover, #222222); }
+    .s-utility a:hover, .s-utility button:hover { background: var(--nav-hover-bg, #f7f7f7); color: var(--nav-fg-hover, #222222); }
+  }
+  /* État actif : aplat + teinte + graisse. Trois signaux, pas
+     seulement la couleur (critère G11). */
+  .s-nav a[aria-current="page"], .s-nav a.active {
+    background: var(--nav-active-bg, #fff0f3);
+    color: var(--nav-active-fg, #E21B3C);
+    font-weight: 600;
+  }
+
+  /* ---- Zone utilitaire : ⌘K, état système, réglages ---- */
+  .s-utility {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2, 4px);
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+  .s-utility a, .s-utility button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2, 4px);
+    height: var(--btn-h, 32px);
+    padding: 0 var(--sp-4, 8px);
+    border: 0;
+    border-radius: var(--nav-radius, 4px);
+    background: transparent;
+    color: var(--nav-fg, #717171);
+    font-family: inherit;
+    font-size: var(--text-mini, 0.75rem);
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .s-utility a[aria-current="page"] {
+    background: var(--nav-active-bg, #fff0f3);
+    color: var(--nav-active-fg, #E21B3C);
+  }
+
+  /* Palette de commandes ⌘K — EMPLACEMENT RÉSERVÉ.
+     Le déclencheur reste masqué tant qu'aucun écran n'a enregistré
+     de palette (document.documentElement.dataset.cmdk = 'on').
+     On ne montre pas un contrôle mort. */
+  .s-cmdk { display: none !important; }
+  :root[data-cmdk] .s-cmdk { display: inline-flex !important; }
+  .s-cmdk kbd {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: var(--text-micro, 0.6875rem);
+    color: var(--nav-fg, #717171);
+    border: var(--border-w, 1px) solid var(--nav-border, #e0e0e0);
+    border-radius: var(--nav-radius, 4px);
+    padding: 0 var(--sp-2, 4px);
+  }
+
+  /* Indicateur d'état système — pastille + MOT, jamais la couleur
+     seule. L'état réel se pose plus tard via data-state (idle,
+     running, error) sur .s-sys. */
+  .s-sys-dot {
+    width: var(--sp-3, 6px);
+    height: var(--sp-3, 6px);
+    border-radius: var(--radius-pill, 9999px);
+    background: var(--nav-idle, #a0a0a0);
+    flex-shrink: 0;
+  }
+  .s-sys[data-state="running"] .s-sys-dot { background: var(--info, #1a73e8); }
+  .s-sys[data-state="error"]   .s-sys-dot { background: var(--danger, #d93025); }
+  .s-sys[data-state="ok"]      .s-sys-dot { background: var(--success, #008a05); }
+
+  /* ============================================================
+     PALETTE DE COMMANDES ⌘K + PANNEAU DES RACCOURCIS
+     ------------------------------------------------------------
+     Définis ICI, et pas dans samourais.css, parce que trois des
+     quatre écrans autonomes (éditeur, calendrier, analytics) ne
+     chargent pas samourais.css : la nav est le seul point commun
+     aux 8 écrans. Même règle que le reste du fichier — chaque
+     valeur s'écrit var(--jeton, repli).
+     ============================================================ */
+  /* `margin: auto` explicite : samourais.css applique un reset
+     universel `* { margin: 0 }` qui écrase le margin:auto que la
+     feuille de l'agent utilisateur pose sur dialog:modal — sans quoi
+     la boîte se colle en haut à gauche au lieu d'être centrée. */
+  .s-pal, .s-sc, .s-cf {
+    margin: auto;
+    width: min(560px, calc(100vw - var(--sp-8, 32px)));
+    max-width: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--fg-1, #16181d);
+    font-family: var(--font-ui, 'Inter', system-ui, sans-serif);
+  }
+  /* Centrage horizontal explicite : poser margin-top seul écraserait
+     le `margin: auto` par défaut de <dialog> et collerait la palette
+     à gauche. */
+  .s-pal { margin: 12vh auto auto; }
+  .s-pal::backdrop, .s-sc::backdrop { background: rgba(0, 0, 0, .45); }
+
+  .s-pal__box, .s-sc__box {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: var(--border-w, 1px) solid var(--border-2, #d2d6dc);
+    border-radius: var(--radius-block, 8px);
+    background: var(--bg-1, #ffffff);
+    /* Élément flottant : l'ombre est ici autorisée (critère G3). */
+    box-shadow: var(--shadow-high, 0 8px 40px rgba(0, 0, 0, .32));
+  }
+
+  .s-pal__input {
+    height: var(--sp-9, 48px);
+    padding: 0 var(--sp-5, 12px);
+    border: 0;
+    border-bottom: var(--border-w, 1px) solid var(--border-1, #e3e5e8);
+    border-radius: 0;
+    background: transparent;
+    color: var(--fg-1, #16181d);
+    font-family: inherit;
+    font-size: var(--text-regular, 0.9375rem);
+    outline: none;
+  }
+  .s-pal__input::placeholder { color: var(--fg-4, #99a0aa); }
+
+  .s-pal__list { max-height: 44vh; overflow-y: auto; margin: 0; padding: var(--sp-2, 4px); list-style: none; }
+  .s-pal__group {
+    padding: var(--sp-3, 6px) var(--sp-4, 8px) var(--sp-1, 2px);
+    color: var(--fg-3, #6b7280);
+    font-size: var(--text-micro, 0.6875rem);
+    font-weight: 500;
+    letter-spacing: var(--ls-wide, .002em);
+    text-transform: uppercase;
+  }
+  .s-pal__item {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4, 8px);
+    height: var(--menu-row-h, 28px);
+    padding: 0 var(--sp-4, 8px);
+    border-radius: var(--radius-control, 4px);
+    color: var(--fg-2, #3d434c);
+    font-size: var(--text-small, 0.8125rem);
+    cursor: pointer;
+  }
+  /* Surlignage : entrée immédiate, comme le reste de l'app. */
+  .s-pal__item[aria-selected="true"] {
+    background: var(--accent-soft, #e8f0fe);
+    color: var(--accent, #2f6fe0);
+  }
+  .s-pal__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .s-pal__keys, .s-sc kbd {
+    flex-shrink: 0;
+    padding: 0 var(--sp-2, 4px);
+    border: var(--border-w, 1px) solid var(--border-2, #d2d6dc);
+    border-radius: var(--radius-control, 4px);
+    background: var(--bg-2, #f1f2f4);
+    color: var(--fg-3, #6b7280);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: var(--text-micro, 0.6875rem);
+  }
+  .s-pal__empty {
+    margin: 0;
+    padding: var(--sp-5, 12px) var(--sp-4, 8px) var(--sp-6, 16px);
+    color: var(--fg-3, #6b7280);
+    font-size: var(--text-small, 0.8125rem);
+    text-align: center;
+  }
+  .s-pal__foot {
+    display: flex;
+    gap: var(--sp-5, 12px);
+    padding: var(--sp-3, 6px) var(--sp-5, 12px);
+    border-top: var(--border-w, 1px) solid var(--border-1, #e3e5e8);
+    background: var(--bg-2, #f1f2f4);
+    color: var(--fg-3, #6b7280);
+    font-size: var(--text-micro, 0.6875rem);
+  }
+  .s-pal__foot kbd {
+    margin-right: var(--sp-1, 2px);
+    padding: 0 var(--sp-2, 4px);
+    border: var(--border-w, 1px) solid var(--border-2, #d2d6dc);
+    border-radius: var(--radius-control, 4px);
+    font-family: var(--font-mono, ui-monospace, monospace);
+  }
+
+  .s-sc__box { padding: var(--sp-6, 16px); gap: var(--sp-5, 12px); }
+  .s-sc__title { margin: 0; font-size: var(--title-3, 1.25rem); font-weight: 600; color: var(--fg-1, #16181d); }
+  .s-sc__list {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: var(--sp-2, 4px) var(--sp-5, 12px);
+    align-items: center;
+    margin: 0;
+    font-size: var(--text-small, 0.8125rem);
+  }
+  .s-sc__list dt { color: var(--fg-2, #3d434c); }
+  .s-sc__list dd { margin: 0; text-align: right; }
+  .s-sc__none { margin: 0; color: var(--fg-3, #6b7280); font-size: var(--text-small, 0.8125rem); }
+  .s-sc__close {
+    align-self: flex-start;
+    height: var(--btn-h, 32px);
+    min-width: var(--btn-min-w, 92px);
+    padding: 0 var(--sp-5, 12px);
+    border: var(--border-w, 1px) solid var(--border-2, #d2d6dc);
+    border-radius: var(--radius-control, 4px);
+    background: var(--bg-1, #ffffff);
+    color: var(--fg-1, #16181d);
+    font-family: inherit;
+    font-size: var(--text-small, 0.8125rem);
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  /* ---- Confirmation partagée (remplace window.confirm) ---- */
+  .s-cf { width: min(420px, calc(100vw - var(--sp-8, 32px))); }
+  .s-cf::backdrop { background: rgba(0, 0, 0, .45); }
+  .s-cf__box {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-5, 12px);
+    padding: var(--sp-6, 16px);
+    border: var(--border-w, 1px) solid var(--border-2, #d2d6dc);
+    border-radius: var(--radius-block, 8px);
+    background: var(--bg-1, #ffffff);
+    box-shadow: var(--shadow-high, 0 8px 40px rgba(0, 0, 0, .32));
+  }
+  .s-cf__title { margin: 0; color: var(--fg-1, #16181d); font-size: var(--title-3, 1.25rem); font-weight: 600; }
+  .s-cf__text  { margin: 0; max-width: 360px; color: var(--fg-2, #3d434c); font-size: var(--text-small, 0.8125rem); line-height: var(--lh-text, 1.55); }
+  .s-cf__actions { display: flex; justify-content: flex-end; gap: var(--sp-4, 8px); }
+  .s-cf__actions button {
+    height: var(--btn-h, 32px);
+    min-width: var(--btn-min-w, 92px);
+    padding: 0 var(--sp-5, 12px);
+    border: var(--border-w, 1px) solid var(--border-2, #d2d6dc);
+    border-radius: var(--radius-control, 4px);
+    background: var(--bg-1, #ffffff);
+    color: var(--fg-1, #16181d);
+    font-family: inherit;
+    font-size: var(--text-small, 0.8125rem);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .s-cf__ok--danger {
+    border-color: var(--danger, #c22b30);
+    background: var(--danger, #c22b30);
+    color: var(--fg-on-accent, #ffffff);
+  }
+
+  /* ---- Messages non bloquants (remplacent alert()) ---- */
+  .s-notes {
+    position: fixed;
+    right: var(--sp-6, 16px);
+    bottom: var(--sp-6, 16px);
+    z-index: var(--z-toast, 1200);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4, 8px);
+    max-width: 360px;
+  }
+  .s-note {
+    padding: var(--sp-4, 8px) var(--sp-5, 12px);
+    border: var(--border-w, 1px) solid var(--border-2, #d2d6dc);
+    border-left: 3px solid var(--fg-3, #6b7280);
+    border-radius: var(--radius-control, 4px);
+    background: var(--bg-1, #ffffff);
+    color: var(--fg-1, #16181d);
+    font-size: var(--text-small, 0.8125rem);
+    line-height: var(--lh-ui, 1.4);
+    box-shadow: var(--shadow-medium, 0 4px 24px rgba(0, 0, 0, .18));
+  }
+  .s-note--error   { border-left-color: var(--danger, #c22b30); }
+  .s-note--success { border-left-color: var(--success, #1a7f3c); }
+  .s-note--warning { border-left-color: var(--warning, #a86412); }
+
+  /* ---- Bascule de thème ----
+     Le glyphe hérite de la taille de la zone utilitaire (12 px),
+     comme le ⚙ voisin : deux contrôles côte à côte au même gabarit,
+     et aucune 7e taille de police introduite dans le décompte G1. */
+  .s-theme__glyph { font-size: inherit; line-height: 1; }
+
+  /* ---- Bouton de repli (sous 1024px) ---- */
+  /* Sélecteur descendant volontaire : samourais.css style tous les
+     <button> de la page, il faut le dépasser en spécificité. */
+  .s-header .s-nav-toggle { display: none; }
+  .s-nav-toggle-bars {
+    position: relative;
+    display: block;
+    width: var(--icon-md, 16px);
+    height: var(--border-w, 1px);
+    background: currentColor;
+  }
+  .s-nav-toggle-bars::before, .s-nav-toggle-bars::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: var(--border-w, 1px);
+    background: currentColor;
+  }
+  .s-nav-toggle-bars::before { top: -6px; }
+  .s-nav-toggle-bars::after  { top: 6px; }
+
+  /* Focus visible partout, y compris sur les pages sans tokens.css. */
+  .s-header :where(a, button):focus-visible {
+    outline: 2px solid var(--nav-focus, #E21B3C);
+    outline-offset: 2px;
+  }
+
+  /* ---- Sous 1024px : la liste se replie en panneau ---- */
+  @media (max-width: 1023px) {
+    .s-header { gap: var(--sp-4, 8px); padding: 0 var(--sp-5, 12px); }
+    .s-header .s-nav-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: var(--tap-min, 44px);
+      height: var(--tap-min, 44px);
+      order: -1;
+      border: 0;
+      border-radius: var(--nav-radius, 4px);
+      background: transparent;
+      color: var(--nav-fg-strong, #222222);
+      cursor: pointer;
+    }
+    .s-nav {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      display: none;
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--sp-1, 2px);
+      padding: var(--sp-4, 8px);
+      background: var(--nav-bg, #ffffff);
+      border-bottom: var(--border-w, 1px) solid var(--nav-border, #e0e0e0);
+      box-shadow: var(--shadow-medium, 0 4px 24px rgba(0,0,0,.18));
+      max-height: calc(100vh - var(--nav-h, 64px));
+      overflow-y: auto;
+    }
+    .s-nav[data-open] { display: flex; }
+    .s-logo { height: var(--tap-min, 44px); }
+    .s-nav a { height: var(--tap-min, 44px); font-size: var(--text-regular, 0.9375rem); }
+    .s-utility a, .s-utility button { height: var(--tap-min, 44px); min-width: var(--tap-min, 44px); justify-content: center; }
+    /* Le mot sort de l'affichage mais reste lu : jamais de sens
+       porté par la seule pastille. */
+    .s-sys-label {
+      position: absolute; width: 1px; height: 1px;
+      overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+    }
+  }
 </style>
+
 <header class="s-header">
   <a href="/" class="s-logo">
-    <span class="s-logo-mark">&#x2694;</span>
+    <span class="s-logo-mark" aria-hidden="true">&#x2694;</span>
     <span>Samourais</span>
   </a>
-  <nav class="s-nav">
-    <a href="/">Dashboard</a>
-    <a href="/profiles">Profiles</a>
-    <a href="/jobs">Jobs</a>
-    <a href="/viewer" {% if nav_active == 'viewer' %}class="active"{% endif %}>Viewer</a>
-    <a href="/editor" {% if nav_active == 'editor' %}class="active"{% endif %}>Editor</a>
-    <a href="/calendar" {% if nav_active == 'calendar' %}class="active"{% endif %}>Calendrier</a>
-    <a href="/analytics" {% if nav_active == 'analytics' %}class="active"{% endif %}>Analytics</a>
-    <a href="/settings">Settings</a>
+
+  <button type="button" class="s-nav-toggle" aria-expanded="false" aria-controls="s-nav-list"
+          aria-label="Afficher la navigation">
+    <span class="s-nav-toggle-bars" aria-hidden="true"></span>
+  </button>
+
+  {#- 6 destinations au premier niveau. Dashboard est porté par la
+      marque, Jobs et Réglages par la zone utilitaire à droite. -#}
+  <nav id="s-nav-list" class="s-nav" aria-label="Navigation principale">
+    <a href="/profiles"{% if _nav == 'profiles' %} aria-current="page"{% endif %}>Profils</a>
+    <a href="/viewer"{% if _nav == 'viewer' %} aria-current="page"{% endif %}>Médias</a>
+    <a href="/editor"{% if _nav == 'editor' %} aria-current="page"{% endif %}>Éditeur</a>
+    <a href="/calendar"{% if _nav == 'calendar' %} aria-current="page"{% endif %}>Calendrier</a>
+    <a href="/analytics"{% if _nav == 'analytics' %} aria-current="page"{% endif %}>Analytics</a>
+    <a href="/"{% if _nav == 'dashboard' %} aria-current="page"{% endif %}>Dashboard</a>
   </nav>
+
+  <div class="s-utility">
+    <button type="button" class="s-cmdk" data-command-palette
+            aria-keyshortcuts="Meta+K Control+K" aria-label="Ouvrir la palette de commandes">
+      <span>Rechercher</span><kbd>&#8984;K</kbd>
+    </button>
+
+    <a href="/jobs" class="s-sys" data-system-status data-state="idle"
+       title="File de traitements"{% if _nav == 'jobs' %} aria-current="page"{% endif %}>
+      <span class="s-sys-dot" aria-hidden="true"></span>
+      <span class="s-sys-label">Jobs</span>
+    </a>
+
+    {#- Bascule clair/sombre. Les 8 écrans LISAIENT localStorage
+        'theme' mais aucun ne l'écrivait : le thème clair n'était
+        atteignable qu'en changeant la préférence du système. -#}
+    <button type="button" class="s-theme" aria-label="Basculer le thème">
+      <span class="s-theme__glyph" aria-hidden="true">&#9790;</span>
+    </button>
+
+    <a href="/settings" aria-label="Réglages" title="Réglages"{% if _nav == 'settings' %} aria-current="page"{% endif %}>
+      <span aria-hidden="true">&#9881;</span>
+    </a>
+  </div>
 </header>
+
+<script>
+(function () {
+  var toggle = document.querySelector('.s-nav-toggle');
+  var list = document.getElementById('s-nav-list');
+  if (!toggle || !list) return;
+
+  function setOpen(open) {
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    toggle.setAttribute('aria-label', open ? 'Masquer la navigation' : 'Afficher la navigation');
+    if (open) { list.setAttribute('data-open', ''); } else { list.removeAttribute('data-open'); }
+  }
+
+  toggle.addEventListener('click', function () {
+    setOpen(toggle.getAttribute('aria-expanded') !== 'true');
+  });
+
+  // Échap referme et rend le focus au déclencheur.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
+      setOpen(false);
+      toggle.focus();
+    }
+  });
+
+  // Un clic hors du panneau le referme.
+  document.addEventListener('click', function (e) {
+    if (toggle.getAttribute('aria-expanded') !== 'true') return;
+    if (list.contains(e.target) || toggle.contains(e.target)) return;
+    setOpen(false);
+  });
+
+  // Retour au grand écran : on repart d'un état propre.
+  window.addEventListener('resize', function () {
+    if (window.innerWidth >= 1024) setOpen(false);
+  });
+})();
+</script>
+
+{#- Couche applicative partagée : palette ⌘K (G13), panneau « ? »
+    (G14), bascule de thème, indicateur d'état système. Chargée
+    ici parce que ce partial est le SEUL point commun aux 8 écrans
+    — les 4 écrans autonomes n'étendent pas layout.html. `defer`
+    pour ne bloquer aucun rendu. -#}
+<script defer src="{{ url_for('static', filename='samourais-app.js') }}?v={{ asset_version('samourais-app.js') if asset_version is defined else '1' }}"></script>

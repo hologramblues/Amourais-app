@@ -3,132 +3,357 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SAMOURAIS — Viewer</title>
-  <link rel="stylesheet" href="/static/viewer.css">
+  <meta name="color-scheme" content="light dark">
+  <title>SAMOURAIS — Médias</title>
+
+  {#- Anti-flash de thème : script SYNCHRONE avant tout CSS, copie exacte de
+      layout.html. Le viewer est un écran autonome ; sans lui, il flasherait
+      en clair avant de basculer en sombre (critère G9). -#}
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch (e) { /* stockage indisponible : on suit le système */ }
+    })();
+  </script>
+  <style>
+    html { background: #f4f5f7; }
+    @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #0a0b0d; } }
+    html[data-theme="dark"] { background: #0a0b0d; }
+  </style>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=JetBrains+Mono:wght@400;500&display=swap">
+
+  {#- tokens.css AVANT tout autre CSS : c'est la source unique. samourais.css
+      apporte les composants partagés (jeton .chip, bandeau .banner, bouton
+      .btn, état vide .empty, squelette .skeleton) — le viewer ne redéfinit
+      aucun d'eux. -#}
+  <link rel="stylesheet" href="/static/tokens.css?v={{ asset_version('tokens.css') }}">
+  <link rel="stylesheet" href="/static/samourais.css?v={{ asset_version('samourais.css') }}">
+  <link rel="stylesheet" href="/static/viewer.css?v={{ asset_version('viewer.css') }}">
 </head>
-<body>
+<body class="v-body">
 
 {% set nav_active = 'viewer' %}
 {% include "partials/nav.html" %}
 
-<!-- ═══ TOP BAR ═══ -->
-<div class="topbar">
+<!-- ═══════════════════════════════════════════════════════════
+     BARRE D'OUTILS — permanente, une seule rangée de 32px.
+     Densité, disposition, tri et groupement vivent ici et nulle
+     part ailleurs : ce sont les réglages manipulés plusieurs fois
+     par jour (V1, REFERENCES.md §6).
+     ═══════════════════════════════════════════════════════════ -->
+<div class="v-chrome" id="v-chrome">
+  <div class="v-toolbar" role="toolbar" aria-label="Outils de la bibliothèque">
 
-  <!-- Tabs -->
-  <div class="viewer-tabs">
-    <button class="viewer-tab active" data-tab="media" onclick="window.__switchTab('media')">
-      📷 Media <span class="tab-count" id="media-count">0</span>
-    </button>
-    <button class="viewer-tab" data-tab="memes" onclick="window.__switchTab('memes')">
-      🎨 Memes <span class="tab-count" id="memes-count">0</span>
-    </button>
-  </div>
+    <div class="v-tabs" role="tablist" aria-label="Bibliothèque">
+      <button class="v-tab is-active" data-tab="media" role="tab" aria-selected="true">
+        Médias <span class="v-tab__count num" id="count-media">—</span>
+      </button>
+      <button class="v-tab" data-tab="memes" role="tab" aria-selected="false">
+        Memes <span class="v-tab__count num" id="count-memes">—</span>
+      </button>
+    </div>
 
-  <div class="topbar-filters" id="media-filters">
-    <select id="filter-platform">
-      <option value="">Toutes les plateformes</option>
-      <option value="instagram">&#x1F4F7; Instagram</option>
-      <option value="reddit">&#x1F47D; Reddit</option>
-      <option value="tiktok">&#x1F3B5; TikTok</option>
-      <option value="twitter">&#x1F426; Twitter</option>
-    </select>
+    <div class="v-search">
+      <label class="visually-hidden" for="f-q">Rechercher dans les légendes</label>
+      <input type="search" id="f-q" class="v-search__input" placeholder="Rechercher…  ( / )"
+             autocomplete="off" spellcheck="false">
+    </div>
 
-    <select id="filter-profile">
-      <option value="">Tous les profils</option>
-      <!-- Filled dynamically -->
-    </select>
+    <!-- Panneau de filtres : les valeurs et leurs comptes viennent du
+         serveur, recalculés sous les filtres déjà actifs (V13). -->
+    <div class="v-pop" id="pop-filters">
+      <button type="button" class="btn v-pop__trigger" aria-expanded="false" aria-haspopup="true">
+        Filtres <span class="v-pop__badge num" id="filters-badge" hidden>0</span>
+      </button>
+      <div class="v-pop__panel popover" role="dialog" aria-label="Filtres" hidden>
+        <div class="v-facets" id="v-facets"></div>
+        <div class="v-facets__dates">
+          <label class="v-facets__label" for="f-from">Du</label>
+          <input type="date" id="f-from" class="v-date">
+          <label class="v-facets__label" for="f-to">au</label>
+          <input type="date" id="f-to" class="v-date">
+        </div>
+      </div>
+    </div>
 
-    <select id="filter-rating">
-      <option value="">Toutes les notes</option>
-      <option value="5">&#x2605;&#x2605;&#x2605;&#x2605;&#x2605; (5)</option>
-      <option value="4">&#x2605;&#x2605;&#x2605;&#x2605; (4+)</option>
-      <option value="3">&#x2605;&#x2605;&#x2605; (3+)</option>
-      <option value="2">&#x2605;&#x2605; (2+)</option>
-      <option value="1">&#x2605; (1+)</option>
-    </select>
-
-    <select id="filter-source">
-      <option value="">Toutes les sources</option>
-      <option value="profiles">Profils suivis</option>
-      <option value="quicklink">Quick Download</option>
-    </select>
-
-    <select id="filter-sort">
-      <option value="date_desc">Plus recents</option>
+    <label class="visually-hidden" for="f-sort">Tri</label>
+    <select id="f-sort" class="v-select">
+      <option value="date_desc">Plus récents</option>
       <option value="date_asc">Plus anciens</option>
-      <option value="rating_desc">Mieux notes</option>
+      <option value="rating_desc">Mieux notés</option>
+      <option value="rating_asc">Moins notés</option>
+      <option value="size_desc">Plus lourds</option>
+      <option value="size_asc">Plus légers</option>
     </select>
 
-    <input type="search" id="filter-search" placeholder="Rechercher..." style="max-width:200px;">
+    <label class="visually-hidden" for="f-group">Grouper par</label>
+    <select id="f-group" class="v-select">
+      <option value="none">Sans groupe</option>
+      <option value="day">Par jour</option>
+      <option value="week">Par semaine</option>
+      <option value="month">Par mois</option>
+      <option value="profile">Par profil</option>
+    </select>
+
+    <div class="v-seg" role="group" aria-label="Disposition">
+      <button type="button" class="v-seg__btn is-active" data-layout="justified"
+              title="Ratios d'origine préservés">Ratios</button>
+      <button type="button" class="v-seg__btn" data-layout="grid"
+              title="Vignettes carrées, alignées">Carrés</button>
+    </div>
+
+    <!-- V1 : contrôle de densité visible en permanence, 3 paliers de
+         tokens.css (--thumb-sm 120 / --thumb-md 168 / --thumb-lg 240). -->
+    <div class="v-density">
+      <span class="v-density__mark" aria-hidden="true">▪</span>
+      <label class="visually-hidden" for="f-density">Densité de la grille</label>
+      <input type="range" id="f-density" min="0" max="2" step="1" value="1"
+             aria-valuetext="moyenne">
+      <span class="v-density__mark v-density__mark--lg" aria-hidden="true">◼</span>
+    </div>
+
+    <div class="v-pop" id="pop-display">
+      <button type="button" class="btn v-pop__trigger" aria-expanded="false" aria-haspopup="true">Affichage</button>
+      <div class="v-pop__panel popover" role="dialog" aria-label="Propriétés affichées" hidden>
+        <p class="menu-label">Sur chaque vignette</p>
+        <label class="v-check"><input type="checkbox" data-prop="platform"> Plateforme</label>
+        <label class="v-check"><input type="checkbox" data-prop="date" checked> Date</label>
+        <label class="v-check"><input type="checkbox" data-prop="rating" checked> Note</label>
+        <label class="v-check"><input type="checkbox" data-prop="duration" checked> Durée</label>
+        <label class="v-check"><input type="checkbox" data-prop="usage" checked> Usage</label>
+        <label class="v-check"><input type="checkbox" data-prop="dims"> Dimensions</label>
+      </div>
+    </div>
+
+    <button type="button" class="btn v-inspector-toggle" id="btn-inspector"
+            aria-pressed="false" title="Panneau d'inspection (I)">Fiche</button>
+
+    <!-- V20 : les collections vivent dans une colonne latérale permanente,
+         pas dans un menu. Le bouton ne fait que la replier. -->
+    <button type="button" class="btn" id="btn-collections"
+            aria-pressed="true" aria-controls="v-collections"
+            title="Colonne des collections (C)">Collections</button>
+
+    <!-- V27 : l'écran des doublons est un écran, pas une modale : il
+         remplace la grille et garde la barre d'outils au-dessus. -->
+    <button type="button" class="btn" id="btn-doublons"
+            aria-pressed="false" aria-controls="v-dup"
+            title="Rechercher les doublons">Doublons</button>
+
+    <span class="toolbar__spacer"></span>
+
+    <!-- V16 : le total de la vue courante, en chiffre, toujours à l'écran. -->
+    <output class="v-total" id="v-total" for="f-q">
+      <strong class="num" id="v-total-n">—</strong> <span id="v-total-mot">médias</span>
+    </output>
   </div>
 
-  <span id="topbar-stats" class="topbar-stats"></span>
-
-  <div class="zoom-control">
-    <span class="zoom-icon" title="Vue large">&#x1F50D;&#x2212;</span>
-    <input type="range" id="zoom-slider" min="60" max="300" value="220" step="10" oninput="window.__setZoom(this.value)" title="Taille de la grille">
-    <span class="zoom-icon" title="Vue rapprochee">&#x1F50D;&#x2B;</span>
+  <!-- V12 : jetons retirables d'un clic, dans une barre persistante.
+       Jamais dans une modale. La barre disparaît quand rien n'est actif. -->
+  <div class="v-chips" id="v-chips" hidden>
+    <span class="v-chips__label">Filtres actifs</span>
+    <div class="v-chips__list" id="v-chips-list"></div>
+    <button type="button" class="btn btn--sm v-chips__clear" id="btn-clear-filters">Tout effacer</button>
   </div>
 
-  <button id="btn-select-mode" class="btn-select-mode" onclick="window.__toggleSelectionMode()">&#x2714; Selectionner</button>
+  <!-- V11 : barre d'actions, avec le NOMBRE exact, 4 actions au plus. -->
+  <div class="v-selbar" id="v-selbar" hidden role="region" aria-label="Actions sur la sélection">
+    <strong class="v-selbar__count num" id="sel-count">0</strong>
+    <span class="v-selbar__label" id="sel-label">élément sélectionné</span>
+    <span class="toolbar__spacer"></span>
+    <button type="button" class="btn btn--sm" id="btn-sel-all">Tout sélectionner</button>
+    <button type="button" class="btn btn--sm" id="btn-sel-none">Désélectionner</button>
 
-  <div class="topbar-user">
-    <span class="user-label">&#x1F464;</span>
-    <span class="user-name" id="user-name-display" onclick="window.__changeUser()" title="Cliquer pour changer"></span>
+    <!-- V20 : ajout par LOT depuis la sélection multiple déjà en place. -->
+    <div class="v-pop" id="pop-addto">
+      <button type="button" class="btn btn--sm v-pop__trigger"
+              aria-expanded="false" aria-haspopup="true">Ajouter à…</button>
+      <div class="v-pop__panel popover" role="dialog" aria-label="Ajouter à une collection" hidden>
+        <p class="menu-label">Collections</p>
+        <div class="v-addto__list" id="addto-list"></div>
+        <button type="button" class="btn btn--sm v-addto__new" id="btn-addto-new">
+          + Nouvelle collection…
+        </button>
+      </div>
+    </div>
+
+    <button type="button" class="btn btn--sm" id="btn-sel-download">Télécharger</button>
+    <button type="button" class="btn btn--sm btn--danger" id="btn-sel-delete">Supprimer</button>
   </div>
 </div>
 
-<!-- ═══ SELECTION TOOLBAR ═══ -->
-<div id="selection-toolbar" class="selection-toolbar" style="display:none;">
-  <button class="stb-btn" onclick="window.__selectAllVisible()">Tout selectionner</button>
-  <button class="stb-btn" onclick="window.__clearSelection()">Deselectionner</button>
-  <span id="selection-count" class="stb-count">0 selectionne</span>
-  <button id="btn-delete-selected" class="stb-btn stb-delete" onclick="window.__deleteSelected()" disabled>&#x1F5D1; Supprimer</button>
+<!-- Zone de messages : remplace alert(). role=status, donc annoncé, mais
+     jamais bloquant. -->
+<div class="v-notices" id="v-notices" role="status" aria-live="polite"></div>
+
+<div class="v-workspace" id="v-workspace">
+
+  <!-- ═══ COLLECTIONS (V20) ═══
+       Regroupement MANUEL, en travers des profils. Un média peut être dans
+       plusieurs collections à la fois — c'est une table d'association, pas
+       un dossier. Le compteur est à côté du nom, toujours. -->
+  <aside class="v-collections" id="v-collections" aria-label="Collections">
+    <div class="v-collections__head">
+      <p class="v-collections__title">Collections</p>
+      <button type="button" class="btn btn--sm" id="btn-collection-new"
+              title="Créer une collection">+ Nouvelle</button>
+    </div>
+    <nav class="v-collections__list" id="collections-list"></nav>
+  </aside>
+
+  <main class="v-grid" id="v-grid" tabindex="-1" aria-label="Grille de médias"></main>
+
+  <!-- ═══ DOUBLONS (V27, V28, V29) ═══
+       Deux modes NOMMÉS et séparés. Le curseur de similarité ne filtre que
+       les distances déjà calculées : il ne relance jamais le scan. -->
+  <section class="v-dup" id="v-dup" hidden aria-label="Doublons">
+    <header class="v-dup__bar">
+      <div class="v-seg" role="group" aria-label="Mode de détection">
+        <button type="button" class="v-seg__btn is-active" data-dupmode="exact"
+                title="Même md5 : le fichier est identique octet par octet">
+          Fichiers identiques
+        </button>
+        <button type="button" class="v-seg__btn" data-dupmode="similar"
+                title="Empreinte perceptuelle proche : l'image se ressemble">
+          Visuellement similaires
+        </button>
+      </div>
+
+      <div class="v-dup__seuil" id="dup-seuil" hidden>
+        <label class="v-dup__seuil-label" for="dup-distance">Tolérance</label>
+        <input type="range" id="dup-distance" min="0" max="16" step="1" value="6">
+        <output class="v-dup__seuil-out num" id="dup-distance-out" for="dup-distance">≤ 6 bits</output>
+      </div>
+
+      <span class="toolbar__spacer"></span>
+      <span class="v-dup__resume" id="dup-resume"></span>
+      <button type="button" class="btn btn--sm" id="btn-dup-rescan">Relancer le scan</button>
+      <button type="button" class="btn btn--sm" id="btn-dup-close">Fermer</button>
+    </header>
+
+    <!-- Empreintes manquantes : la bibliothèque déjà stockée n'en a aucune.
+         Le calcul se fait par lots, avec une progression visible. -->
+    <div class="v-dup__empreintes" id="dup-empreintes" hidden>
+      <p class="v-dup__empreintes-texte" id="dup-empreintes-texte"></p>
+      <div class="v-dup__jauge" id="dup-jauge" hidden
+           role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <span class="v-dup__jauge-barre" id="dup-jauge-barre"></span>
+      </div>
+      <button type="button" class="btn btn--primary btn--sm" id="btn-empreintes">
+        Calculer les empreintes
+      </button>
+    </div>
+
+    <div class="v-dup__groupes" id="dup-groupes"></div>
+  </section>
+
+  <!-- V17 : inspection latérale, jamais une modale. -->
+  <aside class="v-inspector" id="v-inspector" hidden aria-label="Fiche du média">
+    <div class="v-inspector__body" id="v-inspector-body"></div>
+  </aside>
 </div>
 
-<!-- ═══ MEDIA GRID ═══ -->
-<div id="media-grid" class="media-grid">
-  <div class="loader"><div class="loader-spinner"></div><p>Chargement...</p></div>
-</div>
-
-<!-- ═══ MEMES GRID (hidden by default) ═══ -->
-<div id="memes-grid" class="media-grid" style="display:none;">
-  <div class="loader"><div class="loader-spinner"></div><p>Chargement des memes...</p></div>
-</div>
-
-<!-- ═══ LIGHTBOX ═══ -->
-<div id="lightbox" class="lightbox">
+<!-- ═══ APERÇU (V15) ═══ -->
+<div id="lightbox" class="lightbox" hidden>
   <div class="lightbox-main">
-    <button class="lightbox-close" onclick="window.__closeLightbox()" title="Fermer (Echap)">&#x2715;</button>
-    <button class="lightbox-nav prev" onclick="window.__navLightbox(-1)" title="Precedent (←)">&#x2039;</button>
-    <div id="lb-media"></div>
-    <button class="lightbox-nav next" onclick="window.__navLightbox(1)" title="Suivant (→)">&#x203A;</button>
+    <button class="lightbox-close" id="lb-close" title="Fermer (Échap)" aria-label="Fermer">&#x2715;</button>
+    <button class="lightbox-nav prev" id="lb-prev" title="Précédent (←)" aria-label="Précédent">&#x2039;</button>
+    <div id="lb-media" class="lightbox-media"></div>
+    <button class="lightbox-nav next" id="lb-next" title="Suivant (→)" aria-label="Suivant">&#x203A;</button>
   </div>
 
   <div class="lightbox-sidebar">
     <div class="sidebar-header">
       <div class="media-info" id="lb-info"></div>
       <div class="media-caption" id="lb-caption"></div>
-      <a class="post-link" id="lb-post-link" href="#" target="_blank" rel="noopener"></a>
+      <div class="lb-actions">
+        <a class="btn btn--sm" id="lb-post-link" href="#" target="_blank" rel="noopener">Post d'origine ↗</a>
+        <a class="btn btn--sm" id="lb-edit-btn" href="#">Éditer</a>
+        <a class="btn btn--sm" id="lb-download-btn" href="#">Télécharger</a>
+      </div>
     </div>
 
     <div class="rating-section">
-      <div class="star-rating" id="lb-stars"></div>
+      <div class="star-rating" id="lb-stars" role="group" aria-label="Noter ce média"></div>
       <div class="rating-info" id="lb-rating-info"></div>
     </div>
 
     <div class="comments-section">
-      <div class="comments-list" id="lb-comments">
-        <div class="comment-empty">Aucun commentaire</div>
-      </div>
+      <div class="comments-list" id="lb-comments"></div>
       <div class="comment-form">
-        <input type="text" id="lb-comment-input" placeholder="Ajouter un commentaire..." maxlength="500">
-        <button id="lb-comment-btn">Envoyer</button>
+        <label class="visually-hidden" for="lb-comment-input">Ajouter un commentaire</label>
+        <input type="text" id="lb-comment-input" placeholder="Ajouter un commentaire…" maxlength="500">
+        <button type="button" class="btn btn--primary btn--sm" id="lb-comment-btn">Envoyer</button>
       </div>
     </div>
   </div>
 </div>
 
-<script src="/static/viewer.js"></script>
+<!-- ═══ DIALOGUE DE CONFIRMATION — remplace confirm() ═══ -->
+<dialog class="v-dialog" id="dlg-confirm">
+  <h2 class="v-dialog__title" id="dlg-confirm-title">Confirmer</h2>
+  <p class="v-dialog__text" id="dlg-confirm-text"></p>
+  <div class="v-dialog__actions">
+    <button type="button" class="btn" id="dlg-confirm-cancel">Annuler</button>
+    <button type="button" class="btn btn--danger" id="dlg-confirm-ok">Confirmer</button>
+  </div>
+</dialog>
+
+<!-- ═══ PSEUDO — demandé AU MOMENT de noter ou commenter, jamais au chargement ═══ -->
+<dialog class="v-dialog" id="dlg-user">
+  <h2 class="v-dialog__title">Ton pseudo</h2>
+  <p class="v-dialog__text">Il identifie tes notes et tes commentaires. Modifiable à tout moment depuis la fiche.</p>
+  <label class="visually-hidden" for="dlg-user-input">Pseudo</label>
+  <input type="text" id="dlg-user-input" class="v-dialog__input" maxlength="40" placeholder="ex. Jérémie">
+  <div class="v-dialog__actions">
+    <button type="button" class="btn" id="dlg-user-cancel">Annuler</button>
+    <button type="button" class="btn btn--primary" id="dlg-user-ok">Valider</button>
+  </div>
+</dialog>
+
+<!-- ═══ SAISIE — créer / renommer une collection (remplace prompt()) ═══ -->
+<dialog class="v-dialog" id="dlg-saisie">
+  <h2 class="v-dialog__title" id="dlg-saisie-title">Nouvelle collection</h2>
+  <p class="v-dialog__text" id="dlg-saisie-text"></p>
+  <label class="visually-hidden" for="dlg-saisie-input">Nom</label>
+  <input type="text" id="dlg-saisie-input" class="v-dialog__input" maxlength="60"
+         placeholder="ex. Références typo">
+  <p class="v-dialog__erreur" id="dlg-saisie-erreur" hidden></p>
+  <div class="v-dialog__actions">
+    <button type="button" class="btn" id="dlg-saisie-cancel">Annuler</button>
+    <button type="button" class="btn btn--primary" id="dlg-saisie-ok">Créer</button>
+  </div>
+</dialog>
+
+<!-- ═══ DÉDUPLICATION (V29) ═══
+     Aucune suppression ne part d'ici sans deux réponses explicites :
+     QUEL exemplaire est gardé, et QUELLES métadonnées le rejoignent. -->
+<dialog class="v-dialog v-dialog--large" id="dlg-dedup">
+  <h2 class="v-dialog__title">Dédupliquer ce groupe</h2>
+
+  <p class="v-dialog__label">Exemplaire gardé</p>
+  <div class="dedup__garde" id="dedup-garde"></div>
+
+  <p class="v-dialog__label">Métadonnées à reprendre sur l'exemplaire gardé</p>
+  <div class="dedup__meta" id="dedup-meta"></div>
+
+  <p class="v-dialog__label">Seront supprimés définitivement</p>
+  <ul class="dedup__perdus" id="dedup-perdus"></ul>
+
+  <p class="v-dialog__text v-dialog__text--danger" id="dedup-avertissement"></p>
+
+  <div class="v-dialog__actions">
+    <button type="button" class="btn" id="dlg-dedup-cancel">Annuler</button>
+    <button type="button" class="btn btn--danger" id="dlg-dedup-ok">Supprimer</button>
+  </div>
+</dialog>
+
+<script src="/static/viewer.js?v={{ asset_version('viewer.js') }}"></script>
 </body>
 </html>

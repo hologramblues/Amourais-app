@@ -330,6 +330,8 @@ class TwitterExtractor(PlatformExtractor):
             adaptor = StealthyFetcher.fetch(media_url, **fetch_kwargs)
         except Exception as exc:
             logger.error("StealthyFetcher failed for Twitter: {}", exc)
+            # risque #53 / §4.20 — voir instagram.py : le pipeline conclut `failed`.
+            result.fetch_error = f"Twitter fetch failed: {exc}"
             return result
 
         # -- Phase 1: Parse intercepted API responses -----------------------
@@ -365,6 +367,7 @@ class TwitterExtractor(PlatformExtractor):
                 if pid in seen_ids:
                     continue
                 seen_ids.add(pid)
+                result.total_seen += 1
 
                 if opts.scrape_mode == "daily" and pid in known_post_ids:
                     consecutive_known += 1
@@ -487,6 +490,7 @@ class TwitterExtractor(PlatformExtractor):
             if tweet_id in seen_ids:
                 continue
             seen_ids.add(tweet_id)
+            result.total_seen += 1
 
             if opts.scrape_mode == "daily" and tweet_id in known_post_ids:
                 logger.info("DOM fallback daily mode: hit known post {}", tweet_id)

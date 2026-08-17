@@ -1,0 +1,480 @@
+/* ============================================================
+   SAMOURAIS SCRAPPER — DESIGN TOKENS
+   Source unique de vérité. Aucune valeur brute ailleurs.
+   ------------------------------------------------------------
+   Contenu : UNIQUEMENT des déclarations de custom properties.
+   Ce fichier ne style aucun élément — il peut donc être chargé
+   par n'importe quelle page sans risque de régression.
+   ------------------------------------------------------------
+   Ordre de chargement : tokens.css AVANT tout autre CSS.
+   ------------------------------------------------------------
+   Base : REFERENCES.md §2.2. Les écarts assumés sont signalés
+   par un commentaire « ÉCART ».
+   ============================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* ==========================================================
+     1. TYPOGRAPHIE
+     5 tailles UI + 3 titres. Aucune autre taille n'est permise.
+     ========================================================== */
+
+  /* ÉCART : la pile UI garde "DM Sans" en 2e position. Les 4 écrans
+     historiques (viewer/editor/calendar/analytics) demandent encore
+     DM Sans ; la pile converge vers Inter sans rupture pendant leur
+     reprise. À la fin de la refonte, ne restera que Inter + système. */
+  --font-ui: "Inter", "Inter Variable", "DM Sans", -apple-system,
+             BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-micro:   0.6875rem; /* 11px — badges, légendes de graphe */
+  --text-mini:    0.75rem;   /* 12px — métadonnées sous vignette */
+  --text-small:   0.8125rem; /* 13px — CORPS PAR DÉFAUT de l'app */
+  --text-regular: 0.9375rem; /* 15px — texte long, légendes éditables */
+  --text-large:   1.125rem;  /* 18px — sous-titre de section */
+
+  --title-3: 1.25rem;  /* 20px — titre d'état vide / d'erreur */
+  --title-2: 1.5rem;   /* 24px — titre d'écran */
+  --title-1: 2rem;     /* 32px — valeur KPI hero */
+
+  --weight-light:    300;
+  --weight-normal:   450;  /* corps — compense le petit corps */
+  --weight-medium:   500;  /* labels, boutons, en-têtes de colonne */
+  --weight-semibold: 600;  /* titres */
+  --weight-bold:     700;  /* valeurs KPI */
+
+  --lh-tight: 1.2;   /* titres */
+  --lh-ui:    1.4;   /* lignes de liste, boutons */
+  --lh-text:  1.55;  /* paragraphes */
+
+  --ls-tight:  -0.014em; /* >= 20px */
+  --ls-normal: -0.011em; /* 13–15px */
+  --ls-wide:    0.002em; /* 11–12px capitales */
+  --ls-caps:    0.05em;  /* ÉCART : capitales 11px, l'interlettrage
+                            positif est indispensable à leur lisibilité. */
+
+  --numeric: tabular-nums;
+
+  /* ==========================================================
+     2. ESPACEMENT — multiples de 4 uniquement
+     (--sp-1 et --sp-3 sont les 2 exceptions historiques de la
+     grille : filets et demi-pas optiques.)
+     ========================================================== */
+  --sp-1:  2px;
+  --sp-2:  4px;
+  --sp-3:  6px;
+  --sp-4:  8px;   /* gap par défaut */
+  --sp-5:  12px;
+  --sp-6:  16px;
+  --sp-7:  24px;
+  --sp-8:  32px;
+  --sp-9:  48px;
+
+  /* ==========================================================
+     3. RAYONS — 4 valeurs, jamais mélangées dans un même niveau
+     ========================================================== */
+  --radius-control:   4px;
+  --radius-block:     8px;
+  --radius-container: 12px;
+  --radius-pill:      9999px;
+
+  /* ==========================================================
+     4. GÉOMÉTRIE
+     ========================================================== */
+  --sidebar-w:   240px;
+  --inspector-w: 300px;
+  --row-h:       32px;  /* rangée de liste / tableau */
+  --menu-row-h:  28px;  /* rangée de popover */
+  --control-h:   22px;  /* select dans un popover */
+  --chip-h:      21px;
+  --btn-h:       32px;
+  --btn-min-w:   92px;
+  --icon-sm:     14px;
+  --icon-md:     16px;
+  --tap-min:     44px;  /* cible tactile minimale */
+  --border-w:    1px;
+  --grid-gap:    4px;
+  --thumb-sm:    120px;
+  --thumb-md:    168px; /* défaut Viewer */
+  --thumb-lg:    240px;
+  --header-h:    56px;  /* ÉCART : 64px -> 56px. La barre de nav ne doit
+                           pas réclamer plus de place que le contenu ;
+                           56 = 32 (bouton) + 2 x 12 de respiration. */
+  --content-max: 1200px;
+
+  /* ==========================================================
+     5. MOUVEMENT — 2 vitesses, rien au-dessus de 400ms
+     ========================================================== */
+  --t-highlight-in:  0s;
+  --t-highlight-out: 150ms;
+  --t-quick:         100ms; /* hover / focus / couleur */
+  --t-regular:       250ms; /* apparition de panneau */
+  --ease:            cubic-bezier(0.2, 0, 0.2, 1);
+  --loading-delay:   800ms;
+  --loading-fade:    200ms;
+
+  /* ==========================================================
+     6. ÉLÉVATION — popover / dialog / dropdown UNIQUEMENT.
+     La hiérarchie normale vient de l'escalier de surfaces.
+     ========================================================== */
+  --shadow-low:    0 2px 4px rgba(0,0,0,.10);
+  --shadow-medium: 0 4px 24px rgba(0,0,0,.18);
+  --shadow-high:   0 8px 40px rgba(0,0,0,.32);
+
+  /* ==========================================================
+     7. EMPILEMENT
+     ========================================================== */
+  --z-content: 1;
+  --z-sticky:  100;
+  --z-overlay: 500;
+  --z-popover: 600;
+  --z-palette: 650;
+  --z-dialog:  700;
+  --z-tooltip: 1100;
+  --z-toast:   1200;
+
+  /* ==========================================================
+     8. PALETTE SÉMANTIQUE — THÈME CLAIR (défaut, premier rang)
+     Toute couleur du produit est définie ici, par RÔLE.
+     ========================================================== */
+
+  /* Surfaces — escalier de 4 niveaux + fond de champ
+     DIRECTION « PAPIER » : neutres CHAUDS, sans dominante bleue.
+     Le contenu du produit est l'image ; un gris bleuté teinte la
+     perception des couleurs des médias posés dessus, un neutre chaud
+     les laisse tranquilles. Écart maximal de 2 points entre les
+     canaux R et B, contre 3 à 5 dans la rampe bleutée précédente. */
+  --bg-canvas: #fbfbfa; /* fond de page, sidebar */
+  --bg-1:      #ffffff; /* conteneur principal, cartes */
+  --bg-2:      #f4f4f2; /* zone en creux, en-tête de tableau */
+  --bg-3:      #eaeae7; /* survol de rangée, piste de slider */
+  --bg-inset:  #fcfcfb; /* fond de champ de saisie */
+
+  /* Bordures — 3 niveaux */
+  --border-1: #e5e5e1; /* filet par défaut */
+  --border-2: #d6d6d1; /* séparateur appuyé, bordure de contrôle */
+  --border-3: #b9b9b3; /* bordure au survol */
+
+  /* Texte — 4 niveaux */
+  --fg-1: #191918; /* primaire — 17.2:1 sur --bg-canvas */
+  --fg-2: #45443f; /* secondaire — 9.0:1 */
+  /* Le tertiaire porte les en-têtes de colonne, les métadonnées sous
+     vignette et le texte des états vides : il vit donc sur --bg-2 et
+     --bg-3 autant que sur le fond de page. Il est tenu volontairement
+     plus foncé que ne le suggère la direction (#8b8b87, qui ne donne
+     que 3.3:1) pour rester au-dessus du seuil AA de 4.5:1 partout.
+     Valeurs mesurées : 5.49 sur --bg-canvas, 5.16 sur --bg-2, 4.71 sur
+     --bg-3. Un premier essai à #6e6e6a passait sur les deux premiers
+     fonds mais tombait à 4.25 sur --bg-3, le fond de survol de rangée —
+     précisément là où ces métadonnées sont lues. */
+  --fg-3: #676763; /* tertiaire — labels, métadonnées */
+  --fg-4: #9c9c97; /* quaternaire — placeholder, désactivé (exempté AA) */
+  --fg-on-accent: #ffffff;
+  --fg-on-solid:  #ffffff; /* texte sur aplat sémantique plein */
+
+  /* Accent — ENCRE, quasi noir
+     ------------------------------------------------------------
+     DIRECTION « PAPIER ». L'accent n'est plus une couleur mais une
+     VALEUR. Trois raisons, dans l'ordre d'importance :
+       1. Aucune couleur d'interface ne dispute l'attention aux médias.
+          C'est le parti pris des bibliothèques d'images et des outils
+          d'écriture, et c'est le contenu qui doit porter la couleur.
+       2. Le contraste devient énorme et gratuit : 16.8:1 partout, là
+          où le bleu se battait pour atteindre 4.5:1 et imposait deux
+          rampes décalées.
+       3. La couleur redevient exclusivement SÉMANTIQUE : vert, orange
+          et rouge ne sont plus noyés au milieu d'un bleu décoratif.
+     Les deux rampes sont conservées par sécurité — des composants les
+     référencent séparément — mais elles convergent désormais : l'encre
+     tient les deux contraintes à la fois, ce qu'aucune teinte colorée
+     ne pouvait faire.
+     ------------------------------------------------------------ */
+  --accent:        #1c1c1a; /* sur --accent-soft : 15.1:1 */
+  --accent-hover:  #33322e;
+  --accent-active: #000000;
+  --accent-soft:   #efeeeb; /* fond de jeton actif / sélection */
+  --accent-border: #d4d3cd;
+
+  --accent-solid:        #1c1c1a; /* blanc dessus : 16.8:1 */
+  --accent-solid-hover:  #33322e; /* blanc dessus : 12.1:1 */
+  --accent-solid-active: #000000; /* blanc dessus : 21.0:1 */
+
+  /* Sémantique — jamais décorative
+     ÉCART : --success et --warning sont assombris d'un cran par
+     rapport à REFERENCES.md. Ces deux tons servent de COULEUR DE TEXTE
+     sur leur propre fond -soft (.badge--success, .badge--warning) ;
+     les valeurs prescrites y tombaient à 4.46:1 et 4.18:1. */
+  --success:      #177537; /* sur --success-soft : 5.09:1 */
+  --success-soft: #e3f5e9;
+  --warning:      #94570d; /* sur --warning-soft : 5.19:1 */
+  --warning-soft: #fdf1de;
+  --danger:       #c22b30;
+  --danger-hover: #a82327;
+  --danger-soft:  #fdeaea;
+  /* L'information garde une couleur PROPRE. Elle pointait sur l'accent
+     à l'époque où celui-ci était bleu ; maintenant que l'accent est de
+     l'encre, un badge « info » serait devenu noir, indistinguable d'un
+     badge neutre. Le bleu de l'ancienne rampe est repris tel quel : il
+     ne sert plus qu'ici, donc il redevient porteur de sens. */
+  --info:         #2861cb;
+  --info-soft:    #e8f0fe;
+  --neutral:      var(--fg-3);
+  --neutral-soft: var(--bg-3);
+
+  /* Séries de graphe — accent + 4 teintes, dans cet ordre */
+  --chart-1: #2f6fe0;
+  --chart-2: #1a7f3c;
+  --chart-3: #a86412;
+  --chart-4: #7c4dbd;
+  --chart-5: #0e7f8c;
+  --chart-grid: var(--border-1);
+
+  /* Sélection de texte */
+  --selection-bg: var(--accent-soft);
+  --selection-fg: var(--fg-1);
+
+  /* Squelette de chargement */
+  --skeleton-base:  #eaeae7;
+  --skeleton-sheen: #f6f6f4;
+
+  /* Focus */
+  --focus-color:  var(--accent);
+  --focus-ring:   2px solid var(--accent);
+  --focus-offset: 2px;
+
+  /* Scrollbar */
+  --scrollbar-track: 12px;
+  --scrollbar-thumb: 6px;
+  --scrollbar-color: rgba(0,0,0,.16);
+  --scrollbar-color-hover: rgba(0,0,0,.28);
+
+  /* ==========================================================
+     9. PONT DE NAVIGATION
+     La barre de nav est incluse par des pages qui NE chargent PAS
+     tokens.css (viewer/editor/calendar/analytics, repris plus tard).
+     Ces jetons portent un préfixe --nav- qui n'existe nulle part
+     ailleurs : partials/nav.html s'en sert avec un fallback, donc
+     la barre suit le thème ici et garde l'ancien rendu là-bas.
+     Aucun risque de collision avec les :root des CSS d'écran.
+     ========================================================== */
+  --nav-h:            var(--header-h);
+  --nav-bg:           var(--bg-1);
+  --nav-border:       var(--border-1);
+  --nav-fg:           var(--fg-3);
+  --nav-fg-strong:    var(--fg-1);
+  --nav-fg-hover:     var(--fg-2);
+  /* Aplat de la marque, sous un glyphe blanc : rampe SOLID. */
+  --nav-accent:       var(--accent-solid);
+  --nav-accent-hover: var(--accent-solid-hover);
+  --nav-hover-bg:     var(--bg-2);
+  --nav-active-bg:    var(--accent-soft);
+  --nav-active-fg:    var(--accent);
+  --nav-font:         var(--font-ui);
+  --nav-radius:       var(--radius-control);
+  --nav-focus:        var(--accent);
+  --nav-idle:         var(--fg-4); /* pastille d'état système au repos */
+
+  /* ==========================================================
+     10. COMPATIBILITÉ — anciens jetons --s-*
+     Encore référencés en style inline dans settings.html (hors
+     périmètre de ce lot). Ce ne sont que des alias : ils pointent
+     vers les rôles ci-dessus et suivent donc les deux thèmes.
+     À supprimer quand settings.html sera repris.
+     ========================================================== */
+  --s-bg:             var(--bg-canvas);
+  --s-bg-subtle:      var(--bg-2);
+  --s-surface:        var(--bg-1);
+  --s-surface-hover:  var(--bg-2);
+  --s-surface-alt:    var(--bg-3);
+  --s-border:         var(--border-1);
+  --s-border-hover:   var(--border-3);
+  --s-border-accent:  var(--border-2);
+  --s-accent:         var(--accent);
+  --s-accent-hover:   var(--accent-hover);
+  --s-accent-light:   var(--accent-soft);
+  --s-accent-blue:    var(--accent);
+  --s-accent-dim:     var(--accent-soft);
+  --s-text:           var(--fg-1);
+  --s-text-secondary: var(--fg-2);
+  --s-text-muted:     var(--fg-3);
+  --s-text-accent:    var(--accent);
+  --s-success:        var(--success);
+  --s-success-bg:     var(--success-soft);
+  --s-warning:        var(--warning);
+  --s-warning-bg:     var(--warning-soft);
+  --s-error:          var(--danger);
+  --s-error-bg:       var(--danger-soft);
+  --s-info:           var(--info);
+  --s-info-bg:        var(--info-soft);
+  --s-font-heading:   var(--font-ui);
+  --s-font-body:      var(--font-ui);
+  --s-font-mono:      var(--font-mono);
+  --s-header-h:       var(--header-h);
+  --s-radius:         var(--radius-block);
+  --s-radius-lg:      var(--radius-container);
+}
+
+/* ============================================================
+   THÈME SOMBRE
+   Deux blocs strictement identiques :
+     A. suivi du système, tant qu'aucun choix explicite n'est posé
+     B. choix manuel, qui doit gagner dans les deux sens
+   Seuls les jetons QUI CHANGENT sont redéfinis : géométrie,
+   typographie et mouvement sont communs aux deux thèmes.
+   Aucune couleur n'a ici sa seule définition — toutes existent
+   déjà sur :root ci-dessus.
+   ============================================================ */
+
+/* --- A. Suivi du système --- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    /* Neutres CHAUDS, symétriques du thème clair : la dominante bleue
+       du fond teintait la perception des médias posés dessus. */
+    --bg-canvas: #0d0d0c;
+    --bg-1:      #151513;
+    --bg-2:      #1c1c19;
+    --bg-3:      #24241f;
+    --bg-inset:  #100f0e;
+
+    --border-1: #2a2a26;
+    --border-2: #3a3a34;
+    --border-3: #4c4b44;
+
+    --fg-1: #f4f3f0;
+    --fg-2: #cbc9c3;
+    --fg-3: #928f88; /* 5.5:1 sur --bg-2 */
+    --fg-4: #6a6862;
+    /* PIÈGE : l'accent étant devenu un aplat CLAIR en thème sombre, du
+       texte blanc dessus serait illisible. --fg-on-accent passe donc au
+       foncé. --fg-on-solid reste blanc : il habille les aplats
+       sémantiques (danger, succès), qui eux restent colorés et sombres. */
+    --fg-on-accent: #16150f;
+    --fg-on-solid:  #ffffff;
+
+    /* Accent = ENCRE INVERSÉE. Le thème clair pose du quasi-noir sur du
+       papier ; le thème sombre pose du quasi-blanc sur de l'encre. Même
+       parti pris, même contraste, aucune couleur décorative. */
+    --accent:        #f0efec;
+    --accent-hover:  #ffffff;
+    --accent-active: #d8d6d0;
+    --accent-soft:   #26251f;
+    --accent-border: #46443c;
+
+    --accent-solid:        #f0efec; /* --fg-on-accent dessus : 15.9:1 */
+    --accent-solid-hover:  #ffffff; /* --fg-on-accent dessus : 17.6:1 */
+    --accent-solid-active: #d8d6d0; /* --fg-on-accent dessus : 12.4:1 */
+
+    --info:      #6fa8ff;
+    --info-soft: #14203a;
+
+    --success:      #35b364;
+    --success-soft: #10261a;
+    --warning:      #dd9030;
+    --warning-soft: #2a1e0c;
+    --danger:       #ef5a5f;
+    --danger-hover: #ff7175;
+    --danger-soft:  #2c1214;
+
+    --chart-1: #4b8dfa;
+    --chart-2: #35b364;
+    --chart-3: #dd9030;
+    --chart-4: #a279e0;
+    --chart-5: #2fb3c2;
+
+    --selection-bg: #23324a;
+    --selection-fg: #f2f3f5;
+
+    --skeleton-base:  #1d2024;
+    --skeleton-sheen: #262a30;
+
+    --shadow-low:    0 2px 4px rgba(0,0,0,.40);
+    --shadow-medium: 0 4px 24px rgba(0,0,0,.55);
+    --shadow-high:   0 8px 40px rgba(0,0,0,.70);
+
+    --scrollbar-color: rgba(255,255,255,.14);
+    --scrollbar-color-hover: rgba(255,255,255,.26);
+  }
+}
+
+/* --- B. Choix manuel — gagne dans les deux sens --- */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-canvas: #0d0d0c;
+  --bg-1:      #151513;
+  --bg-2:      #1c1c19;
+  --bg-3:      #24241f;
+  --bg-inset:  #100f0e;
+
+  --border-1: #2a2a26;
+  --border-2: #3a3a34;
+  --border-3: #4c4b44;
+
+  --fg-1: #f4f3f0;
+  --fg-2: #cbc9c3;
+  --fg-3: #928f88;
+  --fg-4: #6a6862;
+  /* Voir le bloc A : l'aplat d'accent est CLAIR en thème sombre, le
+     texte posé dessus doit donc être foncé. */
+  --fg-on-accent: #16150f;
+  --fg-on-solid:  #ffffff;
+
+  --accent:        #f0efec;
+  --accent-hover:  #ffffff;
+  --accent-active: #d8d6d0;
+  --accent-soft:   #26251f;
+  --accent-border: #46443c;
+
+  --accent-solid:        #f0efec; /* --fg-on-accent dessus : 15.9:1 */
+  --accent-solid-hover:  #ffffff; /* --fg-on-accent dessus : 17.6:1 */
+  --accent-solid-active: #d8d6d0; /* --fg-on-accent dessus : 12.4:1 */
+
+  --info:      #6fa8ff;
+  --info-soft: #14203a;
+
+  --success:      #35b364;
+  --success-soft: #10261a;
+  --warning:      #dd9030;
+  --warning-soft: #2a1e0c;
+  --danger:       #ef5a5f;
+  --danger-hover: #ff7175;
+  --danger-soft:  #2c1214;
+
+  --chart-1: #4b8dfa;
+  --chart-2: #35b364;
+  --chart-3: #dd9030;
+  --chart-4: #a279e0;
+  --chart-5: #2fb3c2;
+
+  --selection-bg: #23324a;
+  --selection-fg: #f2f3f5;
+
+  --skeleton-base:  #1d2024;
+  --skeleton-sheen: #262a30;
+
+  --shadow-low:    0 2px 4px rgba(0,0,0,.40);
+  --shadow-medium: 0 4px 24px rgba(0,0,0,.55);
+  --shadow-high:   0 8px 40px rgba(0,0,0,.70);
+
+  --scrollbar-color: rgba(255,255,255,.14);
+  --scrollbar-color-hover: rgba(255,255,255,.26);
+}
+
+/* ============================================================
+   AJUSTEMENTS D'ENVIRONNEMENT
+   ============================================================ */
+
+/* Filet plus fin sur écran dense : la hiérarchie reste lisible
+   sans épaissir le trait. */
+@media (min-resolution: 2dppx) {
+  :root { --border-w: 0.5px; }
+}
+
+/* Barre de nav plus haute au doigt : la cible tactile minimale
+   commande, pas la densité. */
+@media (max-width: 1023px) {
+  :root { --header-h: 52px; }
+}

@@ -1,412 +1,958 @@
-/* ============================================
-   SAMOURAIS Analytics — Instagram Account Stats
-   ============================================ */
+/* ============================================================
+   SAMOURAIS — ANALYTICS
+   ------------------------------------------------------------
+   Règle du fichier : AUCUNE valeur de couleur brute. Chaque teinte
+   passe par un jeton de tokens.css, qui porte le thème clair ET le
+   thème sombre. La seule exception du produit (le fond anti-flash)
+   vit dans le <head> de analytics.html, avant que ce fichier existe.
 
-:root {
-    --ana-bg: #ffffff;
-    --ana-surface: #ffffff;
-    --ana-surface2: #f7f7f7;
-    --ana-border: #e0e0e0;
-    --ana-text: #222222;
-    --ana-muted: #717171;
-    --ana-accent: #E21B3C;
-    --ana-blue: #1a73e8;
-    --ana-green: #008a05;
-    --ana-yellow: #f59e0b;
-    --ana-purple: #833AB4;
-    --ana-ig-gradient: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
-}
+   Échelle typographique de l'écran — 6 tailles, pas une de plus :
+     11px  --text-micro    en-têtes de colonne, badges, légendes
+     12px  --text-mini     métadonnées, libellés de KPI, notes
+     13px  --text-small    CORPS : cellules, boutons, selects, titres de bloc
+     15px  --text-regular  description d'état vide
+     20px  --title-3       titre d'écran, titre d'état vide
+     32px  --title-1       valeur de KPI
+   ============================================================ */
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+*, *::before, *::after { box-sizing: border-box; }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: #f7f7f7;
-    color: var(--ana-text);
-    min-height: 100vh;
+  margin: 0;
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+  font-family: var(--font-ui);
+  font-size: var(--text-small);
+  font-weight: var(--weight-normal);
+  line-height: var(--lh-ui);
+  letter-spacing: var(--ls-normal);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Navigation — handled by shared nav partial */
-.nav-tabs { display: none; }
+/* Normalisation des contrôles natifs.
+   Cet écran ne charge pas samourais.css : les <input> non stylés
+   explicitement (cases du menu de colonnes, bascule des valeurs de
+   la heatmap) retombaient sur Arial 13,333 px. Sans conséquence
+   visible sur une case à cocher, mais c'est une police de plus dans
+   un écran qui n'en veut qu'une. */
+:where(button, input, select, textarea) { font: inherit; letter-spacing: inherit; }
 
-/* Main container */
-.app {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 24px;
+h1, h2, h3, p, figure { margin: 0; }
+
+::selection { background: var(--selection-bg); color: var(--selection-fg); }
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-control);
 }
 
-/* ─── Profile Header ──────────────────────── */
-.profile-header {
-    background: var(--ana-surface);
-    border-radius: 16px;
-    border: 1px solid var(--ana-border);
-    padding: 32px;
-    margin-bottom: 24px;
-    display: flex;
-    gap: 24px;
-    align-items: center;
+.num {
+  font-variant-numeric: var(--numeric);
+  text-align: right;
 }
 
-.profile-avatar-wrapper {
-    position: relative;
-    flex-shrink: 0;
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
 }
 
-.profile-avatar {
-    width: 88px;
-    height: 88px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 3px solid transparent;
-    background-image: linear-gradient(white, white), var(--ana-ig-gradient);
-    background-origin: border-box;
-    background-clip: content-box, border-box;
+/* ============================================================
+   1. GABARIT
+   ============================================================ */
+
+.ana {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--sp-7) var(--sp-6) var(--sp-9);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
 }
 
-.verified-badge {
-    position: absolute;
-    bottom: 2px;
-    right: 2px;
-    width: 22px;
-    height: 22px;
-    background: var(--ana-blue);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 700;
-    border: 2px solid white;
+/* ============================================================
+   2. BARRE D'ÉCRAN — titre, compte, fraîcheur, période (A1, A5)
+   ============================================================ */
+
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  flex-wrap: wrap;
 }
 
-.profile-info {
-    flex: 1;
+.top__title {
+  font-size: var(--title-3);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--ls-tight);
+  line-height: var(--lh-tight);
 }
 
-.profile-name-row {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    margin-bottom: 8px;
+.top__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+  color: var(--fg-3);
+  font-size: var(--text-mini);
 }
 
-.profile-name-row h1 {
-    font-size: 24px;
-    font-weight: 700;
+.acct { display: inline-flex; align-items: center; gap: var(--sp-3); }
+
+.acct__av {
+  width: var(--sp-6); height: var(--sp-6);
+  border-radius: var(--radius-pill);
+  object-fit: cover;
+  background: var(--bg-3);
+  border: var(--border-w) solid var(--border-1);
+}
+.acct__av[hidden] { display: none; }
+
+.acct__handle { color: var(--fg-2); font-weight: var(--weight-medium); }
+
+.sep { color: var(--fg-4); }
+
+.sync[data-state="stale"] { color: var(--warning); }
+.sync[data-state="none"]  { color: var(--danger); }
+
+.top__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
 }
 
-.profile-username {
-    font-size: 16px;
-    color: var(--ana-muted);
-    font-weight: 400;
+/* --- Sélecteur de compte, à gauche du sélecteur de période ---
+   Même gabarit que .custom : libellé tertiaire + contrôle de 32 px.
+   Il ne s'affiche qu'à partir de deux comptes (attribut hidden posé
+   par analytics.js). */
+.acct-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0;
+  color: var(--fg-3);
+  font-size: var(--text-mini);
+}
+.acct-pick[hidden] { display: none; }
+.acct-pick__label { white-space: nowrap; }
+
+/* --- Segmented : LE sélecteur de période, unique et global --- */
+.seg {
+  display: inline-flex;
+  padding: var(--sp-1);
+  background: var(--bg-2);
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-control);
 }
 
-.profile-bio {
-    font-size: 14px;
-    color: var(--ana-muted);
-    margin-bottom: 16px;
-    line-height: 1.5;
-    max-width: 600px;
+.seg__btn {
+  height: calc(var(--btn-h) - var(--sp-2));
+  min-width: 52px;
+  padding: 0 var(--sp-5);
+  border: var(--border-w) solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--text-small);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: background var(--t-quick) var(--ease), color var(--t-quick) var(--ease);
 }
 
-.profile-stats-row {
-    display: flex;
-    gap: 32px;
+@media (any-hover: hover) and (any-pointer: fine) {
+  .seg__btn:hover { color: var(--fg-1); }
 }
 
-.profile-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+/* État actif : aplat + teinte + graisse — trois signaux, pas la
+   seule couleur (G11). */
+.seg__btn[aria-pressed="true"] {
+  background: var(--bg-1);
+  border-color: var(--border-2);
+  color: var(--fg-1);
+  font-weight: var(--weight-semibold);
 }
 
-.profile-stat-value {
-    font-size: 20px;
-    font-weight: 700;
+/* --- Période personnalisée --- */
+.custom {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: var(--fg-3);
+  font-size: var(--text-mini);
 }
 
-.profile-stat-label {
-    font-size: 12px;
-    color: var(--ana-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+.custom__input {
+  width: 56px;
+  height: var(--btn-h);
+  padding: 0 var(--sp-4);
+  border: var(--border-w) solid var(--border-2);
+  border-radius: var(--radius-control);
+  background: var(--bg-inset);
+  color: var(--fg-1);
+  font: inherit;
+  font-size: var(--text-small);
 }
 
-/* ─── Header with period selector ─────────── */
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
+.custom__unit { color: var(--fg-3); }
+
+/* --- Boutons : 32px, 13/500, min-width 92. Le sélecteur couvre aussi
+       les <a>, qui servent de bouton quand l'action est une navigation. --- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--btn-h);
+  min-width: var(--btn-min-w);
+  padding: 0 var(--sp-5);
+  text-decoration: none;
+  white-space: nowrap;
+  border: var(--border-w) solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--accent-solid);
+  color: var(--fg-on-accent);
+  font-family: inherit;
+  font-size: var(--text-small);
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--t-quick) var(--ease);
+}
+@media (any-hover: hover) and (any-pointer: fine) {
+  .btn:hover { background: var(--accent-solid-hover); }
+}
+.btn:active { background: var(--accent-solid-active); }
+
+.btn--ghost {
+  background: var(--bg-1);
+  border-color: var(--border-2);
+  color: var(--fg-2);
+}
+@media (any-hover: hover) and (any-pointer: fine) {
+  .btn--ghost:hover { background: var(--bg-2); border-color: var(--border-3); color: var(--fg-1); }
+}
+.btn--ghost:active { background: var(--bg-3); }
+
+/* --- Ligne de période + règle de comparaison, écrite à l'écran --- */
+.period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-3) var(--sp-4);
+  margin-top: calc(var(--sp-6) * -1 + var(--sp-2));
+  font-size: var(--text-mini);
+  color: var(--fg-3);
+}
+.period__main { color: var(--fg-2); font-weight: var(--weight-medium); }
+.period__rule { color: var(--fg-3); }
+
+/* ============================================================
+   3. BANDEAU D'ÉTAT (A6) — bloc composé, jamais un toast
+   ============================================================ */
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-6);
+  background: var(--bg-1);
+  border: var(--border-w) solid var(--border-1);
+  border-left: var(--sp-2) solid var(--neutral);
+  border-radius: var(--radius-block);
 }
 
-.header h2 {
-    font-size: 20px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+.notice__dot {
+  width: var(--sp-4); height: var(--sp-4);
+  margin-top: var(--sp-2);
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--neutral);
 }
 
-.period-selector {
-    display: flex;
-    gap: 8px;
+.notice__body { flex: 1; min-width: 0; }
+
+.notice__title {
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  color: var(--fg-1);
 }
 
-.period-btn {
-    padding: 8px 16px;
-    background: var(--ana-surface);
-    border: 2px solid var(--ana-border);
-    border-radius: 8px;
-    color: var(--ana-muted);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
+.notice__text {
+  margin-top: var(--sp-2);
+  font-size: var(--text-mini);
+  color: var(--fg-2);
+  line-height: var(--lh-text);
 }
 
-.period-btn:hover {
-    border-color: #bbb;
-    color: var(--ana-text);
+.notice__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-shrink: 0;
 }
 
-.period-btn.active {
-    border-color: var(--ana-accent);
-    background: rgba(226, 27, 60, 0.06);
-    color: var(--ana-text);
+/* Sémantique : liseré + pastille + libellé de niveau dans le titre.
+   Jamais la couleur seule (G11). */
+.notice--danger  { border-left-color: var(--danger);  background: var(--danger-soft); }
+.notice--danger  .notice__dot { background: var(--danger); }
+.notice--warning { border-left-color: var(--warning); background: var(--warning-soft); }
+.notice--warning .notice__dot { background: var(--warning); }
+.notice--success { border-left-color: var(--success); }
+.notice--success .notice__dot { background: var(--success); }
+
+/* Échec d'une action : la cause s'écrit sous le bouton qui a échoué,
+   au même endroit que le geste, jamais dans un toast fugace (G24, G27).
+   « Échec — » porte l'information en toutes lettres : la couleur seule
+   ne dit rien en niveaux de gris (G11). */
+.act-error {
+  margin-top: var(--sp-4);
+  font-size: var(--text-mini);
+  line-height: var(--lh-text);
+  color: var(--danger);
+}
+.act-error::before { content: 'Échec — '; font-weight: var(--weight-semibold); }
+
+/* ============================================================
+   4. AGRÉGAT — 5 chiffres, avant tout graphe et tout tableau (A4)
+   ============================================================ */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--sp-4);
 }
 
-/* ─── Stats Cards ─────────────────────────── */
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 24px;
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-5) var(--sp-6);
+  background: var(--bg-1);
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-block);
 }
 
-.stat-card {
-    background: var(--ana-surface);
-    border-radius: 12px;
-    padding: 20px;
-    border: 1px solid var(--ana-border);
+.kpi__label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--text-mini);
+  font-weight: var(--weight-medium);
+  color: var(--fg-3);
+  white-space: nowrap;
 }
 
-.stat-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 12px;
+.kpi__value {
+  font-size: var(--title-1);
+  font-weight: var(--weight-bold);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-tight);
+  color: var(--fg-1);
+  text-align: left;
+  font-variant-numeric: var(--numeric);
+}
+.kpi__value[data-absent] { color: var(--fg-4); }
+
+.kpi__delta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-mini);
+  color: var(--fg-3);
+  min-height: var(--sp-6);
 }
 
-.stat-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
+/* Variation : flèche + signe + pourcentage. La flèche porte le sens,
+   la couleur ne fait que l'appuyer (G11). */
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;   /* « +10,6 % » ne se coupe jamais en deux lignes */
+}
+.delta--up   { color: var(--success); }
+.delta--down { color: var(--danger); }
+.delta--flat { color: var(--fg-3); }
+.delta__arrow { font-size: var(--text-micro); line-height: 1; }
+
+/* Comparaison invalide : un tiret neutre, JAMAIS un 0 % (A3, G29). */
+.delta--none { color: var(--fg-4); cursor: help; border-bottom: var(--border-w) dotted var(--border-3); }
+
+.info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon-sm); height: var(--icon-sm);
+  border-radius: var(--radius-pill);
+  background: var(--bg-3);
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+  cursor: help;
+  flex-shrink: 0;
 }
 
-.stat-icon.followers { background: rgba(226, 27, 60, 0.1); }
-.stat-icon.engagement { background: rgba(131, 58, 180, 0.1); }
-.stat-icon.likes { background: rgba(253, 29, 29, 0.1); }
-.stat-icon.posts { background: rgba(64, 93, 230, 0.1); }
+/* ============================================================
+   5. BLOCS — panneaux de graphe, heatmap, tableau
+   ============================================================ */
 
-.stat-value {
-    font-size: 32px;
-    font-weight: 700;
-    margin-bottom: 4px;
+.panels {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--sp-4);
 }
 
-.stat-label {
-    font-size: 13px;
-    color: var(--ana-muted);
+.panel {
+  background: var(--bg-1);
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-block);
+  min-width: 0;
+  /* Pas d'overflow:hidden ici — il rognerait le menu « Colonnes »,
+     qui est un popover absolu ancré dans l'en-tête du bloc. */
 }
 
-.stat-sub {
-    font-size: 12px;
-    color: var(--ana-muted);
-    margin-top: 4px;
+.panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: var(--border-w) solid var(--border-1);
+  min-height: var(--sp-9);
 }
 
-.stat-sub.positive {
-    color: var(--ana-green);
-    font-weight: 600;
+.panel__title {
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+  color: var(--fg-1);
 }
 
-.stat-sub.negative {
-    color: var(--ana-accent);
-    font-weight: 600;
+.panel__body { padding: var(--sp-6); }
+
+.panel__note {
+  padding: 0 var(--sp-6) var(--sp-5);
+  font-size: var(--text-mini);
+  color: var(--fg-3);
+  line-height: var(--lh-text);
+}
+.panel__note:empty { display: none; }
+
+/* --- Champs de sélection dans l'en-tête de bloc --- */
+.field { display: inline-flex; align-items: center; gap: var(--sp-3); }
+.field__label { font-size: var(--text-mini); color: var(--fg-3); white-space: nowrap; }
+
+.select {
+  height: var(--btn-h);
+  padding: 0 var(--sp-5);
+  border: var(--border-w) solid var(--border-2);
+  border-radius: var(--radius-control);
+  background: var(--bg-inset);
+  color: var(--fg-1);
+  font-family: inherit;
+  font-size: var(--text-small);
+  cursor: pointer;
+  max-width: 220px;
 }
 
-/* ─── Charts ──────────────────────────────── */
-.charts-grid {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 16px;
-    margin-bottom: 24px;
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--text-mini);
+  color: var(--fg-2);
+  cursor: pointer;
+  min-height: var(--menu-row-h);
+}
+.check input { accent-color: var(--accent-solid); width: var(--icon-sm); height: var(--icon-sm); margin: 0; }
+
+/* --- Zone de graphe : hauteur fixée AVANT le dessin --- */
+.chartbox { position: relative; height: 260px; }
+.chartbox[hidden] { display: none; }
+
+/* ============================================================
+   6. ÉTATS VIDES ET SQUELETTES
+   ============================================================ */
+
+.slot:empty { display: none; }
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  padding: var(--sp-7) var(--sp-6);
+}
+.panel .empty { padding: var(--sp-7) var(--sp-6) var(--sp-8); }
+
+.empty__title {
+  font-size: var(--title-3);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--ls-tight);
+  line-height: var(--lh-tight);
+  color: var(--fg-1);
 }
 
-.chart-card {
-    background: var(--ana-surface);
-    border-radius: 12px;
-    padding: 20px;
-    border: 1px solid var(--ana-border);
+.empty__text {
+  max-width: 360px;
+  font-size: var(--text-regular);
+  line-height: var(--lh-text);
+  color: var(--fg-3);
 }
 
-.chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
+.empty__actions { display: flex; gap: var(--sp-4); flex-wrap: wrap; }
+
+/* Squelette : dimensions exactes du contenu attendu, localisé.
+   Apparition immédiate, sans écran de chargement global (G21). */
+.sk {
+  display: inline-block;
+  border-radius: var(--radius-control);
+  background: linear-gradient(90deg,
+              var(--skeleton-base) 25%, var(--skeleton-sheen) 37%, var(--skeleton-base) 63%);
+  background-size: 400% 100%;
+  animation: sk-sheen 1.4s linear infinite;
+}
+.sk--val   { width: 92px;  height: var(--sp-8); }
+.sk--sub   { width: 68px;  height: var(--sp-5); }
+.sk--cell  { width: 44px;  height: var(--sp-5); }
+.sk--line  { width: 180px; height: var(--sp-5); vertical-align: middle; }
+.sk--chip  { width: 56px;  height: var(--chip-h); }
+.sk--thumb { width: var(--tap-min); height: var(--tap-min); margin-right: var(--sp-4); vertical-align: middle; }
+
+@keyframes sk-sheen { to { background-position: -400% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sk { animation: none; }
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
 
-.chart-title {
-    font-size: 16px;
-    font-weight: 600;
+/* ============================================================
+   7. HEATMAP — 7 colonnes × 24 lignes, dégradé MONOCHROME (A10)
+   ============================================================ */
+
+.heat-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 560px) minmax(0, 1fr);
+  gap: var(--sp-7);
+  align-items: start;
 }
 
-.chart-container {
-    height: 250px;
-    position: relative;
+.heat-wrap { overflow-x: auto; }
+
+.heat {
+  border-collapse: separate;
+  border-spacing: var(--sp-1);
+  width: 100%;
+  table-layout: fixed;
 }
 
-.charts-row2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 24px;
+.heat thead th {
+  padding-bottom: var(--sp-2);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  color: var(--fg-3);
 }
 
-/* ─── Table (Top Posts) ───────────────────── */
-.table-card {
-    background: var(--ana-surface);
-    border-radius: 12px;
-    border: 1px solid var(--ana-border);
-    overflow: hidden;
-    margin-bottom: 24px;
+.heat__hour {
+  width: var(--sp-8);
+  padding-right: var(--sp-3);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-normal);
+  font-variant-numeric: var(--numeric);
+  text-align: right;
+  /* --fg-4 est le niveau « placeholder / désactivé » : trop faible pour
+     une échelle qu'il faut lire (2,64:1 en clair). L'heure est une
+     information, elle prend le niveau tertiaire (5,46:1 / 5,98:1). */
+  color: var(--fg-3);
+  white-space: nowrap;
 }
 
-.table-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--ana-border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+.heat__cell { padding: 0; }
+
+.heat__link {
+  display: block;
+  height: var(--sp-6);
+  border-radius: var(--radius-control);
+  /* Rampe monochrome : du fond en creux vers l'aplat d'accent. */
+  background: color-mix(in oklab, var(--accent-solid) calc(var(--v, 0) * 100%), var(--bg-2));
+  text-decoration: none;
+  transition: outline-color var(--t-quick) var(--ease);
+  outline: var(--border-w) solid transparent;
 }
 
-.table-header h3 {
-    font-size: 16px;
-    font-weight: 600;
+@media (any-hover: hover) and (any-pointer: fine) {
+  .heat__link:hover { outline-color: var(--fg-1); }
 }
 
-table {
-    width: 100%;
-    border-collapse: collapse;
+/* Le liseré de survol ci-dessus (1 px transparent) est plus spécifique que
+   la règle de focus globale écrite en :where() : sans cette reprise, la
+   case de heatmap prenait le focus SANS anneau visible (G12). */
+.heat__link:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 
-th {
-    padding: 12px 16px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--ana-muted);
-    text-align: left;
-    border-bottom: 1px solid var(--ana-border);
+/* Toggle « afficher les valeurs » : pur CSS, aucune requête (G18). */
+.heat[data-values] .heat__link::after {
+  content: attr(data-n);
+  display: block;
+  text-align: center;
+  font-size: var(--text-micro);
+  font-variant-numeric: var(--numeric);
+  line-height: var(--sp-6);
+  color: var(--fg-2);
+}
+.heat[data-values] .heat__link[data-strong]::after { color: var(--fg-on-accent); }
+/* Un vrai zéro reste écrit — c'est une mesure, pas une absence — mais
+   il recule d'un niveau de texte pour ne pas noyer la grille. */
+.heat[data-values] .heat__link[data-n="0"]::after { color: var(--fg-4); }
+
+/* Données insuffisantes : la grille est explicitement neutralisée,
+   jamais affichée silencieusement fausse (A12). */
+.heat[data-insufficient] .heat__link { background: var(--bg-2); pointer-events: none; }
+
+.heat-side { display: flex; flex-direction: column; gap: var(--sp-5); }
+
+.legend { display: flex; align-items: center; gap: var(--sp-3); }
+.legend__label { font-size: var(--text-micro); color: var(--fg-3); font-variant-numeric: var(--numeric); }
+.legend__ramp {
+  flex: 1;
+  height: var(--sp-3);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--bg-2), var(--accent-solid));
+  border: var(--border-w) solid var(--border-1);
+}
+.heat-side .panel__note { padding: 0; }
+
+/* ============================================================
+   8. TABLEAU — miniatures, tri, colonnes masquables (A7, A8, A13)
+   ============================================================ */
+
+.cols { position: relative; }
+
+.cols__summary {
+  display: inline-flex;
+  align-items: center;
+  height: var(--btn-h);
+  padding: 0 var(--sp-5);
+  border: var(--border-w) solid var(--border-2);
+  border-radius: var(--radius-control);
+  background: var(--bg-1);
+  color: var(--fg-2);
+  font-size: var(--text-small);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.cols__summary::-webkit-details-marker { display: none; }
+
+/* Dropdown : la SEULE ombre de l'écran, et c'est un élément flottant. */
+.cols__menu {
+  position: absolute;
+  top: calc(100% + var(--sp-2));
+  right: 0;
+  z-index: var(--z-popover);
+  min-width: 176px;
+  padding: var(--sp-2);
+  background: var(--bg-1);
+  border: var(--border-w) solid var(--border-2);
+  border-radius: var(--radius-block);
+  box-shadow: var(--shadow-medium);
 }
 
-td {
-    padding: 12px 16px;
-    font-size: 13px;
-    border-bottom: 1px solid #f0f0f0;
+.cols__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  height: var(--menu-row-h);
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-control);
+  font-size: var(--text-small);
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.cols__row input { accent-color: var(--accent-solid); width: var(--icon-sm); height: var(--icon-sm); margin: 0; }
+@media (any-hover: hover) and (any-pointer: fine) {
+  .cols__row:hover { background: var(--bg-2); }
 }
 
-tr:hover td {
-    background: #fafafa;
+/* Le tableau défile dans SON conteneur, la page ne déborde jamais (G32). */
+.tbl-wrap { overflow-x: auto; }
+
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 880px;
 }
 
-.rank-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    font-size: 13px;
-    font-weight: 700;
-    background: #e0e0e0;
+.tbl th {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-content);
+  height: var(--row-h);
+  padding: 0 var(--sp-5);
+  background: var(--bg-2);
+  border-bottom: var(--border-w) solid var(--border-1);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  color: var(--fg-3);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.tbl th.num { text-align: right; }
+.tbl th[data-sort]::after {
+  content: "";
+  display: inline-block;
+  width: var(--sp-5);
+  color: var(--fg-4);
+}
+.tbl th[aria-sort="ascending"]::after  { content: " \25B2"; color: var(--accent); }
+.tbl th[aria-sort="descending"]::after { content: " \25BC"; color: var(--accent); }
+.tbl th[aria-sort] { color: var(--fg-1); }
+
+@media (any-hover: hover) and (any-pointer: fine) {
+  .tbl th[data-sort]:hover { color: var(--fg-1); background: var(--bg-3); }
 }
 
-.rank-badge.rank-gold { background: #f59e0b; color: #000; }
-.rank-badge.rank-silver { background: #9ca3af; color: #000; }
-.rank-badge.rank-bronze { background: #b45309; color: #fff; }
+.tbl td {
+  height: var(--tap-min);
+  padding: var(--sp-2) var(--sp-5);
+  border-bottom: var(--border-w) solid var(--border-1);
+  font-size: var(--text-small);
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.tbl td.num { font-variant-numeric: var(--numeric); text-align: right; color: var(--fg-1); }
+.tbl tbody tr:last-child td { border-bottom: 0; }
 
-.caption-cell {
-    max-width: 300px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+@media (any-hover: hover) and (any-pointer: fine) {
+  .tbl tbody tr:hover td { background: var(--bg-2); }
 }
 
-.caption-cell a {
-    color: var(--ana-text);
-    text-decoration: none;
+/* Première colonne collée : l'identité du post reste lisible pendant
+   le défilement horizontal (A13). */
+.tbl__id {
+  position: sticky;
+  left: 0;
+  z-index: calc(var(--z-content) + 1);
+  background: var(--bg-1);
+  border-right: var(--border-w) solid var(--border-1);
+  min-width: 320px;
+  white-space: normal;
+}
+.tbl th.tbl__id { z-index: calc(var(--z-sticky) + 1); background: var(--bg-2); }
+@media (any-hover: hover) and (any-pointer: fine) {
+  .tbl tbody tr:hover .tbl__id { background: var(--bg-2); }
 }
 
-.caption-cell a:hover {
-    color: var(--ana-accent);
-    text-decoration: underline;
+.post { display: flex; align-items: center; gap: var(--sp-4); }
+
+.post__rank {
+  flex-shrink: 0;
+  width: var(--sp-6);
+  font-size: var(--text-micro);
+  font-variant-numeric: var(--numeric);
+  text-align: right;
+  color: var(--fg-4);
 }
 
-.num-cell {
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-    font-weight: 500;
+/* Miniature : width/height fixés dans le HTML ET en CSS.
+   Aucun saut de mise en page au chargement (A7). */
+.post__thumb {
+  flex-shrink: 0;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border-radius: var(--radius-control);
+  object-fit: cover;
+  background: var(--bg-2);
+  border: var(--border-w) solid var(--border-1);
 }
 
-/* ─── Loading / Empty state ───────────────── */
-.loading-state, .empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--ana-muted);
+/* Média indisponible : un placeholder aux MÊMES dimensions (G28). */
+.post__thumb--void {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-micro);
+  color: var(--fg-4);
 }
 
-.loading-state .spinner {
-    width: 40px;
-    height: 40px;
-    border: 3px solid var(--ana-border);
-    border-top: 3px solid var(--ana-accent);
-    border-radius: 50%;
-    margin: 0 auto 16px;
-    animation: spin 1s linear infinite;
+.post__cap {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-1);
+  text-decoration: none;
+}
+.post__cap:hover { text-decoration: underline; }
+.post__cap--void { color: var(--fg-4); font-style: italic; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: var(--chip-h);
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-pill);
+  background: var(--bg-2);
+  border: var(--border-w) solid var(--border-1);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
+  color: var(--fg-2);
+  white-space: nowrap;
 }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
+/* ------------------------------------------------------------
+   LOT B — la performance réelle, et la frontière du mesurable.
+
+   Tout ce bloc sert UN principe : une valeur absente ne doit pas
+   ressembler à une valeur basse. Elle a sa propre couleur (--fg-4,
+   la plus effacée), sa propre ligne de séparation, et son propre
+   rang « — ». Le lecteur ne peut pas confondre « zéro like » avec
+   « like jamais relevé », même en diagonale.
+   ------------------------------------------------------------ */
+
+/* La ligne entière ouvre le média dans le viewer. */
+.tbl__row[data-href] { cursor: pointer; }
+
+/* Sous la frontière : les non mesurés. Même hauteur, même grille,
+   mais l'œil sait tout de suite qu'il a changé de population. */
+.tbl__row--void td { color: var(--fg-3); }
+.tbl__row--void .post__cap { color: var(--fg-3); }
+
+.post__rank--void { color: var(--fg-4); }
+
+/* La frontière elle-même, écrite en toutes lettres : elle occupe une
+   ligne du tableau plutôt qu'une note de bas de page qu'on ne lit pas. */
+.tbl__cut td {
+  height: auto;
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--bg-2);
+  border-top: var(--border-w) solid var(--border-2);
+  border-bottom: var(--border-w) solid var(--border-2);
+  font-size: var(--text-micro);
+  color: var(--fg-3);
+  white-space: normal;
+  text-align: left;
 }
 
-/* ─── Responsive ──────────────────────────── */
-@media (max-width: 1024px) {
-    .stats-grid { grid-template-columns: repeat(2, 1fr); }
-    .charts-grid { grid-template-columns: 1fr; }
-    .charts-row2 { grid-template-columns: 1fr; }
-    .profile-header { flex-direction: column; text-align: center; }
-    .profile-stats-row { justify-content: center; }
-    .profile-name-row { justify-content: center; }
-    .profile-bio { margin-left: auto; margin-right: auto; }
+/* Une mesure absente. Jamais un 0, jamais un tiret gras. */
+.void { color: var(--fg-4); }
+
+/* Le marqueur d'une valeur exacte MAIS incomplète ou approchée :
+   somme partielle (*), taux sur abonnés du jour (~), groupe trop
+   maigre (!). Discret, mais présent et survolable. */
+.partiel {
+  margin-left: var(--sp-2);
+  font-size: var(--text-micro);
+  color: var(--fg-4);
+  cursor: help;
 }
 
-@media (max-width: 600px) {
-    .stats-grid { grid-template-columns: 1fr; }
-    .header { flex-direction: column; gap: 12px; align-items: flex-start; }
-    .profile-avatar { width: 64px; height: 64px; }
-    .profile-stats-row { gap: 20px; }
+.post__txt {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.post__sub {
+  font-size: var(--text-micro);
+  color: var(--fg-4);
+}
+.post__ext {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0 var(--sp-3);
+  font-size: var(--text-small);
+  color: var(--fg-4);
+  text-decoration: none;
+}
+.post__ext:hover { color: var(--fg-1); }
+
+.chip--plat { font-variant-numeric: normal; }
+.chip--best {
+  margin-left: var(--sp-4);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Tableau d'agrégats : pas de rang, pas de miniature, colonnes plus
+   étroites que le classement. */
+.tbl--agg { min-width: 640px; }
+.tbl--agg .tbl__id { min-width: 200px; }
+.tbl--agg th { cursor: default; }
+.tbl__row--thin td { color: var(--fg-3); }
+
+/* La phrase de lecture, au-dessus du tableau : c'est elle que le
+   propriétaire lit en premier, pas la grille. */
+.verdict {
+  margin: 0 0 var(--sp-5);
+  font-size: var(--text-regular);
+  line-height: var(--lh-text);
+  color: var(--fg-1);
+  text-wrap: pretty;
+}
+.verdict:empty { display: none; }
+
+/* Colonnes masquées : bascule d'une classe, zéro requête (A13, G18). */
+.tbl[data-hide~="account"]  :is(th, td).col-account,
+.tbl[data-hide~="type"]     :is(th, td).col-type,
+.tbl[data-hide~="likes"]    :is(th, td).col-likes,
+.tbl[data-hide~="comments"] :is(th, td).col-comments,
+.tbl[data-hide~="views"]    :is(th, td).col-views,
+.tbl[data-hide~="eng"]      :is(th, td).col-eng,
+.tbl[data-hide~="rate"]     :is(th, td).col-rate,
+.tbl[data-hide~="date"]     :is(th, td).col-date,
+.tbl[data-hide~="hour"]     :is(th, td).col-hour,
+.tbl[data-hide~="day"]      :is(th, td).col-day { display: none; }
+
+/* ============================================================
+   9. DENSITÉ RÉDUITE ET MOBILE
+   ============================================================ */
+
+@media (max-width: 1100px) {
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .panels { grid-template-columns: minmax(0, 1fr); }
+  .heat-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 720px) {
+  .ana { padding: var(--sp-6) var(--sp-5) var(--sp-8); gap: var(--sp-5); }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .top { flex-direction: column; align-items: stretch; }
+  .top__controls { justify-content: space-between; }
+  .period { margin-top: calc(var(--sp-5) * -1 + var(--sp-2)); }
+  .panel__head { flex-wrap: wrap; }
+  .tbl__id { min-width: 200px; }
+  /* Le bandeau d'état passe ses actions à la ligne : sur 375 px, la
+     colonne de texte ne doit pas être écrasée par celle des boutons. */
+  .notice { flex-wrap: wrap; }
+  .notice__actions { flex-basis: 100%; }
+  .notice__actions .btn { flex: 1; }
+  .kpi__delta { flex-wrap: wrap; }
+}
+
+/* Au doigt : les cibles montent à 44px et rien n'est révélé au survol. */
+@media (pointer: coarse) {
+  .seg__btn, .btn, .select, .cols__summary, .custom__input { height: var(--tap-min); }
+  /* La case fait 44 px de haut mais 38 px de large sur 375 px : 7 colonnes
+     à 44 px forceraient un défilement horizontal de la grille elle-même,
+     ce qui coûte plus que les 6 px manquants. Compromis assumé. */
+  .heat__link { height: var(--tap-min); }
+  .heat[data-values] .heat__link::after { line-height: var(--tap-min); }
+  .cols__row { height: var(--tap-min); }
+  .check { min-height: var(--tap-min); }
+  /* Un en-tête triable est une cible tactile comme une autre : il restait
+     à 32 px de haut au doigt (G30). */
+  .tbl th[data-sort] { height: var(--tap-min); }
 }

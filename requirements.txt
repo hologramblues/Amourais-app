@@ -2,6 +2,14 @@
 flask==3.1.*
 jinja2>=3.1
 
+# Serveur WSGI de production (lot 4.2 d'AUDIT.md §9 / volet WSGI du test T15).
+# L'application tournait jusqu'ici sur le serveur de developpement Werkzeug.
+# Version EPINGLEE sur la serie reellement testee en local : la configuration
+# de demarrage du Dockerfile (--workers 1 --threads N, worker gthread) est
+# validee contre celle-ci et contre aucune autre.
+# CONTRAINTE : toujours --workers 1 (cf. l'en-tete de run.py).
+gunicorn==26.0.*
+
 # Database
 sqlalchemy==2.0.*
 

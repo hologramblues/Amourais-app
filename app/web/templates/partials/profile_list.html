@@ -3,12 +3,12 @@
   <thead>
     <tr>
       <th>Plateforme</th>
-      <th>Username</th>
+      <th>Nom d'utilisateur</th>
       <th>Mode</th>
       <th>Intervalle</th>
-      <th>Dernier scrape</th>
-      <th>Media</th>
-      <th>Status</th>
+      <th>Dernière collecte</th>
+      <th class="num">Médias</th>
+      <th>État</th>
       <th>Actions</th>
     </tr>
   </thead>
@@ -30,9 +30,9 @@
           <option value="daily" {{ 'selected' if p.scrape_mode == 'daily' }}>Quotidien</option>
         </select>
       </td>
-      <td class="font-mono" style="font-size:0.8rem">{{ p.scrape_interval_minutes }}m</td>
+      <td class="font-mono" style="font-size: var(--text-mini)">{{ p.scrape_interval_minutes }}m</td>
       <td>{{ p.last_scraped_at|formatdate }}</td>
-      <td class="font-mono">{{ item.media_count }}</td>
+      <td class="font-mono num">{{ item.media_count }}</td>
       <td>
         {% if p.is_active %}
           <span class="s-badge s-badge-green"><span class="s-dot s-dot-green"></span>Actif</span>
@@ -43,7 +43,7 @@
       <td>
         <button class="s-btn-sm"
           hx-post="/api/profiles/{{ p.id }}/scrape"
-          hx-swap="none">Scrape</button>
+          hx-swap="none">Collecter</button>
         {% if p.is_active %}
         <button class="s-btn-sm s-btn-ghost"
           hx-patch="/api/profiles/{{ p.id }}"
@@ -55,13 +55,20 @@
           hx-patch="/api/profiles/{{ p.id }}"
           hx-vals='{"isActive": true}'
           hx-target="#profile-list"
-          hx-swap="innerHTML">Resume</button>
+          hx-swap="innerHTML">Reprendre</button>
         {% endif %}
+        {#- La confirmation NOMME le profil et annonce ce qui est
+            perdu (critère G16). Le dialogue est celui de
+            samourais-app.js, pas la boîte système du navigateur :
+            c'était le dernier window.confirm de l'application. -#}
         <button class="s-btn-sm s-btn-danger"
           hx-delete="/api/profiles/{{ p.id }}"
-          hx-confirm="Supprimer ce profil ?"
+          hx-confirm="Le profil @{{ p.username }} ({{ p.platform }}) et le suivi de ses {{ item.media_count }} média(s) seront retirés. Les fichiers déjà téléchargés sont conservés."
+          data-confirm-title="Supprimer @{{ p.username }} ?"
+          data-confirm-label="Supprimer le profil"
+          data-confirm-danger
           hx-target="#profile-list"
-          hx-swap="innerHTML">Suppr</button>
+          hx-swap="innerHTML">Supprimer</button>
 
         <details class="s-backfill-details">
           <summary>Dates backfill</summary>

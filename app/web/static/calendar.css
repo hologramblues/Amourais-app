@@ -1,612 +1,1450 @@
-/* ============================================
-   SAMOURAIS Calendar — Light theme for FullCalendar v6
-   ============================================ */
+/* ============================================================
+   SAMOURAIS SCRAPPER — ÉCRAN CALENDRIER
+   ------------------------------------------------------------
+   Références : Buffer (file, états, échecs) + Later (grille).
+   Barème : REFERENCES.md §4.2.
 
-:root {
-    --cal-bg: #ffffff;
-    --cal-surface: #ffffff;
-    --cal-surface2: #f7f7f7;
-    --cal-border: #e0e0e0;
-    --cal-text: #222222;
-    --cal-text-muted: #717171;
-    --cal-accent: #E21B3C;
-    --cal-accent-hover: #c4162f;
-    --cal-blue: #1a73e8;
-    --cal-green: #008a05;
-    --cal-gray: #717171;
-    --cal-yellow: #f59e0b;
-}
+   RÈGLE DURE DE CE FICHIER : aucune couleur brute. Pas un seul
+   #hex, pas un seul rgb()/rgba(), pas un `white`. Tout passe par
+   les jetons de tokens.css, éventuellement mélangés par
+   color-mix() — qui prend des jetons en entrée, donc reste dans
+   la source unique de vérité. Les deux thèmes en découlent sans
+   une seule règle dupliquée.
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+   FullCalendar v6 s'accorde par SES propres custom properties
+   (--fc-*). On les MAPPE sur nos jetons (bloc §9) au lieu de le
+   surcharger en dur : c'est ce qui fait suivre le thème sombre
+   jusque dans son shadow-free DOM.
+   ============================================================ */
+
+/* ============================================================
+   1. SOCLE
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
-    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: var(--cal-bg);
-    color: var(--cal-text);
-    overflow-x: hidden;
+  margin: 0;
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+  font: var(--weight-normal) var(--text-small) / var(--lh-ui) var(--font-ui);
+  letter-spacing: var(--ls-normal);
+  overflow-x: hidden;
 }
 
-/* Navigation — handled by shared nav partial */
+/* Normalisation des contrôles natifs.
+   Cet écran ne charge pas samourais.css : sans cette règle, tout
+   <button>, <input> ou <select> non stylé explicitement retombe sur
+   la police de l'agent utilisateur (Arial 13,333 px), au milieu d'un
+   écran en Inter 13 px. `font: inherit` est ce que fait samourais.css
+   pour les 4 autres écrans. */
+:where(button, input, select, textarea) { font: inherit; letter-spacing: inherit; }
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-fg);
+}
+
+.u-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.num {
+  font-variant-numeric: var(--numeric);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* La nav historique masquait ses onglets par cette classe. */
 .nav-tabs { display: none; }
 
-/* Layout */
-.calendar-app {
-    display: flex;
-    height: calc(100vh - 64px);
-    overflow: hidden;
-}
-
-.calendar-main {
-    flex: 1;
-    padding: 24px;
-    overflow-y: auto;
-}
-
-/* Header */
-.calendar-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-}
-
-.calendar-header h1 {
-    font-size: 24px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.header-actions {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-}
-
-.view-toggle {
-    display: flex;
-    gap: 2px;
-    background: var(--cal-surface2);
-    border-radius: 8px;
-    padding: 3px;
-    border: 1px solid var(--cal-border);
-}
-
-.view-toggle button {
-    padding: 8px 16px;
-    border: none;
-    background: none;
-    color: var(--cal-text-muted);
-    font-size: 13px;
-    font-weight: 500;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.view-toggle button.active {
-    background: var(--cal-accent);
-    color: white;
-}
-
-.view-toggle button:hover:not(.active) {
-    color: var(--cal-text);
-    background: rgba(0, 0, 0, 0.04);
-}
+/* ============================================================
+   2. CONTRÔLES COMMUNS — un seul bouton pour tout l'écran
+   ============================================================ */
 
 .btn {
-    padding: 10px 18px;
-    border: none;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  height: var(--btn-h);
+  min-width: var(--btn-min-w);
+  padding: 0 var(--sp-5);
+  border: var(--border-w) solid var(--border-2);
+  border-radius: var(--radius-control);
+  background: var(--bg-1);
+  color: var(--fg-1);
+  font: var(--weight-medium) var(--text-small) / var(--lh-ui) var(--font-ui);
+  letter-spacing: var(--ls-normal);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-quick) var(--ease),
+              border-color var(--t-quick) var(--ease),
+              color var(--t-quick) var(--ease);
 }
 
-.btn-primary {
-    background: var(--cal-accent);
-    color: white;
+.btn:hover { background: var(--bg-2); border-color: var(--border-3); }
+.btn:active { background: var(--bg-3); }
+.btn[disabled] { color: var(--fg-4); cursor: not-allowed; }
+
+.btn--primary {
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+  color: var(--fg-on-accent);
+}
+.btn--primary:hover { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
+.btn--primary:active { background: var(--accent-solid-active); border-color: var(--accent-solid-active); }
+
+.btn--danger { color: var(--danger); border-color: var(--border-2); }
+.btn--danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+
+/* Bouton compact : navigation de période, croix, actions de carte. */
+.btn--icon {
+  min-width: var(--btn-h);
+  width: var(--btn-h);
+  padding: 0;
+  color: var(--fg-2);
+  font-size: var(--text-regular);
 }
 
-.btn-primary:hover {
-    background: var(--cal-accent-hover);
-    transform: translateY(-1px);
+.btn--mini {
+  height: var(--menu-row-h);
+  min-width: 0;
+  padding: 0 var(--sp-4);
+  font-size: var(--text-micro);
 }
 
-.btn-secondary {
-    background: var(--cal-surface2);
-    color: var(--cal-text);
-    border: 1px solid var(--cal-border);
+/* Sous le doigt, tout contrôle atteint la cible minimale. */
+@media (pointer: coarse) {
+  .btn { min-height: var(--tap-min); }
+  .btn--icon { width: var(--tap-min); height: var(--tap-min); }
+  .btn--mini { height: var(--tap-min); }
 }
 
-.btn-secondary:hover {
-    background: #eee;
+/* Champs */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
 }
 
-/* FullCalendar Light Theme Overrides */
+.field__label {
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+}
+
+.input {
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--border-w) solid var(--border-2);
+  border-radius: var(--radius-control);
+  background: var(--bg-inset);
+  color: var(--fg-1);
+  font: var(--weight-normal) var(--text-small) / var(--lh-ui) var(--font-ui);
+  font-family: var(--font-ui);
+}
+
+.input:hover { border-color: var(--border-3); }
+.input::placeholder { color: var(--fg-4); }
+textarea.input { min-height: calc(var(--sp-9) + var(--sp-8)); resize: vertical; }
+
+/* ============================================================
+   3. GABARIT DE L'ÉCRAN
+   ============================================================ */
+
+.cal {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--header-h));
+  overflow: hidden;
+}
+
+/* ---- Barre d'outils, collée en haut : C9 + C12 y vivent ---- */
+.cal-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: var(--border-w) solid var(--border-1);
+  background: var(--bg-1);
+}
+
+.cal-bar__title {
+  margin: 0;
+  font-size: var(--title-2);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--ls-tight);
+  line-height: var(--lh-tight);
+}
+
+.cal-bar__period {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.cal-bar__month {
+  min-width: calc(var(--thumb-sm) + var(--sp-6));
+  padding: 0 var(--sp-3);
+  color: var(--fg-1);
+  font-size: var(--text-regular);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: var(--numeric);
+  text-align: center;
+}
+
+.cal-bar__spacer { flex: 1 1 auto; }
+
+/* Fuseau horaire écrit en clair — C12. */
+.cal-tz {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: var(--chip-h);
+  padding: 0 var(--sp-4);
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-pill);
+  background: var(--bg-2);
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  font-variant-numeric: var(--numeric);
+  white-space: nowrap;
+}
+
+.cal-tz__glyph { color: var(--fg-4); }
+
+/* ---- Bascule Mois / Semaine / Liste — C9 ---- */
+.seg {
+  display: inline-flex;
+  gap: var(--sp-1);
+  padding: var(--sp-1);
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-2);
+}
+
+.seg__btn {
+  height: var(--menu-row-h);
+  min-width: 0;
+  padding: 0 var(--sp-5);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--fg-3);
+  font: var(--weight-medium) var(--text-small) / var(--lh-ui) var(--font-ui);
+  cursor: pointer;
+  transition: background var(--t-quick) var(--ease), color var(--t-quick) var(--ease);
+}
+
+.seg__btn:hover { color: var(--fg-1); }
+
+.seg__btn[aria-pressed="true"] {
+  background: var(--bg-1);
+  border: var(--border-w) solid var(--border-2);
+  color: var(--fg-1);
+}
+
+@media (pointer: coarse) {
+  .seg__btn { height: var(--tap-min); }
+}
+
+/* ---- Filtres persistants — C13 ---- */
+.cal-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-6);
+  border-bottom: var(--border-w) solid var(--border-1);
+  background: var(--bg-canvas);
+}
+
+.cal-filters__group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: var(--chip-h);
+  padding: 0 var(--sp-4);
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-pill);
+  background: var(--bg-1);
+  color: var(--fg-2);
+  font: var(--weight-medium) var(--text-micro) / var(--lh-ui) var(--font-ui);
+  cursor: pointer;
+  transition: background var(--t-quick) var(--ease), border-color var(--t-quick) var(--ease);
+}
+
+.chip:hover { border-color: var(--border-3); }
+
+.chip[aria-pressed="true"] {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.chip__n {
+  color: var(--fg-3);
+  font-variant-numeric: var(--numeric);
+}
+
+.chip[aria-pressed="true"] .chip__n { color: var(--accent); }
+
+/* Le compte de chaque état porte sa couleur, doublée du libellé. */
+.chip--failed .chip__n { color: var(--danger); }
+.chip--draft  .chip__n { color: var(--fg-3); }
+
+.cal-filters__search {
+  /* width:auto est indispensable : le width:100% de .input ferait
+     de ce champ une ligne entière dans un conteneur en flex-wrap. */
+  width: auto;
+  height: var(--chip-h);
+  min-width: calc(var(--thumb-sm) + var(--sp-7));
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-micro);
+}
+
+.cal-filters select.input {
+  height: var(--chip-h);
+  width: auto;
+  padding: 0 var(--sp-4);
+  border-radius: var(--radius-pill);
+  background: var(--bg-1);
+  font-size: var(--text-micro);
+}
+
+.cal-filters__reset {
+  padding: 0;              /* le UA pose 1px 6px sur un <button> */
+  border: 0;
+  background: none;
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.cal-filters__reset:hover { color: var(--fg-1); }
+
+@media (pointer: coarse) {
+  .chip, .cal-filters__search, .cal-filters select.input { height: var(--tap-min); }
+}
+
+/* ============================================================
+   4. BANDEAU D'ERREUR — bloc composé, jamais un toast (G27)
+   ============================================================ */
+
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-5);
+  margin: var(--sp-5) var(--sp-6) 0;
+  padding: var(--sp-5);
+  border: var(--border-w) solid var(--danger);
+  border-left-width: var(--sp-3);
+  border-radius: var(--radius-block);
+  background: var(--danger-soft);
+}
+
+.alert[hidden] { display: none; }
+
+.alert__glyph {
+  flex: none;
+  width: var(--icon-md);
+  color: var(--danger);
+  font-weight: var(--weight-bold);
+  text-align: center;
+}
+
+.alert__body { flex: 1 1 auto; }
+
+.alert .btn { flex: none; white-space: nowrap; }
+
+.alert__title {
+  margin: 0;
+  color: var(--fg-1);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+}
+
+.alert__text {
+  margin: var(--sp-2) 0 0;
+  max-width: 60ch;
+  color: var(--fg-2);
+  font-size: var(--text-mini);
+  line-height: var(--lh-text);
+}
+
+/* ============================================================
+   5. TIROIR DES POSTS SANS DATE
+   Les brouillons non datés n'apparaissent dans aucune case de
+   grille : sans ce tiroir ils sont littéralement invisibles.
+   ============================================================ */
+
+.tray {
+  border-bottom: var(--border-w) solid var(--border-1);
+  background: var(--bg-2);
+}
+
+.tray[hidden] { display: none; }
+
+.tray__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-6);
+  border: 0;
+  background: none;
+  color: var(--fg-2);
+  font: var(--weight-medium) var(--text-mini) / var(--lh-ui) var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tray__caret {
+  color: var(--fg-4);
+  transition: transform var(--t-quick) var(--ease);
+}
+
+.tray[data-open="false"] .tray__caret { transform: rotate(-90deg); }
+.tray[data-open="false"] .tray__list { display: none; }
+
+.tray__count {
+  color: var(--fg-3);
+  font-variant-numeric: var(--numeric);
+}
+
+.tray__hint {
+  color: var(--fg-4);
+  font-weight: var(--weight-normal);
+}
+
+.tray__list {
+  display: flex;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-6) var(--sp-4);
+  overflow-x: auto;
+}
+
+.tray__list > .pcard { flex: 0 0 auto; width: calc(var(--thumb-lg) + var(--sp-9)); }
+
+/* ============================================================
+   6. LA CARTE DE POST — composant unique
+   Utilisée dans la grille, la file, le tiroir et l'inspecteur :
+   la signalétique d'état est donc garantie identique partout.
+   C4 (miniature + heure + plateforme) et C5 (liseré + pastille
+   + libellé) sont portés ici, une seule fois.
+   ============================================================ */
+
+.pcard {
+  /* La carte fixe SA police, sans dépendre du contexte.
+     Deux fuites sinon, mesurées à l'écran :
+       — dans .fc-event, FullCalendar impose font-size: .85em, ce qui
+         donnait 11,05 px (hors échelle) à tout le contenu de la carte ;
+       — dans le tiroir et la file, la carte est un <button>, et comme
+         cet écran ne charge pas samourais.css, le bouton retombait sur
+         la police de l'agent utilisateur : Arial 13,333 px.
+     Les deux cas rendaient la MÊME carte dans deux polices. */
+  font-family: var(--font-ui);
+  font-size: var(--text-small);
+
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-4);
+  padding: var(--sp-3);
+  padding-left: var(--sp-5);
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-1);
+  color: var(--fg-1);
+  text-align: left;
+  overflow: hidden;
+  transition: border-color var(--t-quick) var(--ease), background var(--t-quick) var(--ease);
+}
+
+/* Liseré d'état : le signal non textuel, à gauche, sur 3 px. */
+.pcard::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--sp-3);
+  background: var(--pcard-tone, var(--neutral));
+}
+
+.pcard:hover { border-color: var(--border-3); background: var(--bg-2); }
+
+.pcard--draft     { --pcard-tone: var(--fg-4); }
+.pcard--scheduled { --pcard-tone: var(--accent); }
+.pcard--ready     { --pcard-tone: var(--warning); }
+.pcard--published { --pcard-tone: var(--success); }
+.pcard--failed    { --pcard-tone: var(--danger); }
+
+/* L'échec ne déménage pas et ne se fond pas dans la file. */
+.pcard--failed {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+.pcard--failed:hover { background: var(--danger-soft); border-color: var(--danger); }
+
+.pcard__thumb {
+  position: relative;
+  display: block;
+  width: var(--sp-8);
+  height: var(--sp-8);
+  flex: none;
+  border-radius: var(--radius-control);
+  background: var(--bg-3);
+  overflow: hidden;
+}
+
+.pcard__thumb img,
+.pcard__thumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Média absent : un emplacement AUX MÊMES DIMENSIONS (G28). */
+.pcard__thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-4);
+  font-size: var(--text-mini);
+}
+
+.pcard__thumb--video::after {
+  content: "\25B6";
+  position: absolute;
+  right: var(--sp-1);
+  bottom: 0;
+  color: var(--fg-on-solid);
+  font-size: var(--text-micro);
+  text-shadow: 0 0 var(--sp-2) var(--fg-1);
+}
+
+.pcard__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.pcard__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.pcard__time {
+  color: var(--fg-2);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: var(--numeric);
+  white-space: nowrap;
+}
+
+.pcard__lock { color: var(--fg-4); font-size: var(--text-micro); }
+
+/* Plateformes : monogramme, jamais un aplat de marque (G8). */
+.pcard__plats {
+  display: flex;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.plat {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--icon-md);
+  height: var(--icon-md);
+  padding: 0 var(--sp-1);
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-2);
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--ls-wide);
+}
+
+.plat--none {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.pcard__title {
+  color: var(--fg-1);
+  font-size: var(--text-mini);
+  font-weight: var(--weight-medium);
+  line-height: var(--lh-ui);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* État : pastille + libellé, toujours les deux (G11). */
+.pcard__state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
+}
+
+.dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sp-5);
+  height: var(--sp-5);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--pcard-tone, var(--neutral)) 18%, transparent);
+  color: var(--pcard-tone, var(--neutral));
+  font-size: var(--text-micro);
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+
+.pcard--failed .pcard__state { color: var(--danger); }
+.pcard--published .pcard__state { color: var(--success); }
+
+/* ---- Bloc de reprise, DANS la carte — C7 + C8 ---- */
+.pfix {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: var(--border-w) solid color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.pfix__cause {
+  margin: 0;
+  color: var(--fg-1);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
+  line-height: var(--lh-text);
+  white-space: normal;
+}
+
+.pfix__do {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: var(--text-micro);
+  line-height: var(--lh-text);
+  white-space: normal;
+}
+
+.pfix__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.pfix__actions .btn { background: var(--bg-1); }
+
+/* Densité de la carte selon l'endroit où elle vit. */
+.pcard--row { padding: var(--sp-4); padding-left: var(--sp-5); }
+.pcard--row .pcard__thumb { width: var(--sp-9); height: var(--sp-9); }
+.pcard--row .pcard__title { font-size: var(--text-small); }
+
+/* La tuile du tiroir tient sa largeur de .tray__list, jamais d'ici :
+   une largeur posée sur le modificateur écraserait celle du parent. */
+.pcard--tile { min-width: 0; }
+
+/* ============================================================
+   7. FILE (vue Liste) — problèmes d'abord, C14
+   ============================================================ */
+
+.queue {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--sp-6);
+  overflow-y: auto;
+}
+
+.queue[hidden] { display: none; }
+
+.queue__section + .queue__section { margin-top: var(--sp-7); }
+
+.queue__head {
+  position: sticky;
+  top: calc(var(--sp-6) * -1);
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-4) 0;
+  background: var(--bg-canvas);
+  color: var(--fg-2);
+  font-size: var(--text-mini);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+}
+
+.queue__head--danger { color: var(--danger); }
+
+.queue__n {
+  color: var(--fg-3);
+  font-weight: var(--weight-normal);
+  font-variant-numeric: var(--numeric);
+  letter-spacing: var(--ls-normal);
+  text-transform: none;
+}
+
+.queue__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* La carte de la file est un <button> : sans width explicite, un
+   contrôle de formulaire reste en shrink-to-fit même en display:grid. */
+.queue__list > li > .pcard { width: 100%; }
+
+.queue__day {
+  margin-bottom: var(--sp-2);
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  font-variant-numeric: var(--numeric);
+}
+
+/* ============================================================
+   8. ÉTAT VIDE (G26)
+   ============================================================ */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-9) var(--sp-6);
+  text-align: center;
+}
+
+.empty__title {
+  margin: 0;
+  font-size: var(--title-3);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--ls-tight);
+}
+
+.empty__text {
+  margin: 0;
+  max-width: calc(var(--thumb-lg) + var(--thumb-sm));
+  color: var(--fg-3);
+  font-size: var(--text-small);
+  line-height: var(--lh-text);
+}
+
+/* ============================================================
+   9. FULLCALENDAR — mapping des variables, pas de surcharge dure
+   ============================================================ */
+
+.cal-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--sp-6);
+  overflow-y: auto;
+}
+
+.cal-grid[hidden] { display: none; }
+
 .fc {
-    --fc-border-color: var(--cal-border);
-    --fc-button-bg-color: var(--cal-surface2);
-    --fc-button-border-color: var(--cal-border);
-    --fc-button-text-color: var(--cal-text);
-    --fc-button-hover-bg-color: #e8e8e8;
-    --fc-button-hover-border-color: var(--cal-border);
-    --fc-button-active-bg-color: var(--cal-accent);
-    --fc-button-active-border-color: var(--cal-accent);
-    --fc-today-bg-color: rgba(226, 27, 60, 0.06);
-    --fc-page-bg-color: var(--cal-bg);
-    --fc-neutral-bg-color: var(--cal-surface2);
-    --fc-list-event-hover-bg-color: #f0f0f0;
-    --fc-highlight-color: rgba(226, 27, 60, 0.1);
-    --fc-non-business-color: rgba(0, 0, 0, 0.03);
-    --fc-event-border-color: transparent;
+  /* Le pont : chaque variable de FullCalendar pointe sur un jeton. */
+  --fc-border-color: var(--border-1);
+  --fc-page-bg-color: var(--bg-1);
+  --fc-neutral-bg-color: var(--bg-2);
+  --fc-neutral-text-color: var(--fg-3);
+  --fc-today-bg-color: var(--accent-soft);
+  --fc-highlight-color: var(--accent-soft);
+  --fc-non-business-color: var(--bg-2);
+  --fc-event-bg-color: transparent;
+  --fc-event-border-color: transparent;
+  --fc-event-text-color: var(--fg-1);
+  --fc-event-selected-overlay-color: transparent;
+  --fc-more-link-bg-color: var(--bg-2);
+  --fc-more-link-text-color: var(--fg-2);
+  --fc-list-event-hover-bg-color: var(--bg-2);
+  --fc-bg-event-color: var(--accent);
+  --fc-bg-event-opacity: 0.10;
+  --fc-now-indicator-color: var(--danger);
+
+  font-family: var(--font-ui);
+  font-size: var(--text-small);
 }
 
-.fc .fc-toolbar-title {
-    font-size: 20px !important;
-    font-weight: 700;
-    color: var(--cal-text);
+.fc .fc-scrollgrid {
+  border-radius: var(--radius-block);
+  overflow: hidden;
+}
+
+.fc .fc-col-header-cell {
+  background: var(--bg-2);
 }
 
 .fc .fc-col-header-cell-cushion {
-    color: var(--cal-text-muted);
-    font-weight: 600;
-    font-size: 12px;
-    text-transform: uppercase;
-    padding: 10px 4px;
+  padding: var(--sp-3) var(--sp-2);
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  text-decoration: none;
 }
 
-.fc .fc-daygrid-day-number {
-    color: var(--cal-text-muted);
-    font-size: 13px;
-    padding: 6px 8px;
+.fc .fc-daygrid-day-number,
+.fc .fc-timegrid-slot-label-cushion {
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  font-variant-numeric: var(--numeric);
+  text-decoration: none;
 }
 
-.fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
-    background: var(--cal-accent);
-    color: white;
-    border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
+.fc .fc-day-today .fc-daygrid-day-number {
+  color: var(--accent);
+  font-weight: var(--weight-semibold);
 }
 
+.fc .fc-day-other .fc-daygrid-day-number { color: var(--fg-4); }
+
+.fc .fc-daygrid-day-frame { padding: var(--sp-1); }
+
+/* L'événement n'est plus qu'un porteur : la carte fait tout.
+   Le rayon est ramené sur l'échelle : FullCalendar pose 3px sur
+   .fc-daygrid-dot-event, une 4e valeur hors de nos quatre rayons. */
 .fc .fc-event {
-    border-radius: 6px !important;
-    padding: 3px 6px !important;
-    font-size: 12px !important;
-    font-weight: 500;
-    border: none !important;
-    cursor: pointer;
-    transition: transform 0.1s, box-shadow 0.2s;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  /* FullCalendar pose font-size: .85em sur l'évènement, ce qui donnait
+     11,05 px — une taille hors de l'échelle, héritée par tout ce que
+     la carte n'écrase pas explicitement. On la ramène sur le jeton. */
+  font-size: var(--text-small);
 }
 
-.fc .fc-event:hover {
-    transform: scale(1.02);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+.fc .fc-daygrid-event { margin-top: var(--sp-1); }
+.fc .fc-daygrid-event-harness { margin-bottom: var(--sp-1); }
+.fc .fc-daygrid-event-dot,
+.fc .fc-event-time,
+.fc .fc-event-title-container { display: none; }
+
+/* eventContent rend .pcard : on la laisse occuper toute la case. */
+.fc .fc-event .pcard { width: 100%; }
+
+.fc .fc-daygrid-more-link {
+  display: block;
+  margin: var(--sp-1) 0 0;
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--radius-control);
+  color: var(--fg-2);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
 }
 
-.fc .fc-event-title {
-    font-weight: 500;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.fc .fc-popover {
+  border: var(--border-w) solid var(--border-2);
+  border-radius: var(--radius-block);
+  background: var(--bg-1);
+  box-shadow: var(--shadow-medium);
 }
 
-.fc .fc-daygrid-event-dot {
-    display: none;
+.fc .fc-popover-header {
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-2);
+  color: var(--fg-2);
+  font-size: var(--text-mini);
+  font-weight: var(--weight-medium);
 }
 
-.fc .fc-button {
-    border-radius: 6px !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    padding: 6px 14px !important;
-    text-transform: capitalize !important;
+.fc .fc-timegrid-slot { height: var(--sp-8); }
+.fc .fc-timegrid-axis-cushion { color: var(--fg-3); font-size: var(--text-micro); }
+
+/* Créneaux récurrents matérialisés (fond dédié) — amorce de C11. */
+.fc .fc-bg-event.slot-free {
+  background: var(--accent-soft);
+  opacity: 1;
 }
 
-.fc .fc-button-primary:not(:disabled).fc-button-active {
-    background: var(--cal-accent) !important;
-    border-color: var(--cal-accent) !important;
+.fc .fc-bg-event.slot-free .fc-event-title {
+  display: block;
+  padding: var(--sp-1) var(--sp-2);
+  color: var(--accent);
+  font-size: var(--text-micro);
+  font-style: normal;
+  font-weight: var(--weight-medium);
 }
 
-.fc .fc-toolbar {
-    margin-bottom: 16px !important;
+/* ============================================================
+   10. INSPECTEUR LATÉRAL
+   ============================================================ */
+
+.cal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
 }
 
-/* Sidebar */
-.calendar-sidebar {
-    width: 380px;
-    background: var(--cal-surface);
-    border-left: 1px solid var(--cal-border);
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
+.cal-work {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.sidebar-header {
-    padding: 20px;
-    border-bottom: 1px solid var(--cal-border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+/* ---- Bibliothèque latérale (C1 + C2 + C10) ---- */
+.lib {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  width: calc(var(--thumb-sm) * 2 + var(--sp-7));  /* 264px, sur l'échelle de 4 */
+  border-right: var(--border-w) solid var(--border-1);
+  background: var(--bg-1);
+  overflow: hidden;
 }
 
-.sidebar-header h2 {
-    font-size: 16px;
-    font-weight: 700;
+.lib[data-open="false"] { width: calc(var(--sp-8) + var(--sp-4)); }
+.lib[data-open="false"] .lib__panel { display: none; }
+.lib[data-open="false"] .lib__title,
+.lib[data-open="false"] .lib__count { display: none; }
+.lib[data-open="false"] .lib__toggle { transform: scaleX(-1); }
+
+.lib__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: var(--border-w) solid var(--border-1);
 }
 
-.sidebar-close {
-    width: 32px;
-    height: 32px;
-    border: none;
-    background: var(--cal-surface2);
-    color: var(--cal-text-muted);
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.lib__title {
+  margin: 0;
+  flex: 1 1 auto;
+  color: var(--fg-1);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
 }
 
-.sidebar-close:hover {
-    color: var(--cal-text);
+.lib__count {
+  color: var(--fg-2);
+  font-size: var(--text-micro);
+  font-variant-numeric: var(--numeric);
 }
 
-.sidebar-content {
-    padding: 20px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+.lib__toggle { flex: none; }
+
+.lib__panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.sidebar-section {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+.lib__filter {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--menu-row-h);
+  padding: var(--sp-2) var(--sp-5);
+  color: var(--fg-2);
+  font-size: var(--text-micro);
+  cursor: pointer;
 }
 
-.sidebar-label {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--cal-text-muted);
+.lib__filter input { accent-color: var(--accent); }
+
+.lib__hint {
+  margin: 0;
+  padding: 0 var(--sp-5) var(--sp-4);
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  line-height: var(--lh-text);
 }
 
-.sidebar-input {
-    background: var(--cal-surface2);
-    border: 1px solid var(--cal-border);
-    border-radius: 8px;
-    padding: 10px 12px;
-    color: var(--cal-text);
-    font-size: 14px;
-    font-family: inherit;
-    resize: vertical;
+/* Mur en colonnes plutôt que grille de cases : deux tuiles de
+   ratios différents ne se letterboxent pas et ne laissent pas de
+   trou sous la plus courte. */
+.lib__grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  columns: 2;
+  column-gap: var(--sp-2);
+  padding: 0 var(--sp-5) var(--sp-5);
+  overflow-y: auto;
 }
 
-.sidebar-input:focus {
-    outline: none;
-    border-color: var(--cal-accent);
+.lib__empty {
+  margin: var(--sp-6) 0 0;
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  line-height: var(--lh-text);
+}
+.lib__empty strong { color: var(--fg-1); }
+
+/* La tuile garde le RATIO D'ORIGINE et occupe sa place avant que
+   l'image n'arrive : aucune voisine ne bouge au chargement. */
+.libtile {
+  position: relative;
+  margin: 0 0 var(--sp-2);
+  break-inside: avoid;
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-2);
+  overflow: hidden;
+  cursor: grab;
 }
 
-textarea.sidebar-input {
-    min-height: 80px;
+.libtile__img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: var(--ar, 4 / 5);
+  object-fit: cover;
+  background: var(--bg-3);
 }
 
-/* Post thumbnail preview */
-.post-preview {
-    width: 100%;
-    aspect-ratio: 1;
-    border-radius: 8px;
-    overflow: hidden;
-    background: var(--cal-surface2);
-    border: 1px solid var(--cal-border);
-    position: relative;
+.libtile:hover { border-color: var(--border-2); }
+.libtile:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
 }
 
-.post-preview img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+.libtile[data-armed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 var(--border-w) var(--accent);
 }
 
-.post-preview .no-media {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--cal-text-muted);
-    font-size: 40px;
+.libtile__badge,
+.libtile__used {
+  position: absolute;
+  top: var(--sp-1);
+  padding: 0 var(--sp-2);
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-1);
+  color: var(--fg-1);
+  font-size: var(--text-micro);
+  line-height: var(--sp-6);
+}
+.libtile__badge { left: var(--sp-1); }
+.libtile__used  { right: var(--sp-1); }
+
+.libtile__cap {
+  padding: var(--sp-1) var(--sp-2);
+  border-top: var(--border-w) solid var(--border-1);
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Platform pills */
-.platform-selector {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
+/* Une vignette armée : les cases deviennent visiblement des cibles. */
+:root[data-lib-armed] .fc .fc-daygrid-day:hover,
+:root[data-lib-armed] .fc .fc-timegrid-col:hover {
+  background: var(--accent-soft);
+  cursor: copy;
 }
 
-.platform-pill {
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    border: 1px solid var(--cal-border);
-    background: var(--cal-surface2);
-    color: var(--cal-text-muted);
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    gap: 4px;
+/* Média posé dans le composer */
+.dlg__media {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-4);
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-2);
+}
+.dlg__media-thumb {
+  flex: none;
+  width: calc(var(--sp-9) + var(--sp-6));   /* 64px */
+  height: calc(var(--sp-9) + var(--sp-6));
+  border-radius: var(--radius-control);
+  object-fit: cover;
+  background: var(--bg-3);
+}
+.dlg__media-name {
+  margin: 0;
+  color: var(--fg-1);
+  font-size: var(--text-micro);
+  font-weight: var(--weight-semibold);
+}
+.dlg__media-meta {
+  margin: var(--sp-1) 0 0;
+  color: var(--fg-3);
+  font-size: var(--text-micro);
+  font-variant-numeric: var(--numeric);
 }
 
-.platform-pill:hover {
-    border-color: #bbb;
-    color: var(--cal-text);
+.side {
+  flex: 0 0 var(--inspector-w);
+  width: var(--inspector-w);
+  display: flex;
+  flex-direction: column;
+  border-left: var(--border-w) solid var(--border-1);
+  background: var(--bg-1);
+  overflow: hidden;
 }
 
-.platform-pill.selected {
-    border-color: var(--cal-accent);
-    background: rgba(226, 27, 60, 0.06);
-    color: var(--cal-accent);
+.side[hidden] { display: none; }
+
+.side__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: var(--border-w) solid var(--border-1);
 }
 
-/* Status badge */
-.status-badge {
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
+.side__title {
+  margin: 0;
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
 }
 
-.status-badge.draft {
-    background: rgba(113, 113, 113, 0.12);
-    color: var(--cal-gray);
+.side__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-5);
+  overflow-y: auto;
 }
 
-.status-badge.scheduled {
-    background: rgba(26, 115, 232, 0.1);
-    color: var(--cal-blue);
+/* Sans cela, l'aperçu carré et les blocs se font écraser par le
+   flex-shrink par défaut au lieu de faire défiler le panneau. */
+.side__body > * { flex: 0 0 auto; }
+
+.side__foot {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
+  border-top: var(--border-w) solid var(--border-1);
 }
 
-.status-badge.published {
-    background: rgba(0, 138, 5, 0.1);
-    color: var(--cal-green);
+.side__foot .btn { flex: 1 1 auto; min-width: 0; }
+
+.side__preview {
+  width: 100%;
+  aspect-ratio: 1;
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-block);
+  background: var(--bg-2);
+  overflow: hidden;
 }
 
-.status-badge.failed {
-    background: rgba(217, 48, 37, 0.1);
-    color: #d93025;
+.side__preview img,
+.side__preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
-/* Sidebar actions */
-.sidebar-actions {
-    padding: 20px;
-    border-top: 1px solid var(--cal-border);
-    display: flex;
-    gap: 8px;
+.side__preview--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-4);
+  font-size: var(--text-small);
 }
 
-.sidebar-actions .btn {
-    flex: 1;
-    justify-content: center;
+.side__rows {
+  display: flex;
+  flex-direction: column;
+  border: var(--border-w) solid var(--border-1);
+  border-radius: var(--radius-block);
 }
 
-.btn-danger {
-    background: rgba(217, 48, 37, 0.08);
-    color: #d93025;
-    border: 1px solid rgba(217, 48, 37, 0.25);
+.side__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  min-height: var(--menu-row-h);
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--text-mini);
 }
 
-.btn-danger:hover {
-    background: rgba(217, 48, 37, 0.15);
+.side__row + .side__row { border-top: var(--border-w) solid var(--border-1); }
+.side__row dt { color: var(--fg-3); margin: 0; }
+.side__row dd { margin: 0; color: var(--fg-1); text-align: right; font-variant-numeric: var(--numeric); }
+
+/* Sélecteur de plateformes */
+.plats-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
 }
 
-.btn-publish {
-    background: var(--cal-green);
-    color: white;
+.plats-pick__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: var(--chip-h);
+  padding: 0 var(--sp-4);
+  border: var(--border-w) solid var(--border-2);
+  border-radius: var(--radius-pill);
+  background: var(--bg-1);
+  color: var(--fg-3);
+  font: var(--weight-medium) var(--text-micro) / var(--lh-ui) var(--font-ui);
+  cursor: pointer;
 }
 
-.btn-publish:hover {
-    background: #007004;
+.plats-pick__btn[aria-pressed="true"] {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
-/* Stats row */
-.stats-row {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 16px;
+@media (pointer: coarse) {
+  .plats-pick__btn { height: var(--tap-min); }
 }
 
-.stat-card {
-    flex: 1;
-    background: var(--cal-surface);
-    border: 1px solid var(--cal-border);
-    border-radius: 10px;
-    padding: 16px;
-    text-align: center;
+/* ============================================================
+   11. DIALOGUE — la seule place des ombres, avec le toast
+   ============================================================ */
+
+.dlg {
+  width: calc(var(--thumb-lg) * 2);
+  max-width: calc(100vw - var(--sp-8));
+  padding: 0;
+  border: var(--border-w) solid var(--border-2);
+  border-radius: var(--radius-block);
+  background: var(--bg-1);
+  color: var(--fg-1);
+  box-shadow: var(--shadow-high);
 }
 
-.stat-value {
-    font-size: 28px;
-    font-weight: 700;
+/* Le voile recule vers la couleur de fond de page : il assombrit en
+   thème sombre et éclaircit en thème clair, sans jamais poser un
+   noir ou un blanc en dur. */
+.dlg::backdrop {
+  background: color-mix(in srgb, var(--bg-canvas) 65%, transparent);
+  backdrop-filter: blur(2px);
 }
 
-.stat-label {
-    font-size: 12px;
-    color: var(--cal-text-muted);
-    margin-top: 4px;
+.dlg__head {
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: var(--border-w) solid var(--border-1);
 }
 
-.stat-card.draft .stat-value { color: var(--cal-gray); }
-.stat-card.scheduled .stat-value { color: var(--cal-blue); }
-.stat-card.published .stat-value { color: var(--cal-green); }
-
-/* Empty state */
-.empty-sidebar {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    color: var(--cal-text-muted);
-    text-align: center;
-    padding: 40px 20px;
+.dlg__title {
+  margin: 0;
+  font-size: var(--text-large);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--ls-tight);
 }
 
-.empty-sidebar .icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-    opacity: 0.5;
+.dlg__sub {
+  margin: var(--sp-2) 0 0;
+  max-width: 60ch;
+  color: var(--fg-3);
+  font-size: var(--text-mini);
+  line-height: var(--lh-text);
 }
 
-.empty-sidebar p {
-    font-size: 14px;
-    line-height: 1.5;
+.dlg__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-6);
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
-/* Toast notification */
+.dlg__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-6);
+  border-top: var(--border-w) solid var(--border-1);
+  background: var(--bg-2);
+}
+
+.dlg__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.dlg__links .btn { text-decoration: none; }
+
+/* ============================================================
+   12. TOASTS
+   ============================================================ */
+
+.toasts {
+  position: fixed;
+  right: var(--sp-6);
+  bottom: var(--sp-6);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  pointer-events: none;
+}
+
 .toast {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    background: var(--cal-surface);
-    border: 1px solid var(--cal-border);
-    border-radius: 10px;
-    padding: 14px 20px;
-    font-size: 14px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
-    z-index: 1000;
-    transform: translateY(100px);
-    opacity: 0;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  max-width: calc(var(--thumb-lg) + var(--thumb-md));
+  padding: var(--sp-4) var(--sp-5);
+  border: var(--border-w) solid var(--border-2);
+  border-left: var(--sp-3) solid var(--neutral);
+  border-radius: var(--radius-block);
+  background: var(--bg-1);
+  color: var(--fg-1);
+  font-size: var(--text-mini);
+  box-shadow: var(--shadow-medium);
+  opacity: 0;
+  transform: translateY(var(--sp-4));
+  transition: opacity var(--t-regular) var(--ease), transform var(--t-regular) var(--ease);
 }
 
-.toast.show {
-    transform: translateY(0);
-    opacity: 1;
+.toast[data-show="true"] { opacity: 1; transform: none; }
+.toast--success { border-left-color: var(--success); }
+.toast--error { border-left-color: var(--danger); }
+.toast--info { border-left-color: var(--accent); }
+
+/* ============================================================
+   13. RESPONSIVE — sous 1024, l'inspecteur s'escamote (G33)
+   ============================================================ */
+
+@media (max-width: 1023px) {
+  .cal-bar { gap: var(--sp-4); padding: var(--sp-4); }
+  .cal-bar__title { font-size: var(--text-large); }
+  .cal-filters { padding: var(--sp-3) var(--sp-4); }
+  .cal-grid, .queue { padding: var(--sp-4); }
+
+  .cal-body { position: relative; }
+
+  .side {
+    position: absolute;
+    inset: 0 0 0 auto;
+    z-index: var(--z-overlay);
+    width: min(var(--inspector-w), 100vw);
+    box-shadow: var(--shadow-high);
+  }
 }
 
-.toast.success { border-left: 3px solid var(--cal-green); }
-.toast.error { border-left: 3px solid #d93025; }
-.toast.info { border-left: 3px solid var(--cal-blue); }
+@media (max-width: 767px) {
+  .cal { height: auto; min-height: calc(100vh - var(--header-h)); }
+  .cal-bar__spacer { display: none; }
+  .cal-bar__title { width: 100%; }
+  .side { width: 100vw; }
+  .fc .fc-col-header-cell-cushion { letter-spacing: var(--ls-normal); }
 
-/* Schedule modal */
-.modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(4px);
-    z-index: 500;
-    display: none;
-    align-items: center;
-    justify-content: center;
-}
+  /* Sept colonnes dans 375 px donnaient des cartes de 42 px : le titre
+     et la plateforme y étaient littéralement à zéro pixel de large (C4).
+     La grille garde donc sa largeur lisible et défile dans SON conteneur
+     — la page, elle, ne déborde pas (G32). */
+  .cal-grid { overflow-x: auto; }
+  .cal-grid > #calendar { min-width: 900px; }
 
-.modal-overlay.show {
-    display: flex;
-}
+  /* Les filtres défilent dans leur propre conteneur plutôt que
+     d'empiler trois rangées de jetons devant la grille (G31/G32). */
+  .cal-filters { flex-wrap: nowrap; overflow-x: auto; }
+  .cal-filters__group { flex-wrap: nowrap; }
+  .cal-filters > * { flex: none; }
+  .cal-filters__reset { white-space: nowrap; }
 
-.modal {
-    background: var(--cal-surface);
-    border: 1px solid var(--cal-border);
-    border-radius: 16px;
-    padding: 28px;
-    width: 420px;
-    max-width: 90vw;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
-}
-
-.modal h3 {
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 20px;
-}
-
-.modal-field {
-    margin-bottom: 16px;
-}
-
-.modal-field label {
-    display: block;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--cal-text-muted);
-    margin-bottom: 6px;
-}
-
-.modal-field input,
-.modal-field textarea {
+  /* Sous 768 px la bibliothèque devient un bandeau horizontal :
+     elle reste sur l'écran (C1) sans manger la largeur de la grille. */
+  .cal-body { flex-direction: column; }
+  .lib {
     width: 100%;
-    background: var(--cal-surface2);
-    border: 1px solid var(--cal-border);
-    border-radius: 8px;
-    padding: 10px 12px;
-    color: var(--cal-text);
-    font-size: 14px;
-    font-family: inherit;
-}
-
-.modal-field textarea {
-    min-height: 80px;
-    resize: vertical;
-}
-
-.modal-field input:focus,
-.modal-field textarea:focus {
-    outline: none;
-    border-color: var(--cal-accent);
-}
-
-.modal-actions {
+    border-right: 0;
+    border-bottom: var(--border-w) solid var(--border-1);
+  }
+  .lib[data-open="false"] { width: 100%; }
+  .lib__grid {
+    columns: auto;
     display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-    margin-top: 20px;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    height: calc(var(--thumb-sm) + var(--sp-6));   /* 136px : un bandeau, pas un mur */
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .libtile {
+    flex: 0 0 auto;
+    width: calc(var(--thumb-sm) - var(--sp-7));    /* 96px */
+    max-height: 100%;
+    margin-bottom: 0;
+  }
+  .libtile__cap { display: none; }
+  .lib__hint { display: none; }
 }
 
-/* Responsive */
-@media (max-width: 900px) {
-    .calendar-app {
-        flex-direction: column;
-    }
-    .calendar-sidebar {
-        width: 100%;
-        max-height: 50vh;
-        border-left: none;
-        border-top: 1px solid var(--cal-border);
-    }
-    .stats-row {
-        flex-wrap: wrap;
-    }
-    .stat-card {
-        min-width: 100px;
-    }
+/* ============================================================
+   14. CIBLES TACTILES — 44 px partout où l'on peut toucher (G30)
+   Les règles précédentes ne couvraient que .btn/.chip : les
+   onglets de granularité, le lien « Tout réafficher », les
+   vignettes de bibliothèque et les cartes de post restaient
+   sous la barre.
+   ============================================================ */
+@media (pointer: coarse) {
+  .seg__btn,
+  .cal-filters__reset,
+  .plats-pick__btn,
+  .lib__filter,
+  .tray__head,
+  .side__foot .btn { min-height: var(--tap-min); }
+
+  .cal-filters__reset { padding: 0 var(--sp-4); }
+
+  .libtile { min-height: var(--tap-min); }
+  .lib__filter input { width: var(--sp-7); height: var(--sp-7); }
+  .fc .fc-daygrid-day-frame { min-height: calc(var(--tap-min) + var(--sp-7)); }
+  .fc .fc-daygrid-day-number { padding: var(--sp-3) var(--sp-4); }
+  .pcard { min-height: var(--tap-min); }
 }

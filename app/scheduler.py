@@ -1,10 +1,14 @@
 """
 APScheduler-based job scheduling for the SAMOURAIS SCRAPPER.
 
-Runs three recurring tasks:
+Recurring tasks (see `start_scheduler` for the authoritative list):
     1. Check due profiles every 30 minutes and enqueue scrape jobs.
     2. Retry failed media downloads/uploads every 2 hours.
     3. Clean up stale temp files daily at 03:00.
+    4. Check for due scheduled posts every 5 minutes.
+    5/6. Collect Instagram stats and media insights via the Graph API.
+    7. Probe each platform's session health every 6 hours — WITHOUT ever
+       taking a scrape slot (see `sonder_les_sessions`).
 
 Also provides an API for triggering immediate (manual) scrape jobs.
 """
@@ -24,7 +28,14 @@ from app.config import (
     DOWNLOAD_DIR,
     MAX_CONCURRENT_SCRAPES,
 )
-from app.db import MediaItem, Profile, ScheduledPost, ScrapeJob, SessionLocal
+from app.db import (
+    MediaItem,
+    Profile,
+    SavedMeme,
+    ScheduledPost,
+    ScrapeJob,
+    SessionLocal,
+)
 
 # ---------------------------------------------------------------------------
 # Scheduler singleton
@@ -74,6 +85,29 @@ def _now_ts() -> int:
     return int(datetime.now().timestamp())
 
 
+def _fail_job(job_id: int, message: str) -> None:
+    """Mark a still-open job as ``failed`` from outside the pipeline.
+
+    A job left in ``queued``/``running`` with no thread behind it freezes its
+    profile: ``check_due_profiles`` skips any profile that already has an
+    active job (risque #54, AUDIT.md §4.2). Opens its own session because the
+    callers run outside any request/pipeline session.
+    """
+    db = SessionLocal()
+    try:
+        job = db.query(ScrapeJob).filter_by(id=job_id).first()
+        if job and job.status in ("queued", "running"):
+            job.status = "failed"
+            job.error_message = message[:500]
+            job.completed_at = _now_ts()
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("Could not mark job {} as failed: {}", job_id, exc)
+    finally:
+        db.close()
+
+
 def _run_job_safe(job_id: int, profile_id: int) -> None:
     """
     Execute a scrape job in the current thread with proper concurrency
@@ -84,6 +118,12 @@ def _run_job_safe(job_id: int, profile_id: int) -> None:
             "Profile {} already has a running job, skipping job {}",
             profile_id,
             job_id,
+        )
+        # Do not leave this job `queued` for ever: it would block every future
+        # scheduled run of the profile (risque #54, §4.2 chemin A).
+        _fail_job(
+            job_id,
+            "Skipped: profile already has a running job",
         )
         return
 
@@ -103,7 +143,10 @@ def _run_job_safe(job_id: int, profile_id: int) -> None:
         db = SessionLocal()
         try:
             job = db.query(ScrapeJob).filter_by(id=job_id).first()
-            if job and job.status == "running":
+            # `queued` too: any exception raised before the pipeline reaches
+            # `_mark_job(..., "running")` would otherwise leave the job
+            # `queued` for ever (risque #54, §4.2 chemin B).
+            if job and job.status in ("queued", "running"):
                 job.status = "failed"
                 job.error_message = f"Unhandled: {str(exc)[:500]}"
                 job.completed_at = _now_ts()
@@ -153,61 +196,84 @@ def check_due_profiles() -> None:
         logger.info("{} profile(s) due for scraping", len(due))
 
         for profile in due:
-            # Skip if already running
-            with _running_lock:
-                if profile.id in _running_profiles:
+            # Per-profile error handling: an exception raised for one profile
+            # must not skip the remaining due profiles of the cycle
+            # (risque #54, §4.2 chemin C).
+            try:
+                # Skip if already running
+                with _running_lock:
+                    if profile.id in _running_profiles:
+                        logger.debug(
+                            "Skipping @{} -- already running", profile.username
+                        )
+                        continue
+
+                # Check for an existing queued job to avoid duplicates
+                existing_queued = (
+                    db.query(ScrapeJob)
+                    .filter(
+                        ScrapeJob.profile_id == profile.id,
+                        ScrapeJob.status.in_(["queued", "running"]),
+                    )
+                    .first()
+                )
+                if existing_queued:
                     logger.debug(
-                        "Skipping @{} -- already running", profile.username
+                        "Skipping @{} -- job {} already {}",
+                        profile.username,
+                        existing_queued.id,
+                        existing_queued.status,
                     )
                     continue
 
-            # Check for an existing queued job to avoid duplicates
-            existing_queued = (
-                db.query(ScrapeJob)
-                .filter(
-                    ScrapeJob.profile_id == profile.id,
-                    ScrapeJob.status.in_(["queued", "running"]),
+                # Create a new scrape job
+                job = ScrapeJob(
+                    profile_id=profile.id,
+                    status="queued",
+                    triggered_by="scheduler",
                 )
-                .first()
-            )
-            if existing_queued:
-                logger.debug(
-                    "Skipping @{} -- job {} already {}",
+                db.add(job)
+                db.commit()
+
+                logger.info(
+                    "Created scheduled job {} for @{} ({})",
+                    job.id,
                     profile.username,
-                    existing_queued.id,
-                    existing_queued.status,
+                    profile.platform,
                 )
-                continue
 
-            # Create a new scrape job
-            job = ScrapeJob(
-                profile_id=profile.id,
-                status="queued",
-                triggered_by="scheduler",
-            )
-            db.add(job)
-            db.commit()
+                # Run in a background thread
+                t = threading.Thread(
+                    target=_run_job_safe,
+                    args=(job.id, profile.id),
+                    name=f"scrape-{profile.platform}-{profile.username}",
+                    daemon=True,
+                )
+                try:
+                    t.start()
+                except Exception as exc:
+                    # No carrier thread: the job would stay `queued` for ever
+                    # and freeze this profile until the next boot.
+                    logger.exception(
+                        "Could not start scrape thread for @{}: {}",
+                        profile.username,
+                        exc,
+                    )
+                    _fail_job(job.id, f"Could not start scrape thread: {exc}")
+                    continue
 
-            logger.info(
-                "Created scheduled job {} for @{} ({})",
-                job.id,
-                profile.username,
-                profile.platform,
-            )
-
-            # Run in a background thread
-            t = threading.Thread(
-                target=_run_job_safe,
-                args=(job.id, profile.id),
-                name=f"scrape-{profile.platform}-{profile.username}",
-                daemon=True,
-            )
-            t.start()
-
-            # Delay between profiles to be polite to platform servers
-            delay_seconds = DELAY_BETWEEN_PROFILES_MS / 1000
-            if delay_seconds > 0:
-                time.sleep(delay_seconds)
+                # Delay between profiles to be polite to platform servers
+                delay_seconds = DELAY_BETWEEN_PROFILES_MS / 1000
+                if delay_seconds > 0:
+                    time.sleep(delay_seconds)
+            except Exception as exc:
+                logger.exception(
+                    "Error while scheduling @{}: {}", profile.username, exc
+                )
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
 
     except Exception as exc:
         logger.exception("Error in check_due_profiles: {}", exc)
@@ -238,7 +304,9 @@ def retry_failed_media() -> None:
         for mi in download_failures:
             mi.status = "pending"
             mi.error_message = None
-            mi.retry_count = (mi.retry_count or 0) + 1
+            # No increment here: the counter is already bumped by the pipeline
+            # on the real failure (pipeline.py:304). Counting twice capped the
+            # media at 3 real attempts instead of 5 (risque #27, §4.12).
             logger.debug(
                 "Reset media {} (post {}) for download retry (attempt {})",
                 mi.id,
@@ -259,7 +327,8 @@ def retry_failed_media() -> None:
         for mi in upload_failures:
             mi.status = "downloaded"
             mi.error_message = None
-            mi.retry_count = (mi.retry_count or 0) + 1
+            # No increment here either: pipeline.py:366 already counted this
+            # failed attempt (risque #27, §4.12).
             logger.debug(
                 "Reset media {} (post {}) for upload retry (attempt {})",
                 mi.id,
@@ -315,7 +384,21 @@ def retry_failed_media() -> None:
                     name=f"retry-{pid}",
                     daemon=True,
                 )
-                t.start()
+                try:
+                    t.start()
+                except Exception as exc:
+                    # Same guard as check_due_profiles: the job is already
+                    # committed as `queued`, so without a carrier thread it
+                    # would freeze this profile for ever, and the raised
+                    # exception would skip the remaining affected profiles
+                    # (risque #54, §4.2 chemin C).
+                    logger.exception(
+                        "Could not start retry thread for profile {}: {}",
+                        pid,
+                        exc,
+                    )
+                    _fail_job(job.id, f"Could not start retry thread: {exc}")
+                    continue
         else:
             logger.debug("No failed media items to retry")
 
@@ -368,46 +451,96 @@ def check_due_posts() -> None:
         db.close()
 
 
-def cleanup_temp_files() -> None:
+#: Âge minimum d'un fichier avant qu'il soit considéré comme abandonné. Un
+#: téléchargement ou un rendu vidéo en cours ne doit jamais être effacé sous
+#: les pieds de celui qui l'écrit.
+_CLEANUP_MAX_AGE_SECONDS = 24 * 3600  # 24 heures
+
+def _est_fichier_de_service(nom: str) -> bool:
+    """Fichiers jamais balayés : `.gitkeep` (versionné), `.DS_Store`, marqueur
+    de volume… Les supprimer ne libère rien et casse l'arborescence attendue."""
+    return nom.startswith(".")
+
+
+def _cleanup_targets() -> list:
+    """Répertoires balayés par le ménage.
+
+    Résolus à l'APPEL depuis `app.config` (et non importés par valeur en tête
+    de module) pour deux raisons : `DOWNLOAD_DIR` reste substituable par les
+    tests, et les trois autres répertoires suivent `DATA_DIR` quel que soit le
+    montage. Avant le lot 3.4, seul `DOWNLOAD_DIR` était balayé — et seulement
+    à son premier niveau : `.thumbs` (risque #51), les répertoires de l'éditeur
+    et `CALENDAR_DIR` (risque #56) grossissaient sans limite jusqu'à saturer le
+    volume, ce que rien ne signalait.
     """
-    Remove orphaned files from the download directory that are older
-    than 24 hours and not referenced by any media item.
+    from app.config import CALENDAR_DIR, EDITOR_OUTPUT_DIR, EDITOR_UPLOAD_DIR
+
+    return [DOWNLOAD_DIR, EDITOR_UPLOAD_DIR, EDITOR_OUTPUT_DIR, CALENDAR_DIR]
+
+
+def _referenced_paths(db) -> set[str]:
+    """Chemins absolus référencés en base — intouchables par le ménage.
+
+    Trois familles : les médias téléchargés (`MediaItem.local_path`), les
+    visuels du calendrier (`ScheduledPost`) et les memes sauvegardés
+    (`SavedMeme`, qui vivent dans `EDITOR_OUTPUT_DIR/memes`). Sans les deux
+    dernières, étendre le balayage aux répertoires de l'éditeur et du
+    calendrier détruirait des fichiers encore utilisés.
     """
-    logger.debug("Running temp file cleanup...")
-    db = SessionLocal()
-    try:
-        if not DOWNLOAD_DIR.exists():
-            return
-
-        # Build a set of currently-referenced local paths
-        referenced_paths: set[str] = set()
-        rows = (
-            db.query(MediaItem.local_path)
-            .filter(MediaItem.local_path.isnot(None))
-            .all()
-        )
-        for (path,) in rows:
-            if path:
-                referenced_paths.add(os.path.abspath(path))
-
-        now = time.time()
-        max_age_seconds = 24 * 3600  # 24 hours
-        removed = 0
-
-        for entry in os.scandir(str(DOWNLOAD_DIR)):
-            if not entry.is_file():
+    referenced: set[str] = set()
+    for model, colonnes in (
+        (MediaItem, ("local_path",)),
+        (ScheduledPost, ("media_path", "thumbnail_path")),
+        (SavedMeme, ("file_path", "thumbnail_path")),
+    ):
+        for nom_colonne in colonnes:
+            colonne = getattr(model, nom_colonne, None)
+            if colonne is None:  # pragma: no cover - schéma plus ancien
                 continue
-
-            file_path = os.path.abspath(entry.path)
-
-            # Skip files still referenced in the DB
-            if file_path in referenced_paths:
-                continue
-
-            # Only remove files older than max_age_seconds
             try:
-                file_age = now - entry.stat().st_mtime
-                if file_age < max_age_seconds:
+                rows = db.query(colonne).filter(colonne.isnot(None)).all()
+            except Exception as exc:  # pragma: no cover - table absente
+                logger.warning(
+                    "Ménage : lecture de {}.{} impossible ({}) — "
+                    "ces fichiers sont épargnés par précaution",
+                    model.__name__,
+                    nom_colonne,
+                    exc,
+                )
+                db.rollback()
+                continue
+            for (path,) in rows:
+                if path:
+                    referenced.add(os.path.abspath(path))
+    return referenced
+
+
+def _sweep_directory(directory, referenced: set[str], stems: set[str], now: float) -> int:
+    """Supprime récursivement les fichiers orphelins et vieux de *directory*."""
+    if not directory.exists():
+        return 0
+
+    removed = 0
+    for racine, _sous_dossiers, fichiers in os.walk(str(directory)):
+        for nom in fichiers:
+            if _est_fichier_de_service(nom):
+                continue
+
+            file_path = os.path.abspath(os.path.join(racine, nom))
+
+            # Fichier encore référencé en base
+            if file_path in referenced:
+                continue
+
+            # Vignette d'un média vivant : `.thumbs/<nanoid>.jpg` porte le même
+            # radical que `downloads/<nanoid>.mp4`. Sans cette garde, le ménage
+            # détruirait chaque nuit les vignettes de toute la bibliothèque, à
+            # regénérer une par une à coups de ffmpeg au prochain affichage.
+            if os.path.splitext(nom)[0] in stems:
+                continue
+
+            try:
+                if now - os.stat(file_path).st_mtime < _CLEANUP_MAX_AGE_SECONDS:
                     continue
             except OSError:
                 continue
@@ -417,6 +550,27 @@ def cleanup_temp_files() -> None:
                 removed += 1
             except OSError as exc:
                 logger.warning("Failed to remove temp file {}: {}", file_path, exc)
+
+    return removed
+
+
+def cleanup_temp_files() -> None:
+    """
+    Remove orphaned files older than 24 hours, and not referenced in the
+    database, from every directory the application writes to: the download
+    directory (including `.thumbs`), the editor's upload/output directories
+    and the calendar media directory.
+    """
+    logger.debug("Running temp file cleanup...")
+    db = SessionLocal()
+    try:
+        referenced = _referenced_paths(db)
+        stems = {os.path.splitext(os.path.basename(p))[0] for p in referenced}
+
+        now = time.time()
+        removed = 0
+        for directory in _cleanup_targets():
+            removed += _sweep_directory(directory, referenced, stems, now)
 
         if removed > 0:
             logger.info("Cleaned up {} orphaned temp files", removed)
@@ -430,6 +584,50 @@ def cleanup_temp_files() -> None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Santé de session — sonde active périodique
+# ---------------------------------------------------------------------------
+def sonder_les_sessions() -> None:
+    """Sonde active de chaque plateforme qui possède des cookies (toutes les 6 h).
+
+    TROIS PROMESSES, tenues par construction :
+
+    1. Elle ne bloque JAMAIS un scrape. Elle n'acquiert pas
+       `_scrape_semaphore` et ne réserve aucun slot de scrape : APScheduler
+       l'exécute dans son propre thread, et `session_health` protège la sonde
+       par un verrou qui lui est PROPRE (`_VERROU_SONDE`).
+    2. Elle est bornée dans le temps. Chaque sonde a un délai franc
+       (`DELAI_SONDE_S`) ; au-delà elle rend « inconnu » et rend la main.
+    3. Elle ne lève jamais. Un job planifié qui explose ferait taire tous ses
+       passages suivants dans les logs — on journalise et on continue.
+
+    Les plateformes SANS fichier de cookies sont ignorées : il n'y a rien à
+    sonder, et un navigateur coûte trop cher pour l'apprendre.
+    """
+    from app.scraper.session_health import (
+        SondeOccupee,
+        plateformes_sondables,
+        sonder_si_libre,
+    )
+
+    plateformes = plateformes_sondables()
+    if not plateformes:
+        logger.info("Sonde de session : aucune plateforme avec des cookies, rien a faire")
+        return
+
+    for plateforme in plateformes:
+        try:
+            etat = sonder_si_libre(plateforme)
+            niveau = logger.warning if etat.urgent else logger.info
+            niveau(
+                "Sante de session {} : {} — {}", plateforme, etat.etat, etat.message
+            )
+        except SondeOccupee:
+            logger.info("Sonde de session {} ignoree : une sonde tourne deja", plateforme)
+        except Exception as exc:
+            logger.error("Sonde de session {} en echec: {}", plateforme, exc)
+
+
 def _recover_stale_jobs() -> None:
     """Fail jobs left in 'queued'/'running' by a previous process.
 
@@ -539,8 +737,22 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # Job 7: Sonde active de santé de session toutes les 6 heures.
+    # Espacée volontairement : chaque passage lance un navigateur furtif par
+    # plateforme. `next_run_time` n'est PAS forcé au démarrage — le boot ne
+    # doit pas payer un navigateur, le signal passif suffit à l'affichage
+    # immédiat, et le bouton « Vérifier maintenant » reste disponible.
+    scheduler.add_job(
+        sonder_les_sessions,
+        trigger="interval",
+        hours=6,
+        id="sonder_les_sessions",
+        name="Sonde de sante des sessions",
+        replace_existing=True,
+    )
+
     scheduler.start()
-    logger.info("Scheduler started with 6 recurring jobs")
+    logger.info("Scheduler started with 7 recurring jobs")
 
     # Run an initial check immediately so we do not wait 30 minutes for
     # the first pass after server startup
@@ -592,4 +804,11 @@ def enqueue_manual_scrape(profile_id: int, job_id: int) -> None:
         name=f"manual-scrape-{profile_id}",
         daemon=True,
     )
-    t.start()
+    try:
+        t.start()
+    except Exception as exc:
+        # Same guard as check_due_profiles: a job committed by the view with
+        # no carrier thread would stay `queued` for ever and freeze the
+        # profile (risque #54, §4.2 chemin C).
+        _fail_job(job_id, f"Could not start scrape thread: {exc}")
+        raise

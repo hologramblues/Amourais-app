@@ -331,6 +331,8 @@ class TikTokExtractor(PlatformExtractor):
             adaptor = StealthyFetcher.fetch(profile_url, **fetch_kwargs)
         except Exception as exc:
             logger.error("StealthyFetcher failed for TikTok: {}", exc)
+            # risque #53 / §4.20 — voir instagram.py : le pipeline conclut `failed`.
+            result.fetch_error = f"TikTok fetch failed: {exc}"
             return result
 
         # -- Phase 1: Parse __UNIVERSAL_DATA_FOR_REHYDRATION__ --------------
@@ -394,6 +396,7 @@ class TikTokExtractor(PlatformExtractor):
                 if pid in seen_ids:
                     continue
                 seen_ids.add(pid)
+                result.total_seen += 1
 
                 if opts.scrape_mode == "daily" and pid in known_post_ids:
                     logger.info("Daily mode: hit known post {}, stopping", pid)
@@ -484,6 +487,7 @@ class TikTokExtractor(PlatformExtractor):
             if video_id in seen_ids:
                 continue
             seen_ids.add(video_id)
+            result.total_seen += 1
 
             if opts.scrape_mode == "daily" and video_id in known_post_ids:
                 logger.info("DOM fallback daily mode: hit known post {}", video_id)

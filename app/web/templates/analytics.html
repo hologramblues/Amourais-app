@@ -1,216 +1,408 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SAMOURAIS - Analytics Instagram</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <link rel="stylesheet" href="/static/analytics.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>SAMOURAIS — Analytics</title>
+
+  {#- Anti-flash de thème : script SYNCHRONE avant tout CSS, copie
+      conforme de layout.html. Sans choix explicite stocké, c'est la
+      préférence système qui pilote, via tokens.css. Les deux couleurs
+      ci-dessous sont les seules valeurs brutes de cet écran : elles
+      doivent peindre le fond avant même que tokens.css soit analysé. -#}
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch (e) { /* stockage indisponible : on suit le système */ }
+    })();
+  </script>
+  <style>
+    html { background: #f4f5f7; }
+    @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #0a0b0d; } }
+    html[data-theme="dark"] { background: #0a0b0d; }
+  </style>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=JetBrains+Mono:wght@400;500&display=swap">
+
+  {#- tokens.css AVANT analytics.css : source unique de vérité. -#}
+  <link rel="stylesheet" href="/static/tokens.css?v={{ asset_version('tokens.css') }}">
+  <link rel="stylesheet" href="/static/analytics.css?v={{ asset_version('analytics.css') }}">
+
+  {#- Chart.js et analytics.js sont tous deux `defer` : ordre garanti,
+      rendu non bloqué. Si le CDN tombe, analytics.js le détecte et
+      remplace chaque graphe par un bloc d'erreur composé — le reste
+      de l'écran (agrégats, heatmap, tableau) continue de fonctionner. -#}
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script defer src="/static/analytics.js?v={{ asset_version('analytics.js') }}"></script>
 </head>
 <body>
-    {% set nav_active = 'analytics' %}
-    {% include "partials/nav.html" %}
 
-    <div class="app">
-        <!-- Profile Header -->
-        <div class="profile-header">
-            <div class="profile-avatar-wrapper">
-                <img id="profile-avatar" class="profile-avatar" src="" alt="Avatar">
-                <span id="verified-badge" class="verified-badge" style="display:none;">&#x2713;</span>
-            </div>
-            <div class="profile-info">
-                <div class="profile-name-row">
-                    <h1 id="profile-display-name">Chargement...</h1>
-                    <span class="profile-username" id="profile-username">@...</span>
-                </div>
-                <p class="profile-bio" id="profile-bio"></p>
-                <div class="profile-stats-row">
-                    <div class="profile-stat">
-                        <span class="profile-stat-value" id="profile-followers">-</span>
-                        <span class="profile-stat-label">Followers</span>
-                    </div>
-                    <div class="profile-stat">
-                        <span class="profile-stat-value" id="profile-following">-</span>
-                        <span class="profile-stat-label">Following</span>
-                    </div>
-                    <div class="profile-stat">
-                        <span class="profile-stat-value" id="profile-posts">-</span>
-                        <span class="profile-stat-label">Posts</span>
-                    </div>
-                </div>
-            </div>
+  {% set nav_active = 'analytics' %}
+  {% include "partials/nav.html" %}
+
+  <main class="ana" id="contenu">
+
+    <!-- ══════════════════════════════════════════════════════════
+         BARRE D'ÉCRAN — titre, compte, fraîcheur (A5),
+         et LE sélecteur de période, unique et global (A1).
+         ══════════════════════════════════════════════════════════ -->
+    <header class="top">
+      <div class="top__id">
+        <h1 class="top__title">Analytics</h1>
+        <p class="top__meta">
+          <span class="acct" id="acct" hidden>
+            <img class="acct__av" id="acct-avatar" width="20" height="20" alt="" aria-hidden="true">
+            <span class="acct__handle" id="acct-handle">—</span>
+          </span>
+          <span class="sep" id="acct-sep" aria-hidden="true" hidden>·</span>
+          <span class="sync" id="sync">Vérification de la dernière synchronisation…</span>
+        </p>
+      </div>
+
+      <div class="top__controls">
+        {#- Sélecteur de compte. L'écran était câblé en dur sur
+            @samourais_, absent de la base : aucun chiffre réel
+            n'apparaissait jamais. Il pousse &profile_id= dans l'URL
+            exactement comme &days=, donc l'état complet de la vue
+            reste dans l'URL. Masqué tant qu'il n'y a qu'un compte :
+            on ne montre pas un choix qui n'en est pas un. -#}
+        <label class="acct-pick" id="acct-pick" hidden>
+          <span class="acct-pick__label">Compte</span>
+          <select class="select" id="acct-select" aria-label="Compte analysé"></select>
+        </label>
+
+        <div class="seg" role="group" aria-label="Période analysée">
+          <button type="button" class="seg__btn" data-days="7">7 j</button>
+          <button type="button" class="seg__btn" data-days="30">30 j</button>
+          <button type="button" class="seg__btn" data-days="90">90 j</button>
+          <button type="button" class="seg__btn" data-days="365">1 an</button>
         </div>
 
-        <!-- Period Selector -->
-        <div class="header">
-            <h2>&#x1F4CA; Statistiques Instagram</h2>
-            <div class="period-selector">
-                <button class="period-btn" data-days="7">7 jours</button>
-                <button class="period-btn active" data-days="30">30 jours</button>
-                <button class="period-btn" data-days="90">90 jours</button>
-            </div>
+        <form class="custom" id="custom-form">
+          <label class="custom__label" for="custom-days">ou</label>
+          <input class="custom__input num" id="custom-days" name="days" type="number"
+                 min="1" max="365" step="1" inputmode="numeric" aria-label="Nombre de jours">
+          <span class="custom__unit">j</span>
+          <button type="submit" class="btn">Appliquer</button>
+        </form>
+
+        <button type="button" class="btn btn--ghost" id="export-csv">Exporter CSV</button>
+      </div>
+    </header>
+
+    <!-- Période affichée + période de comparaison NOMMÉE (A9),
+         et la règle de comparaison, écrite à l'écran, une seule fois. -->
+    <p class="period" id="period">
+      <span class="period__main" id="period-main">…</span>
+      <span class="period__rule" id="period-rule"></span>
+    </p>
+
+    <!-- ══════════════════════════════════════════════════════════
+         BANDEAU D'ÉTAT (A6) — bloc composé : titre + cause + geste.
+         Injecté par analytics.js, jamais un toast.
+         ══════════════════════════════════════════════════════════ -->
+    <div id="alert-slot" role="alert" aria-live="polite"></div>
+
+    <!-- ══════════════════════════════════════════════════════════
+         AGRÉGAT D'ABORD — exactement 5 chiffres (A4).
+         ══════════════════════════════════════════════════════════ -->
+    <section class="kpis" aria-label="Agrégats de la période">
+
+      <article class="kpi">
+        <h2 class="kpi__label">Abonnés</h2>
+        <p class="kpi__value num" data-kpi="followers"><span class="sk sk--val"></span></p>
+        <p class="kpi__delta" data-delta="followers"><span class="sk sk--sub"></span></p>
+      </article>
+
+      <article class="kpi">
+        <h2 class="kpi__label">Posts publiés</h2>
+        <p class="kpi__value num" data-kpi="posts"><span class="sk sk--val"></span></p>
+        <p class="kpi__delta" data-delta="posts"><span class="sk sk--sub"></span></p>
+      </article>
+
+      <article class="kpi">
+        <h2 class="kpi__label">Likes / post</h2>
+        <p class="kpi__value num" data-kpi="likes"><span class="sk sk--val"></span></p>
+        <p class="kpi__delta" data-delta="likes"><span class="sk sk--sub"></span></p>
+      </article>
+
+      <article class="kpi">
+        <h2 class="kpi__label">Commentaires / post</h2>
+        <p class="kpi__value num" data-kpi="comments"><span class="sk sk--val"></span></p>
+        <p class="kpi__delta" data-delta="comments"><span class="sk sk--sub"></span></p>
+      </article>
+
+      <article class="kpi">
+        <h2 class="kpi__label">
+          Taux d'engagement
+          {#- A17 : la limite de la métrique est dite au point d'usage. -#}
+          <span class="info" tabindex="0" role="note"
+                aria-label="Limite : (likes + commentaires) par post divisé par le nombre d'abonnés ACTUEL. L'API Instagram ne fournit pas l'historique d'abonnés, le dénominateur du passé est donc celui d'aujourd'hui."
+                title="(likes + commentaires) par post ÷ abonnés actuels.&#10;L'API Instagram ne fournit pas l'historique d'abonnés :&#10;le dénominateur du passé est celui d'aujourd'hui.">i</span>
+        </h2>
+        <p class="kpi__value num" data-kpi="rate"><span class="sk sk--val"></span></p>
+        <p class="kpi__delta" data-delta="rate"><span class="sk sk--sub"></span></p>
+      </article>
+
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         PUIS LES GRAPHES — deux blocs à sélecteur, pas N graphes
+         figés empilés (A14).
+         ══════════════════════════════════════════════════════════ -->
+    <div class="panels">
+
+      <section class="panel panel--wide">
+        <div class="panel__head">
+          <h2 class="panel__title">Évolution</h2>
+          <label class="field">
+            <span class="field__label">Métrique</span>
+            <select class="select" id="trend-metric">
+              <option value="followers">Abonnés</option>
+              <option value="posts">Posts publiés / semaine</option>
+              <option value="reach">Couverture (reach)</option>
+              <option value="impressions">Impressions</option>
+              <option value="profile_views">Visites de profil</option>
+              <option value="accounts_engaged">Comptes engagés</option>
+            </select>
+          </label>
         </div>
-
-        <!-- KPI Cards -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-card-header">
-                    <div class="stat-icon followers">&#x1F465;</div>
-                </div>
-                <div class="stat-value" id="kpi-followers">&mdash;</div>
-                <div class="stat-label">Followers</div>
-                <div class="stat-sub" id="kpi-follower-delta"></div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-card-header">
-                    <div class="stat-icon engagement">&#x1F4AB;</div>
-                </div>
-                <div class="stat-value" id="kpi-engagement">&mdash;</div>
-                <div class="stat-label">Taux d'engagement</div>
-                <div class="stat-sub" id="kpi-engagement-sub"></div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-card-header">
-                    <div class="stat-icon likes">&#x2764;</div>
-                </div>
-                <div class="stat-value" id="kpi-avg-likes">&mdash;</div>
-                <div class="stat-label">Likes moyens / post</div>
-                <div class="stat-sub" id="kpi-avg-comments"></div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-card-header">
-                    <div class="stat-icon posts">&#x1F4F7;</div>
-                </div>
-                <div class="stat-value" id="kpi-total-posts">&mdash;</div>
-                <div class="stat-label">Posts Instagram</div>
-                <div class="stat-sub" id="kpi-scraped-posts"></div>
-            </div>
+        <div class="panel__body">
+          <div class="chartbox" id="trend-box"><canvas id="chart-trend"></canvas></div>
+          <div class="slot" id="trend-slot"></div>
         </div>
+        <p class="panel__note" id="trend-note"></p>
+      </section>
 
-        <!-- IG API Status Banner -->
-        <div id="ig-api-banner" class="stat-card" style="display:none; padding: 12px 20px; margin-bottom: 16px;">
-            <div style="display:flex; align-items:center; gap: 12px;">
-                <div id="ig-api-indicator" style="width:10px;height:10px;border-radius:50%;background:#888;flex-shrink:0;"></div>
-                <span id="ig-api-text" style="font-size: 0.85rem; color: var(--ana-muted, #888);">Verification API...</span>
-                <a href="/settings" id="ig-api-link" style="margin-left:auto; font-size: 0.85rem;">Configurer</a>
-            </div>
+      <section class="panel">
+        <div class="panel__head">
+          <h2 class="panel__title">Répartition</h2>
+          <label class="field">
+            <span class="field__label">Ventilation</span>
+            <select class="select" id="split-metric">
+              <option value="type">Type de média</option>
+              <option value="hour">Heure de publication</option>
+              <option value="weekday">Jour de la semaine</option>
+            </select>
+          </label>
         </div>
-
-        <!-- Charts Row 1: Follower Growth + Content Breakdown -->
-        <div class="charts-grid">
-            <div class="chart-card">
-                <div class="chart-header">
-                    <span class="chart-title">&#x1F4C8; Evolution des followers</span>
-                </div>
-                <div class="chart-container">
-                    <canvas id="follower-chart"></canvas>
-                </div>
-            </div>
-
-            <div class="chart-card">
-                <div class="chart-header">
-                    <span class="chart-title">&#x1F3AC; Type de contenu</span>
-                </div>
-                <div class="chart-container">
-                    <canvas id="content-chart"></canvas>
-                </div>
-            </div>
+        <div class="panel__body">
+          <div class="chartbox" id="split-box"><canvas id="chart-split"></canvas></div>
+          <div class="slot" id="split-slot"></div>
         </div>
+        <p class="panel__note" id="split-note"></p>
+      </section>
 
-        <!-- Charts Row: Reach & Impressions (from IG Graph API) -->
-        <div class="charts-row2" id="reach-section" style="display:none;">
-            <div class="chart-card">
-                <div class="chart-header">
-                    <span class="chart-title">&#x1F4E1; Reach & Impressions</span>
-                    <span style="font-size: 0.7rem; color: var(--ana-muted); background: rgba(226,27,60,0.1); padding: 2px 8px; border-radius: 4px;">Graph API</span>
-                </div>
-                <div class="chart-container">
-                    <canvas id="reach-chart"></canvas>
-                </div>
-            </div>
-
-            <div class="chart-card">
-                <div class="chart-header">
-                    <span class="chart-title">&#x1F441; Visites profil & Comptes engages</span>
-                    <span style="font-size: 0.7rem; color: var(--ana-muted); background: rgba(226,27,60,0.1); padding: 2px 8px; border-radius: 4px;">Graph API</span>
-                </div>
-                <div class="chart-container">
-                    <canvas id="profile-views-chart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Charts Row 2: Engagement + Posting Times -->
-        <div class="charts-row2">
-            <div class="chart-card">
-                <div class="chart-header">
-                    <span class="chart-title">&#x1F4AB; Engagement par post</span>
-                </div>
-                <div class="chart-container">
-                    <canvas id="engagement-chart"></canvas>
-                </div>
-            </div>
-
-            <div class="chart-card">
-                <div class="chart-header">
-                    <span class="chart-title">&#x23F0; Meilleures heures de publication</span>
-                </div>
-                <div class="chart-container">
-                    <canvas id="posting-times-chart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Charts Row 3: Posting Frequency -->
-        <div class="charts-row2">
-            <div class="chart-card" style="flex: 1;">
-                <div class="chart-header">
-                    <span class="chart-title">&#x1F4C5; Fr&eacute;quence de publication</span>
-                </div>
-                <div class="chart-container">
-                    <canvas id="frequency-chart"></canvas>
-                </div>
-            </div>
-            <div class="chart-card" style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 40px;">
-                <div style="font-size: 48px; margin-bottom: 16px;">&#x2694;</div>
-                <div style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">SAMOURAIS Analytics</div>
-                <div style="color: var(--ana-muted); font-size: 14px; line-height: 1.5;">
-                    Stats de ton compte Instagram.<br>
-                    Mises &agrave; jour via l'API Graph toutes les 6h.
-                </div>
-            </div>
-        </div>
-
-        <!-- Top Posts -->
-        <div class="table-card">
-            <div class="table-header">
-                <h3>&#x1F3C6; Meilleurs posts par engagement</h3>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Type</th>
-                        <th>Caption</th>
-                        <th>&#x2764; Likes</th>
-                        <th>&#x1F4AC; Commentaires</th>
-                        <th>&#x1F440; Vues</th>
-                        <th>Date</th>
-                    </tr>
-                </thead>
-                <tbody id="top-posts-tbody">
-                    <tr><td colspan="7" style="text-align:center;color:#888;padding:40px;">Chargement...</td></tr>
-                </tbody>
-            </table>
-        </div>
     </div>
 
-    <script src="/static/analytics.js"></script>
+    <!-- ══════════════════════════════════════════════════════════
+         HEATMAP 7 colonnes × 24 lignes (A10), cellules cliquables
+         vers le calendrier (A11), source et volume déclarés (A12).
+         Grille rendue par Jinja : hauteur définitive dès le 1er
+         rendu, aucun saut de mise en page au remplissage.
+         ══════════════════════════════════════════════════════════ -->
+    <section class="panel">
+      <div class="panel__head">
+        <h2 class="panel__title">Horaires de publication</h2>
+        <label class="check">
+          <input type="checkbox" id="heat-values">
+          <span>Afficher les valeurs</span>
+        </label>
+      </div>
+
+      <div class="panel__body heat-layout">
+        <div class="heat-wrap">
+          <table class="heat" id="heat">
+            <caption class="sr-only">Nombre de posts publiés par jour de la semaine et par heure</caption>
+            <thead>
+              <tr>
+                <th scope="col"><span class="sr-only">Heure</span></th>
+                {% for d in ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'] %}
+                <th scope="col">{{ d }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for h in range(24) %}
+              <tr>
+                <th scope="row" class="heat__hour">{{ '%02d'|format(h) }}h</th>
+                {% for d in range(7) %}
+                <td class="heat__cell" style="--v:0">
+                  <a class="heat__link" href="/calendar?jour={{ d }}&amp;heure={{ h }}"
+                     data-d="{{ d }}" data-h="{{ h }}" data-n="0"
+                     aria-label="{{ ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'][d] }} {{ '%02d'|format(h) }}h — aucune donnée. Ouvrir le calendrier sur ce créneau."></a>
+                </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="heat-side">
+          <div class="legend" aria-hidden="true">
+            <span class="legend__label">0</span>
+            <span class="legend__ramp"></span>
+            <span class="legend__label" id="heat-max">—</span>
+          </div>
+          <p class="panel__note" id="heat-note">Lecture de la source…</p>
+          <div class="slot" id="heat-slot"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         LOT B — CE QUI MARCHE.
+         La question du propriétaire n'est pas « quelles sont mes
+         colonnes », c'est « qu'est-ce qui marche ». On y répond par
+         des agrégats de performance regroupés selon UN axe choisi
+         (A14 : un sélecteur, pas quatre blocs figés empilés), et par
+         une phrase de lecture posée au-dessus du tableau.
+         Les groupes sous le seuil de fiabilité ne sont pas classés :
+         un « meilleur jour » établi sur deux posts n'est pas un fait.
+         ══════════════════════════════════════════════════════════ -->
+    <section class="panel">
+      <div class="panel__head">
+        <h2 class="panel__title">Ce qui marche</h2>
+        <label class="field">
+          <span class="field__label">Regroupé par</span>
+          <select class="select" id="agg-axis">
+            <option value="platform">Plateforme</option>
+            <option value="type">Type de média</option>
+            <option value="weekday">Jour de publication</option>
+            <option value="hour">Heure de publication</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="panel__body">
+        <p class="verdict" id="agg-verdict"></p>
+        <div class="tbl-wrap">
+          <table class="tbl tbl--agg" id="agg">
+            <thead>
+              <tr>
+                <th scope="col" class="tbl__id">Groupe</th>
+                <th scope="col" class="num">Posts mesurés</th>
+                <th scope="col" class="num">Engagement moyen</th>
+                <th scope="col" class="num">Médiane</th>
+                <th scope="col" class="num">Taux moyen</th>
+                <th scope="col" class="num">Non mesurés</th>
+              </tr>
+            </thead>
+            <tbody id="agg-body"></tbody>
+          </table>
+        </div>
+        <div class="slot" id="agg-slot"></div>
+        <p class="panel__note" id="agg-note"></p>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════════
+         PUIS LA TABLE — miniatures (A7), en-têtes triables (A8),
+         8 colonnes métriques, défilement propre, colonnes masquables (A13).
+
+         LOT B : la table classe désormais les médias scrapés par la
+         performance RÉELLE de leur post d'origine, et sépare à l'œil
+         les posts mesurés des posts non mesurés — un post sans
+         compteur n'est pas un post à zéro.
+         ══════════════════════════════════════════════════════════ -->
+    <section class="panel">
+      <div class="panel__head">
+        <h2 class="panel__title">Classement des médias scrapés</h2>
+
+        <label class="field">
+          <span class="field__label">Portée</span>
+          <select class="select" id="perf-scope">
+            <option value="profile">Le compte affiché</option>
+            <option value="all">Tous les comptes suivis</option>
+          </select>
+        </label>
+
+        <details class="cols">
+          <summary class="cols__summary">Colonnes</summary>
+          <div class="cols__menu">
+            {% for key, label in [
+                 ('account','Compte'), ('type','Type'), ('likes','Likes'),
+                 ('comments','Commentaires'), ('views','Vues'), ('eng','Engagements'),
+                 ('rate','Taux'), ('date','Date'), ('hour','Heure'), ('day','Jour')] %}
+            <label class="cols__row">
+              <input type="checkbox" data-col="{{ key }}" checked>
+              <span>{{ label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </details>
+      </div>
+
+      <div class="tbl-wrap">
+        <table class="tbl" id="posts">
+          <thead>
+            <tr>
+              <th scope="col" class="tbl__id">Post</th>
+              <th scope="col" class="col-account"      data-sort="account">Compte</th>
+              <th scope="col" class="col-type"    data-sort="type">Type</th>
+              <th scope="col" class="col-likes    num" data-sort="likes">Likes</th>
+              <th scope="col" class="col-comments num" data-sort="comments">Commentaires</th>
+              <th scope="col" class="col-views    num" data-sort="views">Vues</th>
+              <th scope="col" class="col-eng      num" data-sort="eng">Engagements</th>
+              <th scope="col" class="col-rate     num" data-sort="rate">Taux</th>
+              <th scope="col" class="col-date     num" data-sort="date">Date</th>
+              <th scope="col" class="col-hour     num" data-sort="hour">Heure</th>
+              <th scope="col" class="col-day"          data-sort="day">Jour</th>
+            </tr>
+          </thead>
+          <tbody id="posts-body">
+            {% for _ in range(5) %}
+            <tr class="tbl__skel">
+              <td class="tbl__id"><span class="sk sk--thumb"></span><span class="sk sk--line"></span></td>
+              <td class="col-account"><span class="sk sk--chip"></span></td>
+              <td class="col-type"><span class="sk sk--chip"></span></td>
+              <td class="col-likes    num"><span class="sk sk--cell"></span></td>
+              <td class="col-comments num"><span class="sk sk--cell"></span></td>
+              <td class="col-views    num"><span class="sk sk--cell"></span></td>
+              <td class="col-eng      num"><span class="sk sk--cell"></span></td>
+              <td class="col-rate     num"><span class="sk sk--cell"></span></td>
+              <td class="col-date     num"><span class="sk sk--cell"></span></td>
+              <td class="col-hour     num"><span class="sk sk--cell"></span></td>
+              <td class="col-day"><span class="sk sk--cell"></span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="slot" id="posts-slot"></div>
+      <p class="panel__note" id="posts-note"></p>
+    </section>
+
+  </main>
+
+  {#- Gabarits d'états — clonés par analytics.js. Aucun HTML d'état
+      construit à la main dans le JS : la forme du bloc vide et du bloc
+      d'erreur est définie ici, une fois. -#}
+  <template id="tpl-empty">
+    <div class="empty">
+      <h3 class="empty__title"></h3>
+      <p class="empty__text"></p>
+      <div class="empty__actions"></div>
+    </div>
+  </template>
+
+  <template id="tpl-notice">
+    <div class="notice">
+      <span class="notice__dot" aria-hidden="true"></span>
+      <div class="notice__body">
+        <h2 class="notice__title"></h2>
+        <p class="notice__text"></p>
+      </div>
+      <div class="notice__actions"></div>
+    </div>
+  </template>
+
 </body>
 </html>

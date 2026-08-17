@@ -84,7 +84,10 @@ def list_posts():
             }
             events.append({
                 "id": p.id,
-                "title": p.title or p.caption[:50] if p.caption else "Sans titre",
+                # Parenthesage: `a or b[:50] if c else d` se lit `(a or b[:50]) if c else d`,
+                # donc un post AVEC titre mais SANS caption s'affichait « Sans titre »
+                # (AUDIT.md §5 l.199, lot 1.7 — second volet).
+                "title": p.title or (p.caption[:50] if p.caption else "Sans titre"),
                 "start": datetime.fromtimestamp(p.scheduled_at).isoformat() if p.scheduled_at else None,
                 "color": color_map.get(p.status, "#6b7280"),
                 "extendedProps": {
@@ -102,7 +105,7 @@ def list_posts():
 
     except Exception as exc:
         logger.exception("Error listing calendar posts: {}", exc)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "Erreur serveur"}), 500
     finally:
         db.close()
 
@@ -182,7 +185,7 @@ def create_post():
     except Exception as exc:
         db.rollback()
         logger.exception("Error creating calendar post: {}", exc)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "Erreur serveur"}), 500
     finally:
         db.close()
 
@@ -217,7 +220,7 @@ def update_post(post_id: int):
     except Exception as exc:
         db.rollback()
         logger.exception("Error updating calendar post: {}", exc)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "Erreur serveur"}), 500
     finally:
         db.close()
 
@@ -247,7 +250,7 @@ def delete_post(post_id: int):
     except Exception as exc:
         db.rollback()
         logger.exception("Error deleting calendar post: {}", exc)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "Erreur serveur"}), 500
     finally:
         db.close()
 
@@ -290,7 +293,7 @@ def publish_post(post_id: int):
     except Exception as exc:
         db.rollback()
         logger.exception("Error publishing calendar post: {}", exc)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "Erreur serveur"}), 500
     finally:
         db.close()
 

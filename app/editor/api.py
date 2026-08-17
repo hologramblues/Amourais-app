@@ -122,7 +122,7 @@ def process_video_endpoint():
     except Exception as exc:
         logger.exception("Video processing failed: {}", exc)
         cleanup_files(video_path, template_path, output_path)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "Erreur serveur"}), 500
 
 
 @editor_api_bp.route("/editor/media/<int:media_id>", methods=["GET"])
@@ -148,6 +148,6 @@ def serve_editor_media(media_id: int):
 
     except Exception as exc:
         logger.exception("Failed to serve editor media: {}", exc)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "Erreur serveur"}), 500
     finally:
         db.close()

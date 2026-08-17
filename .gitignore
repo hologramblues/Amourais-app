@@ -1,7 +1,15 @@
 # === Data (media, DB, sessions — user-specific) ===
-data/samourais.db
-data/samourais.db-journal
-data/samourais.db-wal
+data/samourais.db*
+
+# Sauvegardes de data/ — elles contiennent la base ET les cookies de session.
+# Le motif ci-dessus ne couvre que `data/` : une copie posée à la racine
+# (data-sauvegarde-*, data-backup-*, data-copie-*) y échappait et a bien failli
+# partir sur GitHub. Le bon endroit pour une sauvegarde est HORS du dépôt.
+data-sauvegarde*/
+data-backup*/
+data-copie*/
+*.db-wal
+*.db-shm
 data/downloads/*
 data/sessions/*
 data/cookies/*
@@ -45,3 +53,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.code-workspace
+
+# Marqueur d'etat d'execution ecrit par run.py au demarrage : ce n'est pas du code.
+data/.samourais_volume_marker

@@ -7,9 +7,12 @@ Coordinates the full lifecycle of a scrape job:
 
 from __future__ import annotations
 
+import hashlib
 import os
+import subprocess
 import time
 from datetime import datetime
+from pathlib import Path
 
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
@@ -52,6 +55,116 @@ def _get_extractor(platform: str) -> PlatformExtractor:
 
 
 # ---------------------------------------------------------------------------
+# Empreintes de déduplication (lot A)
+# ---------------------------------------------------------------------------
+# Deux empreintes, deux questions différentes :
+#   md5   — « est-ce EXACTEMENT le même fichier ? » Un seul octet de différence
+#           change tout le condensat. C'est la seule réponse fiable au doublon
+#           strict, et elle ne coûte qu'une lecture séquentielle.
+#   phash — « est-ce visuellement la MÊME image ? » Un dhash 64 bits : on
+#           ramène l'image à 9x8 pixels en niveaux de gris, puis on compare
+#           chaque pixel à son voisin de droite. 8 comparaisons par ligne,
+#           8 lignes : 64 bits. Un recadrage léger, un ré-encodage, un
+#           filigrane déplacent peu de bits ; deux photos différentes en
+#           déplacent une trentaine.
+#
+# Pillow n'est PAS installé dans ce venv (vérifié) et n'est tiré par aucune
+# dépendance. On n'en ajoute pas : ffmpeg est déjà là — il fabrique déjà les
+# vignettes de l'application — et il sait sortir une image redimensionnée en
+# niveaux de gris en un seul appel, pour une image comme pour une vidéo.
+_TAILLE_BLOC_MD5 = 1 << 20  # 1 Mio
+
+_EXTENSIONS_VIDEO = (".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v")
+
+#: Une image UNIFORME (noire, blanche, unie) donne un dhash dégénéré : tous les
+#: bits identiques. Elle « ressemble » alors à toutes les autres images unies,
+#: ce qui produit un groupe géant et faux. On calcule quand même l'empreinte
+#: (la colonne cesse d'être nulle, donc on ne resonde pas le fichier à chaque
+#: passage), mais l'écran des quasi-doublons l'écarte explicitement.
+PHASH_DEGENERE = ("0000000000000000", "ffffffffffffffff")
+
+#: Délai maximum accordé à ffmpeg pour une seule empreinte perceptuelle.
+_TIMEOUT_FFMPEG_S = 20
+
+
+def est_une_video(chemin: str | Path) -> bool:
+    return Path(chemin).suffix.lower() in _EXTENSIONS_VIDEO
+
+
+def md5_fichier(chemin: str | Path) -> str | None:
+    """MD5 hexadécimal du fichier, ou None s'il est illisible."""
+    h = hashlib.md5()
+    try:
+        with open(chemin, "rb") as f:
+            for bloc in iter(lambda: f.read(_TAILLE_BLOC_MD5), b""):
+                h.update(bloc)
+    except OSError as exc:
+        logger.debug("MD5 impossible pour {} : {}", chemin, exc)
+        return None
+    return h.hexdigest()
+
+
+def _vignette_9x8(chemin: Path, video: bool) -> bytes | None:
+    """72 octets : une image 9x8 en niveaux de gris, extraite par ffmpeg.
+
+    Pour une VIDÉO on prend une image de référence à 0,1 s — pas l'image
+    zéro, souvent noire — et on retombe sur l'image zéro si le fichier est
+    plus court que ça. Une vidéo n'a pas de « hash perceptuel » propre : ce
+    qui est comparé est cette image, et l'écran le dit.
+    """
+    def _lancer(args_entree: list[str]) -> bytes | None:
+        cmd = (
+            ["ffmpeg", "-v", "error", "-nostdin", "-threads", "1"]
+            + args_entree
+            + [
+                "-i", str(chemin),
+                "-frames:v", "1",
+                # `format=gray` AVANT `scale` : la moyenne se fait alors sur la
+                # luminance, pas sur un canal choisi au hasard.
+                "-vf", "format=gray,scale=9:8:flags=bilinear",
+                "-f", "rawvideo", "-pix_fmt", "gray", "-",
+            ]
+        )
+        try:
+            res = subprocess.run(cmd, capture_output=True, timeout=_TIMEOUT_FFMPEG_S)
+        except (OSError, subprocess.SubprocessError) as exc:
+            logger.debug("ffmpeg indisponible pour {} : {}", chemin, exc)
+            return None
+        if res.returncode != 0 or len(res.stdout) < 72:
+            return None
+        return res.stdout[:72]
+
+    if video:
+        octets = _lancer(["-ss", "0.1"])
+        if octets is not None:
+            return octets
+    return _lancer([])
+
+
+def phash_fichier(chemin: str | Path, media_type: str | None = None) -> str | None:
+    """dhash 64 bits en hexadécimal (16 caractères), ou None si non calculable."""
+    chemin = Path(chemin)
+    video = media_type == "video" or est_une_video(chemin)
+    pixels = _vignette_9x8(chemin, video)
+    if pixels is None:
+        return None
+
+    bits = 0
+    for ligne in range(8):
+        base = ligne * 9
+        for colonne in range(8):
+            bits = (bits << 1) | (1 if pixels[base + colonne] > pixels[base + colonne + 1] else 0)
+    return format(bits, "016x")
+
+
+def empreintes(chemin: str | Path, media_type: str | None = None) -> tuple[str | None, str | None]:
+    """(md5, phash) pour un fichier local. Aucune exception ne sort d'ici."""
+    if not chemin or not os.path.isfile(chemin):
+        return None, None
+    return md5_fichier(chemin), phash_fichier(chemin, media_type)
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 def _now_ts() -> int:
@@ -59,12 +172,49 @@ def _now_ts() -> int:
     return int(datetime.now().timestamp())
 
 
+def _plateforme_non_atteinte(result) -> str | None:
+    """Return an error message when *result* proves the platform was never reached.
+
+    Two signals (risque #53, §4.20):
+
+    * ``fetch_error`` — posé par les 4 extracteurs quand ``StealthyFetcher.fetch``
+      lève. C'est le signal explicite ;
+    * un résultat TOTALEMENT vide — aucun média, aucun post vu, et pas la moindre
+      bribe de profil. Un extracteur qui a réellement atteint la page en rapporte
+      toujours quelque chose (nom, avatar, ou au moins un post vu) ; du vide
+      intégral signifie navigateur mort, proxy mort, session détruite ou blocage.
+
+    Renvoie ``None`` quand la plateforme a bien répondu (y compris « rien de neuf »).
+    """
+    fetch_error = getattr(result, "fetch_error", None)
+    if fetch_error:
+        return str(fetch_error)
+
+    profile_info = getattr(result, "profile_info", None)
+    profil_vide = profile_info is None or not any(
+        valeur is not None for valeur in vars(profile_info).values()
+    )
+    if not result.media and not getattr(result, "total_seen", 0) and profil_vide:
+        return (
+            "Aucune donnée reçue de la plateforme (navigateur, proxy, session ou "
+            "blocage) — le profil n'a pas été atteint"
+        )
+    return None
+
+
+#: Statuts TERMINAUX d'un job : plus rien ne s'exécutera après eux, ils
+#: s'horodatent donc tous. `empty` en fait partie (risque #3, §4.1, lot 3.3) —
+#: son absence de `completed_at` laissait l'interface sans date de fin sur les
+#: jobs quotidiens sans nouveauté, c'est-à-dire sur la moitié d'entre eux.
+_STATUTS_TERMINAUX = ("completed", "failed", "partial", "empty")
+
+
 def _mark_job(db, job: ScrapeJob, status: str, error: str | None = None) -> None:
     """Update job status and optional error message."""
     job.status = status
     if status == "running" and job.started_at is None:
         job.started_at = _now_ts()
-    if status in ("completed", "failed", "partial"):
+    if status in _STATUTS_TERMINAUX:
         job.completed_at = _now_ts()
     if error:
         job.error_message = error
@@ -163,7 +313,22 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
         result = extractor.extract(profile.profile_url, known_post_ids, options)
     except Exception as exc:
         logger.exception("Extraction failed for job {}: {}", job_id, exc)
+        # risque #10 / §4.5 — horodater malgré l'échec : sans cela le profil reste
+        # éternellement « dû » et consomme un slot de scrape à chaque cycle.
+        profile.last_scraped_at = _now_ts()
+        profile.updated_at = _now_ts()
         _mark_job(db, job, "failed", f"Extraction error: {exc}")
+        return
+
+    # ------------------------------------------------------------------
+    # 5b. Échec TOTAL de fetch : `failed`, jamais `empty` (risque #53, §4.20)
+    #     `last_scraped_at` reste intact : la plateforme n'a pas été atteinte,
+    #     le profil doit redevenir dû au cycle suivant.
+    # ------------------------------------------------------------------
+    erreur_de_fetch = _plateforme_non_atteinte(result)
+    if erreur_de_fetch:
+        logger.error("Fetch failed for job {} (@{}): {}", job_id, profile.username, erreur_de_fetch)
+        _mark_job(db, job, "failed", f"Fetch error: {erreur_de_fetch}")
         return
 
     media_found = len(result.media)
@@ -253,11 +418,15 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
             status="pending",
         )
         try:
-            db.add(media_item)
-            db.flush()
+            # risque #9 / §4.4 — SAVEPOINT : sans lui, `db.rollback()` annulait la
+            # transaction ENTIÈRE depuis le dernier commit, donc tous les items
+            # sains déjà flushés du même job. Ici le doublon n'annule que lui-même,
+            # et `media_new` n'est incrémenté qu'après un flush réussi.
+            with db.begin_nested():
+                db.add(media_item)
+                db.flush()
             media_new += 1
         except IntegrityError:
-            db.rollback()
             # Item already exists -- skip silently
             logger.debug(
                 "Duplicate media item skipped: post_id={}, url={}",
@@ -287,6 +456,14 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
             mi.local_path = dl.local_path
             mi.file_size = dl.file_size
             mi.content_hash = dl.content_hash
+            # Empreintes calculées À L'INGESTION : c'est le seul moment où le
+            # fichier est certainement là (en mode gdrive il est effacé du
+            # disque à l'étape 10). Un échec n'interrompt rien — la colonne
+            # reste nulle et le calcul différé la rattrapera.
+            try:
+                mi.md5, mi.phash = empreintes(dl.local_path, mi.media_type)
+            except Exception as exc:  # noqa: BLE001 — jamais fatal
+                logger.warning("Empreintes non calculées pour {} : {}", mi.id, exc)
             mi.downloaded_at = _now_ts()
             mi.status = "downloaded"
             mi.error_message = None
@@ -414,9 +591,23 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
     job.media_downloaded = media_downloaded
     job.media_uploaded = media_uploaded
 
-    if media_found == 0:
-        # Nothing discovered at all — almost always expired/missing cookies or a
-        # block, NOT a success. Flag it distinctly so it doesn't look "completed".
+    # risque #3 / §4.1 — le statut se décide sur `total_seen`, PAS sur
+    # `media_found`. `media_found = len(result.media)` ne compte que les médias
+    # NOUVEAUX : un profil sain dont aucun post n'a bougé depuis le dernier
+    # cycle en rapporte zéro, et tombait donc dans `empty` — le même badge
+    # orange qu'une session morte. `total_seen` compte les posts VUS sur la
+    # page ; les 4 extracteurs l'incrémentent désormais (lot 1.5).
+    #
+    # `empty` garde un sens précis, et un seul : la page n'a rien montré du
+    # tout. L'échec TOTAL de fetch, lui, est déjà parti en `failed` à l'étape 5b
+    # (risque #53) — les deux situations ne partagent plus de statut.
+    #
+    # `media_found` reste dans la condition en garde : un extracteur qui
+    # rapporterait des médias sans alimenter `total_seen` ne doit pas produire
+    # un `empty` absurde.
+    if total_seen == 0 and media_found == 0:
+        # Nothing seen on the page at all — expired/missing cookies, a block or
+        # a genuinely empty profile. NOT a success: flagged distinctly.
         final_status = "empty"
     elif media_downloaded < len(pending_items) or media_uploaded < len(downloaded_items):
         final_status = "partial"
