@@ -129,6 +129,10 @@ _FORCED_ENV = {
     "PROXY_TIKTOK": "",
     "PROXY_TWITTER": "",
     "PROXY_REDDIT": "",
+    # Apify : aucun jeton — le backend de scrape reste « navigateur » dans les
+    # tests, quel que soit le .env du propriétaire (lot A).
+    "APIFY_TOKEN": "",
+    "APIFY_ACTOR": "",
     # Instagram Graph API : aucun jeton.
     "IG_ACCESS_TOKEN": "",
     "IG_USER_ID": "",

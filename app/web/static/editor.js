@@ -94,6 +94,31 @@
         };
 
         // ============================================
+        // PLATEAU TIKTOK — PLEIN ÉCRAN
+        // --------------------------------------------
+        // Demande du propriétaire : « pour tiktok il faut que ce soit plein
+        // écran y a pas de template blanc autour ». Un TikTok réel n'a NI
+        // fond blanc, NI cadre, NI bandeau de texte : le média couvre les
+        // 1080×1920 (ajustement « cover », l'excédent est rogné) et le texte
+        // POV se pose PAR-DESSUS. Ce gabarit dédié remplace 'story' pour le
+        // plateau TikTok UNIQUEMENT — le plateau Instagram garde TEMPLATES.
+        //   - frame = tout le canvas (0,0,1080,1920, sans arrondi) ;
+        //   - fullBleed:true fait sauter le fond blanc, le cadre pointillé
+        //     et le bandeau dans createElements() ;
+        //   - textArea à 0 : plus de zone de texte de gabarit (les points
+        //     d'accroche du magnétisme retombent sur les bords du canvas) ;
+        //   - filigrane : position basse inchangée (mêmes coordonnées que
+        //     l'ancien gabarit 'story').
+        const TIKTOK_TEMPLATE = {
+            width: 1080,
+            height: 1920,
+            fullBleed: true,
+            frame: { x: 0, y: 0, width: 1080, height: 1920, radius: 0 },
+            textArea: { x: 0, y: 0, width: 1080, maxY: 0 },
+            watermark: { x: 956, y: 1700 }
+        };
+
+        // ============================================
         // STATE
         // ============================================
         const state = {
@@ -182,9 +207,14 @@
         function eachPane(fn) { fn(panes.ig); fn(panes.tt); }
         function activePanes() { return [panes.ig, panes.tt].filter(p => p.enabled); }
 
-        /** Clé de template du plateau : IG suit les boutons de format, TikTok est fixe. */
+        /** Clé de template du plateau : IG suit les boutons de format, TikTok est fixe.
+         *  La clé reste 'story' pour TikTok : c'est l'étiquette DONNÉE (template_format
+         *  du Viewer et du Calendrier, ratio 9:16) — le RENDU, lui, passe par
+         *  templateOf() qui sert le gabarit plein écran dédié. */
         function templateKeyOf(p) { return p.key === 'ig' ? state.currentTemplate : 'story'; }
-        function templateOf(p) { return TEMPLATES[templateKeyOf(p)]; }
+        function templateOf(p) { return p.key === 'ig' ? TEMPLATES[state.currentTemplate] : TIKTOK_TEMPLATE; }
+        /** Vrai pour le plateau plein écran (TikTok) : pas de gabarit autour du média. */
+        function isFullBleed(p) { return !!templateOf(p).fullBleed; }
 
         // ============================================
         // DOM ELEMENTS
@@ -517,21 +547,29 @@
             const template = templateOf(p);
             const frame = template.frame;
             const offset = CANVAS_PADDING; // Offset for all elements
+            // Plein écran (TikTok) : pas de gabarit blanc, pas de cadre, pas
+            // de bandeau — le média couvre tout, le POV se pose par-dessus.
+            const fullBleed = !!template.fullBleed;
 
             // Calculate effective frame height (for story template customization)
-            const effectiveFrameHeight = Math.round(frame.height * (p.frameHeightPercent / 100));
+            // — un plateau plein écran ne se rétrécit pas : il resterait des
+            // bandes, ce que ce plateau interdit par définition.
+            const effectiveFrameHeight = Math.round(
+                frame.height * ((fullBleed ? 100 : p.frameHeightPercent) / 100));
 
             // Calculate Y position to keep frame centered
             const originalCenterY = frame.y + frame.height / 2;
             const effectiveFrameY = originalCenterY - effectiveFrameHeight / 2;
 
-            // White template background
+            // Template background — white for the meme template, BLACK for the
+            // full-bleed pane : c'est l'écran TikTok éteint, jamais du blanc,
+            // et c'est ce noir qui sort à l'export si le média est dézoomé.
             p.templateBg = new fabric.Rect({
                 left: offset,
                 top: offset,
                 width: template.width,
                 height: template.height,
-                fill: '#ffffff',
+                fill: fullBleed ? '#000000' : '#ffffff',
                 selectable: false,
                 evented: false
             });
@@ -556,7 +594,8 @@
                 height: effectiveFrameHeight,
                 rx: frame.radius,
                 ry: frame.radius,
-                fill: '#f0f0f0',
+                // Plein écran : le « pas encore de média » est noir, pas gris.
+                fill: fullBleed ? '#000000' : '#f0f0f0',
                 selectable: false,
                 evented: false
             });
@@ -571,7 +610,8 @@
                 rx: frame.radius,
                 ry: frame.radius,
                 fill: 'transparent',
-                stroke: '#ddd',
+                // Plein écran : AUCUN cadre — le repère pointillé disparaît.
+                stroke: fullBleed ? 'transparent' : '#ddd',
                 strokeWidth: 2,
                 strokeDashArray: [8, 4],
                 selectable: false,
@@ -579,7 +619,13 @@
             });
             p.canvas.add(p.frameBorder);
 
-            // Text box
+            // Text box — bandeau du gabarit meme. Le plateau plein écran n'en
+            // a PAS : ni bandeau, ni placeholder « Tape ton texte... » — le
+            // texte posé sur TikTok, c'est le POV. Tous les consommateurs de
+            // p.textBox testent déjà sa présence.
+            if (fullBleed) {
+                p.textBox = null;
+            } else {
             const textArea = template.textArea;
             p.textBox = new fabric.Textbox(state.text || 'Tape ton texte...', {
                 left: textArea.x + offset,
@@ -614,6 +660,7 @@
                     other.canvas.renderAll();
                 });
             });
+            }
 
             // Watermark (logo or text fallback)
             const wm = template.watermark;
@@ -1170,7 +1217,7 @@
                 p.canvas.sendToBack(p.frameBorder);
                 p.canvas.sendToBack(p.frameRect);
                 p.canvas.sendToBack(p.templateBg);
-                p.canvas.bringToFront(p.textBox);
+                if (p.textBox) p.canvas.bringToFront(p.textBox); // pas de bandeau en plein écran
                 if (p.povObj) p.canvas.bringToFront(p.povObj);
                 p.canvas.bringToFront(p.watermark);
 
@@ -1230,6 +1277,9 @@
         function updateFrameHeight(percentage) {
             frameHeightValue.textContent = percentage + '%';
             eachPane(function(p) {
+                // Plein écran (TikTok) : rétrécir le cadre recréerait des
+                // bandes autour du média — ce plateau reste à 100 %.
+                if (isFullBleed(p)) return;
                 p.frameHeightPercent = percentage;
 
                 const template = templateOf(p);
@@ -2373,10 +2423,109 @@
             }, { crossOrigin: 'anonymous' });
         }
 
+        // ============================================
+        // TEMPLATE PNG PLEIN ÉCRAN (plateau TikTok)
+        // --------------------------------------------
+        // Pas de gabarit blanc : la surcouche envoyée à FFmpeg est le rendu
+        // EXACT du canvas TikTok (POV, texte overlay, filigrane) sur fond
+        // transparent — donc ce que l'utilisateur voit à l'écran, y compris
+        // le bloc-par-ligne Montserrat que l'ancien chemin ne savait pas
+        // dessiner. Là où le média ne couvre pas (dézoom volontaire), le
+        // fond est le même NOIR que le plateau — jamais le blanc que le
+        // pipeline FFmpeg peint sous la vidéo.
+        // ============================================
+        async function generateFullBleedTemplatePNG(p) {
+            const template = templateOf(p);
+            await document.fonts.ready;
+
+            // 1) Surcouche : le canvas réel, média et fonds masqués, fond
+            //    transparent — même mécanique de restauration que
+            //    renderCanvasToDataURL, y compris en cas d'échec.
+            const hidden = [];
+            [p.imageObj, p.templateBg, p.frameRect, p.frameBorder].forEach(function(obj) {
+                if (obj && obj.visible !== false) {
+                    obj.set({ visible: false });
+                    hidden.push(obj);
+                }
+            });
+            const originalZoom = p.canvas.getZoom();
+            const originalBg = p.canvas.backgroundColor;
+            p.canvas.discardActiveObject();
+            p.canvas.backgroundColor = '';
+            p.canvas.setZoom(1);
+            p.canvas.setWidth(template.width + (CANVAS_PADDING * 2));
+            p.canvas.setHeight(template.height + (CANVAS_PADDING * 2));
+            p.canvas.renderAll();
+            let overlayURL;
+            try {
+                overlayURL = p.canvas.toDataURL({
+                    format: 'png',
+                    left: CANVAS_PADDING,
+                    top: CANVAS_PADDING,
+                    width: template.width,
+                    height: template.height
+                });
+            } finally {
+                hidden.forEach(function(obj) { obj.set({ visible: true }); });
+                p.canvas.backgroundColor = originalBg;
+                p.canvas.setZoom(originalZoom);
+                updateCanvasSize(p);
+                p.canvas.renderAll();
+            }
+
+            const overlayImg = await new Promise(function(resolve, reject) {
+                const img = new Image();
+                img.onload = function() { resolve(img); };
+                img.onerror = function() { reject(new Error('Surcouche TikTok illisible')); };
+                img.src = overlayURL;
+            });
+
+            // 2) Fond noir, troué à l'emplacement EXACT où FFmpeg posera la
+            //    vidéo (même calcul « cover » que le canvas et que le serveur :
+            //    scale = max(1080/w, 1920/h) × zoom, centre + décalage).
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = template.width;
+            tempCanvas.height = template.height;
+            const ctx = tempCanvas.getContext('2d');
+
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, template.width, template.height);
+
+            ctx.globalCompositeOperation = 'destination-out';
+            const vidW = videoSource.videoWidth;
+            const vidH = videoSource.videoHeight;
+            if (vidW && vidH) {
+                const baseScale = Math.max(template.width / vidW, template.height / vidH);
+                const s = baseScale * ((p.imageScale || 100) / 100);
+                // +2 px : absorbe les arrondis FFmpeg, un liseré noir d'un
+                // demi-pixel se verrait sur un plein écran.
+                const w = vidW * s + 2;
+                const h = vidH * s + 2;
+                const cx = template.width / 2 + (p.imageOffsetX || 0);
+                const cy = template.height / 2 + (p.imageOffsetY || 0);
+                ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+            } else {
+                // Dimensions vidéo inconnues : trou plein cadre (cas nominal,
+                // le média couvre tout de toute façon).
+                ctx.fillRect(0, 0, template.width, template.height);
+            }
+            ctx.globalCompositeOperation = 'source-over';
+
+            // 3) La surcouche PAR-DESSUS le trou : POV, overlay, filigrane.
+            ctx.drawImage(overlayImg, 0, 0);
+
+            return new Promise(function(resolve) {
+                tempCanvas.toBlob(function(blob) { resolve(blob); }, 'image/png');
+            });
+        }
+
         // Générer le template PNG avec trou transparent pour la vidéo
         async function generateTemplatePNG(params) {
             // Le plateau source est celui choisi par exportVideo().
             const p = panes[params.paneKey] || panes.ig;
+            // Plateau plein écran (TikTok) : pas de gabarit blanc — chemin
+            // dédié, le reste de cette fonction est celui du gabarit meme.
+            if (isFullBleed(p)) return generateFullBleedTemplatePNG(p);
             const template = TEMPLATES[params.template] || templateOf(p);
             const textBox = p.textBox;
             const offset = CANVAS_PADDING;

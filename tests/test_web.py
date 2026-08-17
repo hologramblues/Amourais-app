@@ -726,7 +726,7 @@ def test_settings_env_doit_rejeter_les_identifiants_de_lapplication(
         reponse.close()
 
 
-#: Les 26 clés LÉGITIMES de `ALLOWED_ENV_KEYS` (`web/api.py:28-43`), c'est-à-dire
+#: Les 28 clés LÉGITIMES de `ALLOWED_ENV_KEYS` (`web/api.py:28-45`), c'est-à-dire
 #: la whitelist PRIVÉE des trois identifiants d'application que le lot 1.0b doit
 #: en retirer (risque #52). Cette liste doit donc rester exacte APRÈS le lot 1.0b.
 #:
@@ -739,6 +739,8 @@ CLES_ENV_LEGITIMES = frozenset({
     "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI",
     "GOOGLE_REFRESH_TOKEN", "GDRIVE_ROOT_FOLDER_NAME", "STORAGE_MODE",
     "FB_APP_ID", "FB_APP_SECRET", "IG_ACCESS_TOKEN", "IG_USER_ID",
+    # Lot A (backend Apify) : le jeton et l'acteur se règlent depuis l'UI.
+    "APIFY_TOKEN", "APIFY_ACTOR",
     "DEFAULT_SCRAPE_INTERVAL_MINUTES", "BROWSER_POOL_SIZE", "SCROLL_PAUSE_MS",
     "MAX_SCROLLS", "DELAY_BETWEEN_PROFILES_MS", "BACKFILL_MAX_SCROLLS",
     "DAILY_MAX_SCROLLS", "DAILY_SCRAPE_INTERVAL_MINUTES", "MAX_CONCURRENT_SCRAPES",

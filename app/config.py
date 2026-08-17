@@ -139,6 +139,31 @@ def get_proxy_for_platform(platform: str) -> str:
     }.get(platform, "")
     return specific or os.getenv("PROXY_URL", "")
 
+# Apify — backend de scrape Instagram par API (payant, lot A).
+# Quand APIFY_TOKEN est posé, le pipeline fait passer Instagram par l'acteur
+# Apify au lieu du navigateur (cf. pipeline._choisir_extracteur). Le jeton est
+# relu À CHAUD via get_apify_settings(), comme les proxys.
+APIFY_ACTOR_DEFAULT = "apify~instagram-post-scraper"
+APIFY_TOKEN = os.getenv("APIFY_TOKEN", "")
+APIFY_ACTOR = os.getenv("APIFY_ACTOR", "") or APIFY_ACTOR_DEFAULT
+
+
+def get_apify_settings() -> tuple[str, str]:
+    """(jeton, acteur) Apify, relus À CHAUD depuis le .env persistant.
+
+    Même mécanique que `get_proxy_for_platform` : le fichier de réglages du
+    volume est rechargé à chaque appel pour qu'un jeton posé (ou retiré) dans
+    l'écran Réglages prenne effet au scrape suivant, sans redémarrage.
+    L'acteur vide retombe sur `APIFY_ACTOR_DEFAULT`.
+    """
+    from dotenv import load_dotenv
+    load_dotenv(SETTINGS_ENV, override=True)
+
+    token = (os.getenv("APIFY_TOKEN") or "").strip()
+    acteur = (os.getenv("APIFY_ACTOR") or "").strip() or APIFY_ACTOR_DEFAULT
+    return token, acteur
+
+
 # Instagram Graph API
 IG_ACCESS_TOKEN = os.getenv("IG_ACCESS_TOKEN", "")
 IG_USER_ID = os.getenv("IG_USER_ID", "")

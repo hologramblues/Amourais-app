@@ -22,6 +22,7 @@ from app.config import (
     DAILY_MAX_SCROLLS,
     DAILY_SCRAPE_INTERVAL_MINUTES,
     STORAGE_MODE,
+    get_apify_settings,
     get_proxy_for_platform,
 )
 from app.db import MediaItem, Profile, ProfileSnapshot, ScrapeJob, SessionLocal
@@ -52,6 +53,27 @@ def _get_extractor(platform: str) -> PlatformExtractor:
     if cls is None:
         raise ValueError(f"Unsupported platform: {platform}")
     return cls()
+
+
+def _choisir_extracteur(platform: str) -> tuple[PlatformExtractor, str]:
+    """Aiguillage du backend d'extraction (lot A) : (extracteur, nom du backend).
+
+    Instagram passe par l'API Apify quand `APIFY_TOKEN` est posé — le jeton
+    est relu À CHAUD (`get_apify_settings` recharge le .env persistant, comme
+    les proxys), donc poser ou retirer le jeton dans Réglages change de
+    backend au scrape suivant, sans redémarrage. Toutes les autres plateformes
+    — et Instagram sans jeton — restent sur le backend navigateur.
+
+    `_EXTRACTORS` n'est PAS modifié : le registre reste celui des extracteurs
+    navigateur sous contrat (tests/test_extracteurs_contrat.py).
+    """
+    if platform == "instagram":
+        token, _acteur = get_apify_settings()
+        if token:
+            from app.scraper.instagram_apify import InstagramApifyExtractor
+
+            return InstagramApifyExtractor(), "apify"
+    return _get_extractor(platform), "navigateur"
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +331,14 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
     # 5. Extract media from platform
     # ------------------------------------------------------------------
     try:
-        extractor = _get_extractor(profile.platform)
+        extractor, backend = _choisir_extracteur(profile.platform)
+        # Le backend AYANT SERVI est noté dans les logs du job (lot A) : sans
+        # cette ligne, impossible de savoir si un média vient d'Apify (payant)
+        # ou du navigateur.
+        logger.info(
+            "Job {}: extraction de @{} ({}) via le backend « {} »",
+            job_id, profile.username, profile.platform, backend,
+        )
         result = extractor.extract(profile.profile_url, known_post_ids, options)
     except Exception as exc:
         logger.exception("Extraction failed for job {}: {}", job_id, exc)

@@ -60,24 +60,18 @@ def favicon():
 # Helper: read current .env values for settings form
 # ---------------------------------------------------------------------------
 def _read_env_file() -> dict[str, str]:
-    """Read the .env file and return key-value pairs."""
-    from app.config import BASE_DIR
+    """Valeurs affichées par l'écran Réglages — les valeurs RÉELLES.
 
-    env_path = BASE_DIR / ".env"
-    values: dict[str, str] = {}
-    if not env_path.exists():
-        return values
-    for line in env_path.read_text(encoding="utf-8").splitlines():
-        trimmed = line.strip()
-        if not trimmed or trimmed.startswith("#"):
-            continue
-        eq_idx = trimmed.find("=")
-        if eq_idx == -1:
-            continue
-        key = trimmed[:eq_idx].strip()
-        val = trimmed[eq_idx + 1 :].strip()
-        values[key] = val
-    return values
+    Délègue au lecteur de web/api.py, qui fusionne le .env du projet (défauts)
+    PUIS le .env du volume (DATA_DIR/.env, où `save_env` ÉCRIT). L'ancienne
+    version ne lisait que le .env du projet : chaque sauvegarde réussie
+    devenait invisible au rechargement — champ vidé, badge « Non configuré »
+    malgré un jeton actif (audit §4.6 : « le formulaire n'affiche jamais les
+    valeurs réellement enregistrées »).
+    """
+    from app.web.api import _read_env_file as _lire_env_fusionne
+
+    return _lire_env_fusionne()
 
 
 # ---------------------------------------------------------------------------

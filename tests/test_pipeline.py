@@ -137,6 +137,12 @@ def _pipeline_sandbox(monkeypatch):
     """
     monkeypatch.setattr(pipeline, "_now_ts", lambda: FIXED_NOW)
     monkeypatch.setattr(pipeline, "get_proxy_for_platform", lambda platform: "")
+    # Même règle pour l'aiguillage Apify (lot A) : `get_apify_settings` fait
+    # aussi `load_dotenv(override=True)`. Sans jeton, le backend reste
+    # « navigateur » et `_choisir_extracteur` retombe sur `_EXTRACTORS`.
+    monkeypatch.setattr(
+        pipeline, "get_apify_settings", lambda: ("", "apify~instagram-post-scraper")
+    )
     monkeypatch.setattr(pipeline, "STORAGE_MODE", "local")
 
 

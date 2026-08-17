@@ -328,6 +328,9 @@
                         <h2 class="group__title" id="grp-texte">Texte du bandeau</h2>
                     </div>
                     <textarea class="text-input" id="meme-text" placeholder="Quand tu r&eacute;alises que..."></textarea>
+                    {# Le plateau TikTok est PLEIN ÉCRAN : il n'a pas de bandeau
+                       de gabarit — son texte, c'est le POV ci-dessous. #}
+                    <p class="hint">Instagram uniquement &#8212; le plateau TikTok est plein &eacute;cran, son texte est le &#171;&nbsp;POV&nbsp;&#187;.</p>
 
                     {# <button> et pas <div> : editor.js n'écoute que `click`,
                        et seul un vrai bouton déclenche `click` à Entrée/Espace.
@@ -399,6 +402,9 @@
                             <input type="range" class="slider" id="frame-height" min="30" max="100" value="100">
                             <output class="slider-value" id="frame-height-value" for="frame-height">100%</output>
                         </div>
+                        {# Le plateau TikTok est plein écran : réduire son cadre
+                           recréerait des bandes — le curseur ne pilote qu'Instagram. #}
+                        <p class="hint">Instagram uniquement &#8212; le plateau TikTok reste plein &eacute;cran.</p>
                     </div>
 
                     {# L'opacité du logo est fixée à 50 % (constante WATERMARK_OPACITY dans
