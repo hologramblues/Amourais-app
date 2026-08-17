@@ -97,15 +97,14 @@
         // STATE
         // ============================================
         const state = {
-            currentTemplate: 'square',
+            // Format du canvas INSTAGRAM uniquement (le canvas TikTok est
+            // fixe en 'story' 1080×1920). Défaut : Portrait 4:5.
+            currentTemplate: 'portrait',
             // Media state (image or video)
             mediaType: null, // 'image' or 'video'
             imageSrc: null,
             imageName: '',
             imageSize: 0,
-            imageScale: 100,
-            imageOffsetX: 0,
-            imageOffsetY: 0,
             // Video-specific state
             videoFile: null,
             videoDuration: 0,
@@ -118,12 +117,11 @@
             lineHeight: 1.2,
             overlayText: '',
             showOverlay: false,
+            // Texte TikTok « POV » — rendu sur le canvas TikTok uniquement.
+            povText: '',
+            povStyle: 'light',   // 'light' = fond blanc/texte noir, 'dark' = fond noir translucide/texte blanc
             // Watermark state — opacité constante, voir WATERMARK_OPACITY
             watermarkOpacity: WATERMARK_OPACITY,
-            // Frame customization (for story template)
-            frameHeightPercent: 100,
-            // Canvas state
-            scale: 1,
             // ---- Retouche image (LOT C) ----
             // Tout est appliqué par Fabric côté client : rien ne part au
             // serveur, donc aucun fichier temporaire à nettoyer et aucun
@@ -147,6 +145,46 @@
             cropRatio: null, rotation: 0, flipX: false, flipY: false,
             brightness: 0, contrast: 0, saturation: 0
         };
+
+        // ============================================
+        // PLATEAUX (ÉDITEUR DOUBLE)
+        // --------------------------------------------
+        // UNE composition, DEUX rendus : le média, le texte et la retouche
+        // alimentent les deux canvas ; le CADRAGE (position/zoom de l'image
+        // dans le cadre) est PAR plateau — un recadrage 4:5 et un recadrage
+        // 9:16 ne peuvent pas être identiques. Chaque plateau porte donc ses
+        // objets Fabric ET son état de cadrage.
+        // ============================================
+        function makePane(key, label, platform, canvasId, stageId) {
+            return {
+                key, label, platform, canvasId, stageId,
+                enabled: true,
+                // Objets Fabric propres au plateau
+                canvas: null,
+                textBox: null, imageObj: null, overlayTextObj: null,
+                frameRect: null, frameBorder: null, watermark: null,
+                templateBg: null, clipRect: null, povObj: null,
+                snapLines: [],
+                // Cadrage par plateau
+                imageScale: 100,
+                imageOffsetX: 0,
+                imageOffsetY: 0,
+                frameHeightPercent: 100,
+                scale: 1
+            };
+        }
+
+        const panes = {
+            ig: makePane('ig', 'Instagram', 'instagram', 'meme-canvas-ig', 'stage-ig'),
+            tt: makePane('tt', 'TikTok', 'tiktok', 'meme-canvas-tt', 'stage-tt')
+        };
+
+        function eachPane(fn) { fn(panes.ig); fn(panes.tt); }
+        function activePanes() { return [panes.ig, panes.tt].filter(p => p.enabled); }
+
+        /** Clé de template du plateau : IG suit les boutons de format, TikTok est fixe. */
+        function templateKeyOf(p) { return p.key === 'ig' ? state.currentTemplate : 'story'; }
+        function templateOf(p) { return TEMPLATES[templateKeyOf(p)]; }
 
         // ============================================
         // DOM ELEMENTS
@@ -223,12 +261,21 @@
         const exportDims = document.getElementById('export-dims');
         const exportFormatLabel = document.getElementById('export-format-label');
 
+        // ---- Éditeur double ----
+        const stagesEl = document.getElementById('stages');
+        const stageDimsIG = document.getElementById('stage-ig-dims');
+        const povTextInput = document.getElementById('pov-text');
+        const povStyleGroup = document.getElementById('pov-style-group');
+        const scheduleDialog = document.getElementById('schedule-dialog');
+        const scheduleForm = document.getElementById('schedule-form');
+        const scheduleDatetime = document.getElementById('schedule-datetime');
+        const scheduleCheckIG = document.getElementById('schedule-check-ig');
+        const scheduleCheckTT = document.getElementById('schedule-check-tt');
+        const scheduleIGDims = document.getElementById('schedule-ig-dims');
+
         // ============================================
-        // FABRIC CANVAS
+        // FABRIC CANVAS — un par plateau (voir `panes`)
         // ============================================
-        let canvas;
-        let textBox, imageObj, overlayTextObj, frameRect, frameBorder, watermark, templateBg;
-        let clipRect; // The fixed clipping rectangle
 
         // Canvas padding to show controls outside template - needs to be large enough for scaled images
         const CANVAS_PADDING = 350;
@@ -252,20 +299,16 @@
         }
 
         function repaintBackdrop() {
-            if (!canvas) return;
-            canvas.backgroundColor = artboardBackdrop();
-            canvas.requestRenderAll();
+            eachPane(function(p) {
+                if (!p.canvas) return;
+                p.canvas.backgroundColor = artboardBackdrop();
+                p.canvas.requestRenderAll();
+            });
         }
 
-        function initCanvas() {
-            canvas = new fabric.Canvas('meme-canvas', {
-                backgroundColor: artboardBackdrop(),
-                selection: true,
-                preserveObjectStacking: true,
-                perPixelTargetFind: false // Click on bounding box, not just visible pixels
-            });
-
-            // Custom controls style - larger and more visible
+        function initCanvases() {
+            // Custom controls style - larger and more visible (prototype
+            // partagé : une seule fois pour les deux canvas)
             fabric.Object.prototype.set({
                 borderColor: '#ef4444',
                 cornerColor: '#ef4444',
@@ -278,27 +321,35 @@
                 padding: 10
             });
 
-            updateCanvasSize();
-            createElements();
-            setupCanvasHoverEffects();
-            setupSnapping();
+            eachPane(function(p) {
+                p.canvas = new fabric.Canvas(p.canvasId, {
+                    backgroundColor: artboardBackdrop(),
+                    selection: true,
+                    preserveObjectStacking: true,
+                    perPixelTargetFind: false // Click on bounding box, not just visible pixels
+                });
+                updateCanvasSize(p);
+                createElements(p);
+                setupCanvasHoverEffects(p);
+                setupSnapping(p);
+            });
         }
 
-        function setupCanvasHoverEffects() {
+        function setupCanvasHoverEffects(p) {
             // Show border on hover
-            canvas.on('mouse:over', function(e) {
+            p.canvas.on('mouse:over', function(e) {
                 if (e.target && e.target.selectable) {
                     e.target._showBorder = true;
                     e.target.set('dirty', true);
-                    canvas.renderAll();
+                    p.canvas.renderAll();
                 }
             });
 
-            canvas.on('mouse:out', function(e) {
+            p.canvas.on('mouse:out', function(e) {
                 if (e.target && e.target._showBorder) {
                     e.target._showBorder = false;
                     e.target.set('dirty', true);
-                    canvas.renderAll();
+                    p.canvas.renderAll();
                 }
             });
         }
@@ -307,14 +358,13 @@
         // SNAPPING / MAGNET SYSTEM
         // ============================================
         const SNAP_THRESHOLD = 15; // Distance in pixels to trigger snap
-        let snapLines = []; // Visual guide lines
 
-        function setupSnapping() {
-            canvas.on('object:moving', function(e) {
+        function setupSnapping(p) {
+            p.canvas.on('object:moving', function(e) {
                 const obj = e.target;
                 if (!obj) return;
 
-                const template = TEMPLATES[state.currentTemplate];
+                const template = templateOf(p);
                 const frame = template.frame;
                 const offset = CANVAS_PADDING;
                 const textArea = template.textArea;
@@ -345,27 +395,27 @@
 
                 let snappedX = false;
                 let snappedY = false;
-                
+
                 // Clear previous snap lines
-                clearSnapLines();
+                clearSnapLines(p);
 
                 // Check X snapping (left edge)
                 for (const snapX of snapPointsX) {
                     if (Math.abs(objLeft - snapX) < SNAP_THRESHOLD) {
                         obj.set('left', snapX);
                         snappedX = true;
-                        showSnapLine('vertical', snapX);
+                        showSnapLine(p, 'vertical', snapX);
                         break;
                     }
                 }
 
                 // Check X snapping (center) - only for text objects
-                if (!snappedX && (obj === textBox || obj === overlayTextObj)) {
+                if (!snappedX && (obj === p.textBox || obj === p.overlayTextObj || obj === p.povObj)) {
                     const templateCenterX = offset + template.width / 2;
                     if (Math.abs(objCenterX - templateCenterX) < SNAP_THRESHOLD) {
                         obj.set('left', templateCenterX - (obj.width * (obj.scaleX || 1)) / 2);
                         snappedX = true;
-                        showSnapLine('vertical', templateCenterX);
+                        showSnapLine(p, 'vertical', templateCenterX);
                     }
                 }
 
@@ -374,29 +424,29 @@
                     if (Math.abs(objTop - snapY) < SNAP_THRESHOLD) {
                         obj.set('top', snapY);
                         snappedY = true;
-                        showSnapLine('horizontal', snapY);
+                        showSnapLine(p, 'horizontal', snapY);
                         break;
                     }
                 }
 
-                canvas.renderAll();
+                p.canvas.renderAll();
             });
 
-            canvas.on('object:modified', function() {
-                clearSnapLines();
-                canvas.renderAll();
+            p.canvas.on('object:modified', function() {
+                clearSnapLines(p);
+                p.canvas.renderAll();
             });
 
-            canvas.on('mouse:up', function() {
-                clearSnapLines();
-                canvas.renderAll();
+            p.canvas.on('mouse:up', function() {
+                clearSnapLines(p);
+                p.canvas.renderAll();
             });
         }
 
-        function showSnapLine(orientation, position) {
-            const template = TEMPLATES[state.currentTemplate];
+        function showSnapLine(p, orientation, position) {
+            const template = templateOf(p);
             const offset = CANVAS_PADDING;
-            
+
             let line;
             if (orientation === 'vertical') {
                 line = new fabric.Line([position, offset, position, offset + template.height], {
@@ -417,51 +467,66 @@
                     opacity: 0.8
                 });
             }
-            
-            canvas.add(line);
-            snapLines.push(line);
+
+            p.canvas.add(line);
+            p.snapLines.push(line);
         }
 
-        function clearSnapLines() {
-            snapLines.forEach(line => canvas.remove(line));
-            snapLines = [];
+        function clearSnapLines(p) {
+            p.snapLines.forEach(line => p.canvas.remove(line));
+            p.snapLines = [];
         }
 
-        function updateCanvasSize() {
-            const template = TEMPLATES[state.currentTemplate];
+        function updateCanvasSize(p) {
+            const template = templateOf(p);
             const { width, height } = template;
             const container = document.querySelector('.preview-area');
-            const maxW = container.clientWidth - 60;
-            const maxH = container.clientHeight - 100;
-            
+
+            // Deux plateaux côte à côte : chacun reçoit sa part de la
+            // largeur. En pile (colonne, sous 1100px), chacun a tout.
+            const stacked = stagesEl
+                && getComputedStyle(stagesEl).flexDirection === 'column';
+            const visible = stacked ? 1 : Math.max(1, activePanes().length);
+            const baseW = (stagesEl ? stagesEl.clientWidth : container.clientWidth);
+            const maxW = Math.max(160, baseW / visible - 60);
+            const maxH = Math.max(160, container.clientHeight - 140);
+
             // Calculate scale based on template + padding
             const totalWidth = width + (CANVAS_PADDING * 2);
             const totalHeight = height + (CANVAS_PADDING * 2);
-            
-            state.scale = Math.min(maxW / totalWidth, maxH / totalHeight, 0.4);
-            
-            canvas.setWidth(totalWidth * state.scale);
-            canvas.setHeight(totalHeight * state.scale);
-            canvas.setZoom(state.scale);
+
+            p.scale = Math.min(maxW / totalWidth, maxH / totalHeight, 0.4);
+
+            p.canvas.setWidth(totalWidth * p.scale);
+            p.canvas.setHeight(totalHeight * p.scale);
+            p.canvas.setZoom(p.scale);
         }
 
-        function createElements() {
-            canvas.clear();
-            canvas.backgroundColor = artboardBackdrop();
+        function updateAllCanvasSizes() {
+            eachPane(function(p) {
+                if (!p.canvas) return;
+                updateCanvasSize(p);
+                p.canvas.renderAll();
+            });
+        }
 
-            const template = TEMPLATES[state.currentTemplate];
+        function createElements(p) {
+            p.canvas.clear();
+            p.canvas.backgroundColor = artboardBackdrop();
+
+            const template = templateOf(p);
             const frame = template.frame;
             const offset = CANVAS_PADDING; // Offset for all elements
 
             // Calculate effective frame height (for story template customization)
-            const effectiveFrameHeight = Math.round(frame.height * (state.frameHeightPercent / 100));
-            
+            const effectiveFrameHeight = Math.round(frame.height * (p.frameHeightPercent / 100));
+
             // Calculate Y position to keep frame centered
             const originalCenterY = frame.y + frame.height / 2;
             const effectiveFrameY = originalCenterY - effectiveFrameHeight / 2;
 
             // White template background
-            templateBg = new fabric.Rect({
+            p.templateBg = new fabric.Rect({
                 left: offset,
                 top: offset,
                 width: template.width,
@@ -470,10 +535,10 @@
                 selectable: false,
                 evented: false
             });
-            canvas.add(templateBg);
+            p.canvas.add(p.templateBg);
 
             // Create the clip path (absolute position - stays fixed)
-            clipRect = new fabric.Rect({
+            p.clipRect = new fabric.Rect({
                 left: frame.x + offset,
                 top: effectiveFrameY + offset,
                 width: frame.width,
@@ -484,7 +549,7 @@
             });
 
             // Frame placeholder (gray background when no image)
-            frameRect = new fabric.Rect({
+            p.frameRect = new fabric.Rect({
                 left: frame.x + offset,
                 top: effectiveFrameY + offset,
                 width: frame.width,
@@ -495,10 +560,10 @@
                 selectable: false,
                 evented: false
             });
-            canvas.add(frameRect);
+            p.canvas.add(p.frameRect);
 
             // Frame border - interactive indicator (shows where image area is)
-            frameBorder = new fabric.Rect({
+            p.frameBorder = new fabric.Rect({
                 left: frame.x + offset,
                 top: effectiveFrameY + offset,
                 width: frame.width,
@@ -512,11 +577,11 @@
                 selectable: false,
                 evented: false
             });
-            canvas.add(frameBorder);
+            p.canvas.add(p.frameBorder);
 
             // Text box
             const textArea = template.textArea;
-            textBox = new fabric.Textbox(state.text || 'Tape ton texte...', {
+            p.textBox = new fabric.Textbox(state.text || 'Tape ton texte...', {
                 left: textArea.x + offset,
                 top: textArea.y + offset,
                 width: textArea.width,
@@ -532,20 +597,29 @@
                 hoverCursor: 'move',
                 moveCursor: 'move'
             });
-            canvas.add(textBox);
-            
-            // Sync textBox changes back to state and input
-            textBox.on('changed', function() {
-                const newText = textBox.text === 'Tape ton texte...' ? '' : textBox.text;
+            p.canvas.add(p.textBox);
+
+            // Sync textBox changes back to state, input AND the twin pane :
+            // le texte est UNE donnée de la composition, rendue deux fois.
+            p.textBox.on('changed', function() {
+                const newText = p.textBox.text === 'Tape ton texte...' ? '' : p.textBox.text;
                 state.text = newText;
                 memeTextInput.value = newText;
+                eachPane(function(other) {
+                    if (other === p || !other.textBox) return;
+                    other.textBox.set({
+                        text: newText || 'Tape ton texte...',
+                        fill: '#000000'
+                    });
+                    other.canvas.renderAll();
+                });
             });
 
             // Watermark (logo or text fallback)
             const wm = template.watermark;
             if (logoImage) {
                 // Use logo image
-                watermark = new fabric.Image(logoImage.getElement(), {
+                p.watermark = new fabric.Image(logoImage.getElement(), {
                     left: wm.x + offset,
                     top: wm.y + offset,
                     originX: 'right',
@@ -561,7 +635,7 @@
                 });
             } else {
                 // Fallback to text if logo not loaded yet
-                watermark = new fabric.Text('SAMOURAÏS', {
+                p.watermark = new fabric.Text('SAMOURAÏS', {
                     left: wm.x + offset,
                     top: wm.y + offset,
                     fontSize: template.width * 0.04,
@@ -587,9 +661,16 @@
                     moveCursor: 'move'
                 });
             }
-            canvas.add(watermark);
+            p.canvas.add(p.watermark);
 
-            canvas.renderAll();
+            // Le bloc POV appartient au canvas TikTok : il est recréé après
+            // chaque reconstruction des éléments de ce plateau.
+            if (p.key === 'tt') {
+                p.povObj = null;
+                if (state.povText) ensurePovObject();
+            }
+
+            p.canvas.renderAll();
         }
 
         // ============================================
@@ -617,9 +698,12 @@
                 state.imageSrc = e.target.result;
                 state.imageName = file.name;
                 state.imageSize = file.size;
-                state.imageScale = 100;
-                state.imageOffsetX = 0;
-                state.imageOffsetY = 0;
+                // Le cadrage repart de zéro SUR CHAQUE plateau.
+                eachPane(function(p) {
+                    p.imageScale = 100;
+                    p.imageOffsetX = 0;
+                    p.imageOffsetY = 0;
+                });
                 // LOT C — une nouvelle image repart d'une retouche vierge :
                 // garder le recadrage de la précédente n'aurait aucun sens.
                 Object.assign(state, IMAGE_EDIT_DEFAULTS);
@@ -630,7 +714,7 @@
                 timelineContainer.style.display = 'none';
 
                 updateUploadZone();
-                addImageToCanvas(e.target.result);
+                addImageToAllPanes(e.target.result);
                 
                 imageScaleSection.style.display = 'block';
                 imageScaleSlider.value = 100;
@@ -649,9 +733,11 @@
             state.videoFile = file;
             state.imageName = file.name;
             state.imageSize = file.size;
-            state.imageScale = 100;
-            state.imageOffsetX = 0;
-            state.imageOffsetY = 0;
+            eachPane(function(p) {
+                p.imageScale = 100;
+                p.imageOffsetX = 0;
+                p.imageOffsetY = 0;
+            });
             // LOT C — la retouche et le format image ne s'appliquent pas à
             // une vidéo : on remet à zéro et on masque les deux blocs.
             Object.assign(state, IMAGE_EDIT_DEFAULTS);
@@ -715,8 +801,8 @@
                     
                     const dataURL = tempCanvas.toDataURL('image/jpeg', 0.8);
                     state.imageSrc = dataURL;
-                    
-                    addImageToCanvas(dataURL);
+
+                    addImageToAllPanes(dataURL);
                     resolve(dataURL);
                 };
             });
@@ -927,18 +1013,21 @@
                 const currentTime = videoSource.currentTime;
                 updatePlayhead(currentTime);
                 
-                // Update canvas preview
-                if (imageObj) {
-                    const tempCanvas = document.createElement('canvas');
-                    tempCanvas.width = videoSource.videoWidth;
-                    tempCanvas.height = videoSource.videoHeight;
-                    const ctx = tempCanvas.getContext('2d');
-                    ctx.drawImage(videoSource, 0, 0);
-                    
-                    imageObj.setSrc(tempCanvas.toDataURL('image/jpeg', 0.8), () => {
-                        canvas.renderAll();
+                // Update canvas preview — la frame courante alimente les
+                // DEUX plateaux, comme le média importé.
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = videoSource.videoWidth;
+                tempCanvas.height = videoSource.videoHeight;
+                const ctx = tempCanvas.getContext('2d');
+                ctx.drawImage(videoSource, 0, 0);
+                const frameURL = tempCanvas.toDataURL('image/jpeg', 0.8);
+
+                eachPane(function(p) {
+                    if (!p.imageObj) return;
+                    p.imageObj.setSrc(frameURL, () => {
+                        p.canvas.renderAll();
                     });
-                }
+                });
                 
                 if (currentTime >= state.trimEnd) {
                     pauseVideo();
@@ -969,12 +1058,14 @@
          * sortie (rien de bon ne peut en sortir) et on le dit à l'écran.
          */
         function rejectUnusableImage() {
-            if (imageObj) {
-                canvas.remove(imageObj);
-                imageObj = null;
-            }
+            eachPane(function(p) {
+                if (p.imageObj) {
+                    p.canvas.remove(p.imageObj);
+                    p.imageObj = null;
+                }
+                p.canvas.requestRenderAll();
+            });
             state.imageSrc = null;
-            canvas.requestRenderAll();
             updateImageEditReadouts();
 
             // La vidéo ne passe ici que par une capture de frame déjà rendue
@@ -988,7 +1079,14 @@
             note('Ce fichier n’est pas une image exploitable : rien n’a pu être décodé. Choisis un PNG, un JPEG ou un WebP valide.', 'error');
         }
 
-        function addImageToCanvas(src) {
+        /** Le même média alimente LES DEUX plateaux, chacun avec SON cadrage. */
+        let rejectionNotified = false;
+        function addImageToAllPanes(src) {
+            rejectionNotified = false;
+            eachPane(function(p) { addImageToCanvas(p, src); });
+        }
+
+        function addImageToCanvas(p, src) {
             // Fabric 5 passe `isError` en second argument et rend malgré tout
             // un objet Image — de dimensions 0×0. Sans ce contrôle, un fichier
             // qui n'est pas une image (extension trompeuse, média tronqué)
@@ -997,15 +1095,20 @@
             // se voir : c'est le défaut que l'audit reproche déjà à FFmpeg.
             fabric.Image.fromURL(src, (img, isError) => {
                 if (isError || !img || !img.width || !img.height) {
-                    rejectUnusableImage();
+                    // Deux plateaux, un seul message : l'échec de décodage
+                    // est celui du FICHIER, pas d'un canvas.
+                    if (!rejectionNotified) {
+                        rejectionNotified = true;
+                        rejectUnusableImage();
+                    }
                     return;
                 }
 
-                if (imageObj) {
-                    canvas.remove(imageObj);
+                if (p.imageObj) {
+                    p.canvas.remove(p.imageObj);
                 }
 
-                const template = TEMPLATES[state.currentTemplate];
+                const template = templateOf(p);
                 const frame = template.frame;
                 const offset = CANVAS_PADDING;
 
@@ -1023,15 +1126,15 @@
                 const scaleX = frame.width / (quarterTurn ? img.height : img.width);
                 const scaleY = frame.height / (quarterTurn ? img.width : img.height);
                 const baseScale = Math.max(scaleX, scaleY);
-                const finalScale = baseScale * (state.imageScale / 100);
+                const finalScale = baseScale * (p.imageScale / 100);
 
                 // Center the image in the frame (with offset)
                 const centerX = frame.x + frame.width / 2 + offset;
                 const centerY = frame.y + frame.height / 2 + offset;
 
                 img.set({
-                    left: centerX + state.imageOffsetX,
-                    top: centerY + state.imageOffsetY,
+                    left: centerX + p.imageOffsetX,
+                    top: centerY + p.imageOffsetY,
                     originX: 'center',
                     originY: 'center',
                     scaleX: finalScale,
@@ -1047,7 +1150,7 @@
                     // Lock rotation, only allow scale and move
                     lockRotation: true,
                     // Apply the fixed clip path
-                    clipPath: clipRect,
+                    clipPath: p.clipRect,
                     // Visual styling
                     strokeWidth: 0,
                     borderColor: '#ef4444',
@@ -1059,19 +1162,20 @@
                 // Store base scale for slider calculations
                 img._baseScale = baseScale;
 
-                imageObj = img;
-                canvas.add(imageObj);
-                
+                p.imageObj = img;
+                p.canvas.add(p.imageObj);
+
                 // Reorder layers - templateBg at very back, then frameRect, then image
-                canvas.sendToBack(imageObj);
-                canvas.sendToBack(frameBorder);
-                canvas.sendToBack(frameRect);
-                canvas.sendToBack(templateBg);
-                canvas.bringToFront(textBox);
-                canvas.bringToFront(watermark);
-                
-                if (overlayTextObj) {
-                    canvas.bringToFront(overlayTextObj);
+                p.canvas.sendToBack(p.imageObj);
+                p.canvas.sendToBack(p.frameBorder);
+                p.canvas.sendToBack(p.frameRect);
+                p.canvas.sendToBack(p.templateBg);
+                p.canvas.bringToFront(p.textBox);
+                if (p.povObj) p.canvas.bringToFront(p.povObj);
+                p.canvas.bringToFront(p.watermark);
+
+                if (p.overlayTextObj) {
+                    p.canvas.bringToFront(p.overlayTextObj);
                 }
 
                 // LOT C — réglages (luminosité / contraste / saturation)
@@ -1079,85 +1183,90 @@
                 applyImageFilters();
                 updateImageEditReadouts();
 
-                // Track image movement
-                imageObj.on('moving', function() {
-                    const template = TEMPLATES[state.currentTemplate];
+                // Track image movement — le cadrage est PAR plateau.
+                p.imageObj.on('moving', function() {
+                    const template = templateOf(p);
                     const frame = template.frame;
                     const offset = CANVAS_PADDING;
                     const centerX = frame.x + frame.width / 2 + offset;
                     const centerY = frame.y + frame.height / 2 + offset;
-                    
-                    state.imageOffsetX = this.left - centerX;
-                    state.imageOffsetY = this.top - centerY;
+
+                    p.imageOffsetX = this.left - centerX;
+                    p.imageOffsetY = this.top - centerY;
                 });
 
                 // Track image scaling
-                imageObj.on('scaling', function() {
+                p.imageObj.on('scaling', function() {
                     const currentScale = this.scaleX;
                     const baseScale = this._baseScale;
                     const percentage = Math.round((currentScale / baseScale) * 100);
-                    
-                    state.imageScale = percentage;
+
+                    p.imageScale = percentage;
                     imageScaleSlider.value = Math.min(200, Math.max(50, percentage));
                     imageScaleValue.textContent = percentage + '%';
                 });
 
-                canvas.renderAll();
+                p.canvas.renderAll();
             }, { crossOrigin: 'anonymous' });
         }
 
+        // Le slider agit sur LES DEUX plateaux (même geste qu'avant) ; le
+        // zoom par poignées, lui, reste propre au plateau manipulé.
         function updateImageScale(percentage) {
-            state.imageScale = percentage;
             imageScaleValue.textContent = percentage + '%';
-            
-            if (imageObj && imageObj._baseScale) {
-                const newScale = imageObj._baseScale * (percentage / 100);
-                imageObj.set({
-                    scaleX: newScale,
-                    scaleY: newScale
-                });
-                canvas.renderAll();
-            }
+            eachPane(function(p) {
+                p.imageScale = percentage;
+                if (p.imageObj && p.imageObj._baseScale) {
+                    const newScale = p.imageObj._baseScale * (percentage / 100);
+                    p.imageObj.set({
+                        scaleX: newScale,
+                        scaleY: newScale
+                    });
+                    p.canvas.renderAll();
+                }
+            });
         }
 
         function updateFrameHeight(percentage) {
-            state.frameHeightPercent = percentage;
             frameHeightValue.textContent = percentage + '%';
-            
-            const template = TEMPLATES[state.currentTemplate];
-            const frame = template.frame;
-            const offset = CANVAS_PADDING;
-            
-            // Calculer la nouvelle hauteur effective
-            const effectiveFrameHeight = Math.round(frame.height * (percentage / 100));
-            
-            // Calculer le centre original du cadre
-            const originalCenterY = frame.y + frame.height / 2;
-            
-            // Calculer la nouvelle position Y pour garder le cadre centré
-            const newFrameY = originalCenterY - effectiveFrameHeight / 2;
-            
-            // Mettre à jour les dimensions ET la position du cadre
-            if (clipRect) {
-                clipRect.set({ 
-                    top: newFrameY + offset,
-                    height: effectiveFrameHeight 
-                });
-            }
-            if (frameRect) {
-                frameRect.set({ 
-                    top: newFrameY + offset,
-                    height: effectiveFrameHeight 
-                });
-            }
-            if (frameBorder) {
-                frameBorder.set({ 
-                    top: newFrameY + offset,
-                    height: effectiveFrameHeight 
-                });
-            }
-            
-            canvas.renderAll();
+            eachPane(function(p) {
+                p.frameHeightPercent = percentage;
+
+                const template = templateOf(p);
+                const frame = template.frame;
+                const offset = CANVAS_PADDING;
+
+                // Calculer la nouvelle hauteur effective
+                const effectiveFrameHeight = Math.round(frame.height * (percentage / 100));
+
+                // Calculer le centre original du cadre
+                const originalCenterY = frame.y + frame.height / 2;
+
+                // Calculer la nouvelle position Y pour garder le cadre centré
+                const newFrameY = originalCenterY - effectiveFrameHeight / 2;
+
+                // Mettre à jour les dimensions ET la position du cadre
+                if (p.clipRect) {
+                    p.clipRect.set({
+                        top: newFrameY + offset,
+                        height: effectiveFrameHeight
+                    });
+                }
+                if (p.frameRect) {
+                    p.frameRect.set({
+                        top: newFrameY + offset,
+                        height: effectiveFrameHeight
+                    });
+                }
+                if (p.frameBorder) {
+                    p.frameBorder.set({
+                        top: newFrameY + offset,
+                        height: effectiveFrameHeight
+                    });
+                }
+
+                p.canvas.renderAll();
+            });
         }
 
         function updateUploadZone() {
@@ -1195,10 +1304,12 @@
             state.imageSrc = null;
             state.imageName = '';
             state.imageSize = 0;
-            state.imageScale = 100;
-            state.imageOffsetX = 0;
-            state.imageOffsetY = 0;
-            
+            eachPane(function(p) {
+                p.imageScale = 100;
+                p.imageOffsetX = 0;
+                p.imageOffsetY = 0;
+            });
+
             // Reset video state
             state.videoFile = null;
             state.videoDuration = 0;
@@ -1213,12 +1324,14 @@
             }
             
             fileInput.value = '';
-            
-            if (imageObj) {
-                canvas.remove(imageObj);
-                imageObj = null;
-            }
-            
+
+            eachPane(function(p) {
+                if (p.imageObj) {
+                    p.canvas.remove(p.imageObj);
+                    p.imageObj = null;
+                }
+            });
+
             // Hide all media-related UI
             imageScaleSection.style.display = 'none';
             selectImageBtn.style.display = 'none';
@@ -1230,7 +1343,7 @@
             exportBtn.textContent = '📥 Télécharger le meme';
             scheduleBtn.disabled = true;
             if (saveMemeBtn) saveMemeBtn.disabled = true;
-            canvas.renderAll();
+            eachPane(function(p) { p.canvas.renderAll(); });
         };
 
         // ============================================
@@ -1238,22 +1351,24 @@
         // ============================================
         function updateText(text) {
             state.text = text;
-            if (textBox) {
-                textBox.set({
+            eachPane(function(p) {
+                if (!p.textBox) return;
+                p.textBox.set({
                     text: text || 'Tape ton texte...',
                     fill: '#000000'
                 });
-                canvas.renderAll();
-            }
+                p.canvas.renderAll();
+            });
         }
 
         function updateTextSize(size) {
             state.textSize = size;
             textSizeValue.textContent = size + 'px';
-            if (textBox) {
-                textBox.set({ fontSize: parseInt(size) });
-                canvas.renderAll();
-            }
+            eachPane(function(p) {
+                if (!p.textBox) return;
+                p.textBox.set({ fontSize: parseInt(size) });
+                p.canvas.renderAll();
+            });
         }
 
         function updateLineHeight(value) {
@@ -1261,10 +1376,11 @@
             const ratio = value / 100;
             state.lineHeight = ratio;
             lineHeightValue.textContent = ratio.toFixed(1);
-            if (textBox) {
-                textBox.set({ lineHeight: ratio });
-                canvas.renderAll();
-            }
+            eachPane(function(p) {
+                if (!p.textBox) return;
+                p.textBox.set({ lineHeight: ratio });
+                p.canvas.renderAll();
+            });
         }
 
         // ============================================
@@ -1274,26 +1390,28 @@
             state.showOverlay = !state.showOverlay;
             overlaySwitch.classList.toggle('active', state.showOverlay);
             overlayTextInput.style.display = state.showOverlay ? 'block' : 'none';
-            
-            if (state.showOverlay && state.overlayText) {
-                addOverlayText();
-            } else if (overlayTextObj) {
-                canvas.remove(overlayTextObj);
-                overlayTextObj = null;
-            }
-            canvas.renderAll();
+
+            eachPane(function(p) {
+                if (state.showOverlay && state.overlayText) {
+                    addOverlayText(p);
+                } else if (p.overlayTextObj) {
+                    p.canvas.remove(p.overlayTextObj);
+                    p.overlayTextObj = null;
+                }
+                p.canvas.renderAll();
+            });
         }
 
-        function addOverlayText() {
-            if (overlayTextObj) {
-                canvas.remove(overlayTextObj);
+        function addOverlayText(p) {
+            if (p.overlayTextObj) {
+                p.canvas.remove(p.overlayTextObj);
             }
 
-            const template = TEMPLATES[state.currentTemplate];
+            const template = templateOf(p);
             const frame = template.frame;
             const offset = CANVAS_PADDING;
 
-            overlayTextObj = new fabric.Text(state.overlayText.toUpperCase(), {
+            p.overlayTextObj = new fabric.Text(state.overlayText.toUpperCase(), {
                 left: frame.x + frame.width / 2 + offset,
                 top: frame.y + frame.height - 60 + offset,
                 fontSize: template.width * 0.055,
@@ -1311,21 +1429,27 @@
                 moveCursor: 'move'
             });
 
-            canvas.add(overlayTextObj);
-            canvas.bringToFront(overlayTextObj);
-            canvas.bringToFront(watermark);
-            canvas.renderAll();
+            p.canvas.add(p.overlayTextObj);
+            p.canvas.bringToFront(p.overlayTextObj);
+            p.canvas.bringToFront(p.watermark);
+            p.canvas.renderAll();
+        }
+
+        function addOverlayTextToAllPanes() {
+            eachPane(function(p) { addOverlayText(p); });
         }
 
         function updateOverlayText(text) {
             state.overlayText = text;
-            if (state.showOverlay && text) {
-                addOverlayText();
-            } else if (overlayTextObj && !text) {
-                canvas.remove(overlayTextObj);
-                overlayTextObj = null;
-                canvas.renderAll();
-            }
+            eachPane(function(p) {
+                if (state.showOverlay && text) {
+                    addOverlayText(p);
+                } else if (p.overlayTextObj && !text) {
+                    p.canvas.remove(p.overlayTextObj);
+                    p.overlayTextObj = null;
+                    p.canvas.renderAll();
+                }
+            });
         }
 
 
@@ -1557,36 +1681,38 @@
          * couvrir le cadre et laisse apparaître le fond gris.
          */
         function reapplyImageTransforms() {
-            if (!imageObj) return;
+            eachPane(function(p) {
+                if (!p.imageObj) return;
 
-            const template = TEMPLATES[state.currentTemplate];
-            const frame = template.frame;
-            const offset = CANVAS_PADDING;
+                const template = templateOf(p);
+                const frame = template.frame;
+                const offset = CANVAS_PADDING;
 
-            applyCropToImage(imageObj, state.cropRatio);
+                applyCropToImage(p.imageObj, state.cropRatio);
 
-            const quarterTurn = (state.rotation % 180) !== 0;
-            const srcW = quarterTurn ? imageObj.height : imageObj.width;
-            const srcH = quarterTurn ? imageObj.width : imageObj.height;
+                const quarterTurn = (state.rotation % 180) !== 0;
+                const srcW = quarterTurn ? p.imageObj.height : p.imageObj.width;
+                const srcH = quarterTurn ? p.imageObj.width : p.imageObj.height;
 
-            const baseScale = Math.max(frame.width / srcW, frame.height / srcH);
-            imageObj._baseScale = baseScale;
+                const baseScale = Math.max(frame.width / srcW, frame.height / srcH);
+                p.imageObj._baseScale = baseScale;
 
-            const finalScale = baseScale * (state.imageScale / 100);
-            const centerX = frame.x + frame.width / 2 + offset;
-            const centerY = frame.y + frame.height / 2 + offset;
+                const finalScale = baseScale * (p.imageScale / 100);
+                const centerX = frame.x + frame.width / 2 + offset;
+                const centerY = frame.y + frame.height / 2 + offset;
 
-            imageObj.set({
-                angle: state.rotation,
-                flipX: state.flipX,
-                flipY: state.flipY,
-                scaleX: finalScale,
-                scaleY: finalScale,
-                left: centerX + state.imageOffsetX,
-                top: centerY + state.imageOffsetY
+                p.imageObj.set({
+                    angle: state.rotation,
+                    flipX: state.flipX,
+                    flipY: state.flipY,
+                    scaleX: finalScale,
+                    scaleY: finalScale,
+                    left: centerX + p.imageOffsetX,
+                    top: centerY + p.imageOffsetY
+                });
+                p.imageObj.setCoords();
+                p.canvas.requestRenderAll();
             });
-            imageObj.setCoords();
-            canvas.requestRenderAll();
             updateImageEditReadouts();
         }
 
@@ -1597,42 +1723,49 @@
 
         function applyImageFiltersNow() {
             filterFrame = null;
-            if (!imageObj) return;
+            let filterFailureNoted = false;
 
-            const filters = [];
-            if (state.brightness) {
-                filters.push(new fabric.Image.filters.Brightness({
-                    brightness: state.brightness / 100
-                }));
-            }
-            if (state.contrast) {
-                filters.push(new fabric.Image.filters.Contrast({
-                    contrast: state.contrast / 100
-                }));
-            }
-            if (state.saturation) {
-                filters.push(new fabric.Image.filters.Saturation({
-                    saturation: state.saturation / 100
-                }));
-            }
+            eachPane(function(p) {
+                if (!p.imageObj) return;
 
-            imageObj.filters = filters;
-            try {
-                imageObj.applyFilters();
-            } catch (err) {
-                // Un échec de filtre est VISIBLE : on revient à l'image
-                // nue et on le dit, au lieu de laisser un canvas figé
-                // sans explication.
-                console.error('[editor] application des filtres impossible', err);
-                note('Les réglages n’ont pas pu être appliqués à cette image. L’image d’origine est conservée.', 'error');
-                imageObj.filters = [];
-                try { imageObj.applyFilters(); } catch (e) { /* déjà signalé */ }
-            }
-            canvas.requestRenderAll();
+                const filters = [];
+                if (state.brightness) {
+                    filters.push(new fabric.Image.filters.Brightness({
+                        brightness: state.brightness / 100
+                    }));
+                }
+                if (state.contrast) {
+                    filters.push(new fabric.Image.filters.Contrast({
+                        contrast: state.contrast / 100
+                    }));
+                }
+                if (state.saturation) {
+                    filters.push(new fabric.Image.filters.Saturation({
+                        saturation: state.saturation / 100
+                    }));
+                }
+
+                p.imageObj.filters = filters;
+                try {
+                    p.imageObj.applyFilters();
+                } catch (err) {
+                    // Un échec de filtre est VISIBLE : on revient à l'image
+                    // nue et on le dit, au lieu de laisser un canvas figé
+                    // sans explication. Un seul message pour les deux plateaux.
+                    console.error('[editor] application des filtres impossible', err);
+                    if (!filterFailureNoted) {
+                        filterFailureNoted = true;
+                        note('Les réglages n’ont pas pu être appliqués à cette image. L’image d’origine est conservée.', 'error');
+                    }
+                    p.imageObj.filters = [];
+                    try { p.imageObj.applyFilters(); } catch (e) { /* déjà signalé */ }
+                }
+                p.canvas.requestRenderAll();
+            });
         }
 
         function applyImageFilters() {
-            if (!imageObj) return;
+            if (!panes.ig.imageObj && !panes.tt.imageObj) return;
             if (filterFrame) cancelAnimationFrame(filterFrame);
             filterFrame = requestAnimationFrame(applyImageFiltersNow);
         }
@@ -1653,10 +1786,13 @@
             applyImageFiltersNow();
         }
 
-        /** Dimensions annoncées : source, fenêtre de recadrage, rotation. */
+        /** Dimensions annoncées : source, fenêtre de recadrage, rotation.
+            La SOURCE est la même pour les deux plateaux : on lit le premier
+            objet image disponible. */
         function updateImageEditReadouts() {
             if (!cropReadout || !orientReadout) return;
 
+            const imageObj = panes.ig.imageObj || panes.tt.imageObj;
             if (!imageObj) {
                 cropReadout.textContent = 'Source : —';
                 orientReadout.innerHTML = 'Rotation : <strong>0°</strong>';
@@ -1699,7 +1835,7 @@
         function resetImageEdits(silent) {
             Object.assign(state, IMAGE_EDIT_DEFAULTS);
             syncImageEditControls();
-            if (imageObj) {
+            if (panes.ig.imageObj || panes.tt.imageObj) {
                 reapplyImageTransforms();
                 applyImageFilters();
             }
@@ -1710,9 +1846,9 @@
         // FICHIER DE SORTIE (LOT C)
         // ============================================
 
-        /** Dimensions réelles du fichier produit, multiplicateur compris. */
-        function exportPixelSize() {
-            const template = TEMPLATES[state.currentTemplate];
+        /** Dimensions réelles du fichier produit PAR PLATEAU, multiplicateur compris. */
+        function exportPixelSize(p) {
+            const template = templateOf(p);
             return {
                 width: Math.round(template.width * state.exportScale),
                 height: Math.round(template.height * state.exportScale)
@@ -1721,8 +1857,14 @@
 
         function updateExportReadout() {
             if (!exportDims) return;
-            const size = exportPixelSize();
-            exportDims.textContent = `${size.width}×${size.height} px`;
+            // Deux fichiers sortent désormais : on annonce les deux tailles.
+            const parts = activePanes().map(function(p) {
+                const size = exportPixelSize(p);
+                return `${p.label} ${size.width}×${size.height}`;
+            });
+            exportDims.textContent = parts.length
+                ? parts.join(' + ') + ' px'
+                : 'aucun plateau actif';
             if (exportFormatLabel) {
                 exportFormatLabel.textContent = state.exportFormat === 'jpeg'
                     ? `JPEG, qualité ${state.exportQuality}%`
@@ -1738,24 +1880,32 @@
          * Zoom remis à 1, repères de cadre masqués, sélection annulée —
          * puis tout est restauré, y compris si le rendu échoue.
          */
-        function renderCanvasToDataURL(format, quality, multiplier) {
+        function renderCanvasToDataURL(p, format, quality, multiplier) {
             // Ce que l'utilisateur voit doit être ce qui sort du canvas :
             // on vide d'abord les réglages en attente.
             flushImageFilters();
 
-            const template = TEMPLATES[state.currentTemplate];
-            const originalZoom = canvas.getZoom();
+            const template = templateOf(p);
+            const originalZoom = p.canvas.getZoom();
 
-            frameBorder.set({ visible: false });
-            frameRect.set({ visible: false });
-            canvas.discardActiveObject();
-            canvas.setZoom(1);
-            canvas.setWidth(template.width + (CANVAS_PADDING * 2));
-            canvas.setHeight(template.height + (CANVAS_PADDING * 2));
-            canvas.renderAll();
+            p.frameBorder.set({ visible: false });
+            p.frameRect.set({ visible: false });
+            // Le placeholder « Tape ton texte... » est une AIDE d'édition, pas
+            // du contenu : sans cette garde il était GRAVÉ dans chaque export
+            // dont le bandeau était vide — et la planification double l'écrivait
+            // dans les deux vignettes du calendrier d'un coup.
+            const placeholderVisible = p.textBox
+                && p.textBox.visible !== false
+                && p.textBox.text === 'Tape ton texte...';
+            if (placeholderVisible) p.textBox.set({ visible: false });
+            p.canvas.discardActiveObject();
+            p.canvas.setZoom(1);
+            p.canvas.setWidth(template.width + (CANVAS_PADDING * 2));
+            p.canvas.setHeight(template.height + (CANVAS_PADDING * 2));
+            p.canvas.renderAll();
 
             try {
-                return canvas.toDataURL({
+                return p.canvas.toDataURL({
                     format: format,
                     quality: quality,
                     multiplier: multiplier || 1,
@@ -1765,11 +1915,12 @@
                     height: template.height
                 });
             } finally {
-                canvas.setZoom(originalZoom);
-                updateCanvasSize();
-                frameBorder.set({ visible: true });
-                frameRect.set({ visible: true });
-                canvas.renderAll();
+                p.canvas.setZoom(originalZoom);
+                updateCanvasSize(p);
+                p.frameBorder.set({ visible: true });
+                p.frameRect.set({ visible: true });
+                if (placeholderVisible) p.textBox.set({ visible: true });
+                p.canvas.renderAll();
             }
         }
 
@@ -1800,10 +1951,12 @@
         // RESET & EXPORT
         // ============================================
         function resetAll() {
-            state.imageOffsetX = 0;
-            state.imageOffsetY = 0;
-            state.imageScale = 100;
-            
+            eachPane(function(p) {
+                p.imageOffsetX = 0;
+                p.imageOffsetY = 0;
+                p.imageScale = 100;
+            });
+
             imageScaleSlider.value = 100;
             imageScaleValue.textContent = '100%';
 
@@ -1812,13 +1965,13 @@
             Object.assign(state, IMAGE_EDIT_DEFAULTS);
             syncImageEditControls();
 
-            createElements();
+            eachPane(function(p) { createElements(p); });
 
             if (state.imageSrc) {
-                addImageToCanvas(state.imageSrc);
+                addImageToAllPanes(state.imageSrc);
             }
             if (state.showOverlay && state.overlayText) {
-                addOverlayText();
+                addOverlayTextToAllPanes();
             }
             updateText(state.text);
             updateTextSize(state.textSize);
@@ -1832,80 +1985,112 @@
             }
         }
 
+        // ============================================
+        // PLANIFICATION DOUBLE
+        // --------------------------------------------
+        // « Planifier » propose UN post par plateau actif — Instagram avec
+        // l'export du canvas gauche, TikTok avec celui du canvas droit —
+        // même date/heure proposée, modifiable avant validation. Le POST
+        // /api/calendar/posts existant est réutilisé tel quel : la colonne
+        // `platforms` (JSON) porte la plateforme, aucune migration.
+        // ============================================
+
+        /** Valeur `datetime-local` à partir d'un Date (fuseau local). */
+        function toDatetimeLocalValue(d) {
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+                + `T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
         function schedulePost() {
+            if (!scheduleDialog || typeof scheduleDialog.showModal !== 'function') {
+                note('Le dialogue de planification est indisponible dans ce navigateur.', 'error');
+                return;
+            }
+
+            // Même date/heure PROPOSÉE pour les deux posts : prochaine
+            // heure ronde, au moins 30 minutes devant.
+            const proposed = new Date(Date.now() + 90 * 60 * 1000);
+            proposed.setMinutes(0, 0, 0);
+            scheduleDatetime.value = toDatetimeLocalValue(proposed);
+
+            // Un plateau désactivé n'est pas proposé (mais reste décochable
+            // → recochable tant qu'il est actif).
+            scheduleCheckIG.checked = panes.ig.enabled;
+            scheduleCheckIG.disabled = !panes.ig.enabled;
+            scheduleCheckTT.checked = panes.tt.enabled;
+            scheduleCheckTT.disabled = !panes.tt.enabled;
+            if (scheduleIGDims) {
+                const t = templateOf(panes.ig);
+                scheduleIGDims.textContent = `${t.width}×${t.height}`;
+            }
+
+            scheduleDialog.showModal();
+        }
+
+        /** Rend la vignette d'UN plateau et crée son post au calendrier. */
+        function createCalendarPost(p, scheduledAtTs) {
+            let dataURL;
+            try {
+                dataURL = renderCanvasToDataURL(p, 'jpeg', 0.9, 1);
+            } catch (err) {
+                console.error('[editor] rendu de la vignette impossible (' + p.label + ')', err);
+                return Promise.reject(new Error('rendu ' + p.label));
+            }
+
+            const postData = {
+                title: 'Meme — ' + p.label,
+                caption: state.text || '',
+                media_type: state.mediaType === 'video' ? 'video' : 'image',
+                template_format: templateKeyOf(p),
+                thumbnail: dataURL,  // base64 data URL saved as thumbnail
+                status: 'scheduled',
+                scheduled_at: scheduledAtTs,
+                platforms: JSON.stringify([p.platform]),
+            };
+
+            return fetch('/api/calendar/posts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(postData)
+            }).then(r => {
+                if (!r.ok) throw new Error('Failed to create post (' + p.label + ')');
+                return r.json();
+            });
+        }
+
+        function confirmSchedule() {
             // LOT C — même règle que pour l'export : la vignette envoyée au
             // Calendrier doit porter les réglages déjà visibles à l'écran.
             flushImageFilters();
 
-            // Capture current canvas state as image
-            frameBorder.set({ visible: false });
-            frameRect.set({ visible: false });
-            canvas.discardActiveObject();
-            canvas.renderAll();
+            const chosen = [];
+            if (scheduleCheckIG.checked && panes.ig.enabled) chosen.push(panes.ig);
+            if (scheduleCheckTT.checked && panes.tt.enabled) chosen.push(panes.tt);
+            if (!chosen.length) {
+                note('Choisis au moins une plateforme à planifier.', 'warning');
+                return;
+            }
 
-            const template = TEMPLATES[state.currentTemplate];
-            
-            // Reset zoom temporarily for clean capture
-            const originalZoom = canvas.getZoom();
-            canvas.setZoom(1);
-            canvas.setWidth(template.width + (CANVAS_PADDING * 2));
-            canvas.setHeight(template.height + (CANVAS_PADDING * 2));
-            canvas.renderAll();
-            
-            // Capture the canvas
-            const dataURL = canvas.toDataURL({
-                format: 'jpeg',
-                quality: 0.9,
-                left: CANVAS_PADDING,
-                top: CANVAS_PADDING,
-                width: template.width,
-                height: template.height
-            });
+            const when = new Date(scheduleDatetime.value);
+            if (isNaN(when.getTime())) {
+                note('La date de publication est invalide.', 'warning');
+                return;
+            }
+            const ts = Math.round(when.getTime() / 1000);
 
-            // Restore zoom and size
-            canvas.setZoom(originalZoom);
-            updateCanvasSize();
-            frameBorder.set({ visible: true });
-            frameRect.set({ visible: true });
-            canvas.renderAll();
-
-            // Post directly to calendar API
-            const postData = {
-                title: 'Meme — ' + state.currentTemplate,
-                caption: state.text || '',
-                media_type: state.mediaType === 'video' ? 'video' : 'image',
-                template_format: state.currentTemplate,
-                thumbnail: dataURL,  // base64 data URL saved as thumbnail
-                status: 'draft',
-                platforms: '[]',
-            };
-
-            fetch('/api/calendar/posts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(postData)
-            })
-            .then(r => {
-                if (!r.ok) throw new Error('Failed to create post');
-                return r.json();
-            })
-            .then(result => {
-                // Redirect to calendar
-                window.location.href = '/calendar';
-            })
-            .catch(err => {
-                console.error('Schedule error:', err);
-                note('La planification a échoué. Le post est conservé localement : rouvre le Calendrier pour le reprendre.', 'error');
-                // Fallback: save to sessionStorage
-                sessionStorage.setItem('samourais_pending_post', JSON.stringify({
-                    mediaSrc: dataURL,
-                    mediaType: state.mediaType === 'video' ? 'video' : 'image',
-                    template: state.currentTemplate,
-                    caption: state.text || '',
-                    timestamp: Date.now()
-                }));
-                window.location.href = '/calendar';
-            });
+            scheduleBtn.disabled = true;
+            Promise.all(chosen.map(p => createCalendarPost(p, ts)))
+                .then(() => {
+                    window.location.href = '/calendar';
+                })
+                .catch(err => {
+                    console.error('Schedule error:', err);
+                    scheduleBtn.disabled = false;
+                    // Promise.all peut avoir créé UN des deux posts avant
+                    // l'échec : on le dit, pour éviter un doublon au retry.
+                    note('La planification a échoué (' + err.message + '). Vérifie le Calendrier avant de réessayer : un des posts peut déjà exister.', 'error');
+                });
         }
 
         function saveMemeToViewer() {
@@ -1914,23 +2099,33 @@
                 return;
             }
 
+            const targets = activePanes();
+            if (!targets.length) {
+                note('Aucun plateau actif : réactive Instagram ou TikTok pour sauvegarder.', 'warning');
+                return;
+            }
+
             // LOT C — la taille cible s'applique aussi à la copie Viewer.
             // Le format reste PNG : /api/viewer/memes écrit toujours un
             // fichier .png et le sert en image/png — y déposer du JPEG
             // produirait un fichier mal nommé et mal typé.
-            const size = exportPixelSize();
-            let dataURL;
-            try {
-                dataURL = renderCanvasToDataURL('png', 1, state.exportScale);
-            } catch (err) {
-                console.error('[editor] rendu du meme impossible', err);
-                note('Le meme n’a pas pu être rendu. Réduis la taille cible et réessaie.', 'error');
-                return;
-            }
-
-            if (!dataURL || dataURL.length < 100) {
-                note('Le meme rendu est vide. Réduis la taille cible et réessaie.', 'error');
-                return;
+            // ÉDITEUR DOUBLE : une copie PAR plateau actif.
+            const jobs = [];
+            for (const p of targets) {
+                const size = exportPixelSize(p);
+                let dataURL;
+                try {
+                    dataURL = renderCanvasToDataURL(p, 'png', 1, state.exportScale);
+                } catch (err) {
+                    console.error('[editor] rendu du meme impossible (' + p.label + ')', err);
+                    note('Le meme ' + p.label + ' n’a pas pu être rendu. Réduis la taille cible et réessaie.', 'error');
+                    return;
+                }
+                if (!dataURL || dataURL.length < 100) {
+                    note('Le meme ' + p.label + ' rendu est vide. Réduis la taille cible et réessaie.', 'error');
+                    return;
+                }
+                jobs.push({ pane: p, size: size, dataURL: dataURL });
             }
 
             // Save to backend
@@ -1939,22 +2134,21 @@
                 saveMemeBtn.textContent = '⏳ Sauvegarde...';
             }
 
-            fetch('/api/viewer/memes', {
+            Promise.all(jobs.map(job => fetch('/api/viewer/memes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    image_data: dataURL,
-                    title: 'Meme — ' + state.currentTemplate,
+                    image_data: job.dataURL,
+                    title: 'Meme — ' + job.pane.label,
                     caption: state.text || '',
-                    template_format: state.currentTemplate,
+                    template_format: templateKeyOf(job.pane),
                     media_type: 'image',
                 })
-            })
-            .then(r => {
-                if (!r.ok) throw new Error('Failed to save meme');
+            }).then(r => {
+                if (!r.ok) throw new Error('Failed to save meme (' + job.pane.label + ')');
                 return r.json();
-            })
-            .then(result => {
+            })))
+            .then(() => {
                 if (saveMemeBtn) {
                     saveMemeBtn.disabled = false;
                     saveMemeBtn.textContent = '✅ Sauvegarde !';
@@ -1963,11 +2157,13 @@
                     }, 2000);
                 }
                 // LOT C — dimensions réellement enregistrées, pas un « OK » nu.
-                note(`Meme enregistré dans le Viewer : PNG ${size.width}×${size.height} px.`, 'success');
+                const detail = jobs.map(j => `${j.pane.label} ${j.size.width}×${j.size.height}`).join(', ');
+                note(`Meme${jobs.length > 1 ? 's' : ''} enregistré${jobs.length > 1 ? 's' : ''} dans le Viewer : PNG ${detail} px.`, 'success');
             })
             .catch(err => {
                 console.error('Save meme error:', err);
-                note('Le meme n\u2019a pas pu être sauvegardé. Réessaie ; si l\u2019erreur persiste, télécharge le fichier pour ne rien perdre.', 'error');
+                // Promise.all : une des deux copies peut déjà exister.
+                note('La sauvegarde a échoué (' + err.message + '). Vérifie le Viewer avant de réessayer, puis télécharge les fichiers pour ne rien perdre.', 'error');
                 if (saveMemeBtn) {
                     saveMemeBtn.disabled = false;
                     saveMemeBtn.textContent = '💾 Sauvegarder dans Viewer';
@@ -1979,49 +2175,66 @@
             // LOT C — format (PNG/JPEG), qualité et taille cible viennent
             // du bloc « Fichier de sortie ». Tout est rendu par le canvas :
             // pas d'upload, pas de fichier temporaire, retour immédiat.
+            // ÉDITEUR DOUBLE : un fichier PAR plateau actif.
+            const targets = activePanes();
+            if (!targets.length) {
+                note('Aucun plateau actif : réactive Instagram ou TikTok pour exporter.', 'warning');
+                return;
+            }
+
             const isJpeg = state.exportFormat === 'jpeg';
-            const size = exportPixelSize();
-
-            let dataURL;
-            try {
-                dataURL = renderCanvasToDataURL(
-                    isJpeg ? 'jpeg' : 'png',
-                    isJpeg ? state.exportQuality / 100 : 1,
-                    state.exportScale
-                );
-            } catch (err) {
-                // Un export raté ne disparaît pas en silence : il se dit.
-                console.error('[editor] export image impossible', err);
-                note('L’image n’a pas pu être produite. Réduis la taille cible et réessaie.', 'error');
-                return;
-            }
-
-            if (!dataURL || dataURL.length < 100) {
-                note('L’image produite est vide. Réduis la taille cible et réessaie.', 'error');
-                return;
-            }
-
-            const link = document.createElement('a');
             const timestamp = new Date().toISOString().slice(0, 10);
-            link.download = `samourais_meme_${state.currentTemplate}_${size.width}x${size.height}_${timestamp}.${isJpeg ? 'jpg' : 'png'}`;
-            link.href = dataURL;
-            link.click();
+            const produced = [];
 
-            note(`Image téléchargée : ${size.width}×${size.height} px, ${isJpeg ? 'JPEG ' + state.exportQuality + '%' : 'PNG'}, ${formatBytes(dataURLBytes(dataURL))}.`, 'success');
+            for (const p of targets) {
+                const size = exportPixelSize(p);
+                let dataURL;
+                try {
+                    dataURL = renderCanvasToDataURL(
+                        p,
+                        isJpeg ? 'jpeg' : 'png',
+                        isJpeg ? state.exportQuality / 100 : 1,
+                        state.exportScale
+                    );
+                } catch (err) {
+                    // Un export raté ne disparaît pas en silence : il se dit.
+                    console.error('[editor] export image impossible (' + p.label + ')', err);
+                    note('L’image ' + p.label + ' n’a pas pu être produite. Réduis la taille cible et réessaie.', 'error');
+                    return;
+                }
+
+                if (!dataURL || dataURL.length < 100) {
+                    note('L’image ' + p.label + ' produite est vide. Réduis la taille cible et réessaie.', 'error');
+                    return;
+                }
+
+                const link = document.createElement('a');
+                link.download = `samourais_meme_${p.platform}_${size.width}x${size.height}_${timestamp}.${isJpeg ? 'jpg' : 'png'}`;
+                link.href = dataURL;
+                link.click();
+                produced.push(`${p.label} ${size.width}×${size.height} px (${formatBytes(dataURLBytes(dataURL))})`);
+            }
+
+            note(`Téléchargé : ${produced.join(' + ')}, ${isJpeg ? 'JPEG ' + state.exportQuality + '%' : 'PNG'}.`, 'success');
         }
 
         async function exportVideo() {
-            // Collect all parameters needed for video processing
-            const template = TEMPLATES[state.currentTemplate];
-            
+            // L'export vidéo reste UN SEUL fichier MP4 : il suit le premier
+            // plateau actif (Instagram si les deux le sont). Le pipeline
+            // FFmpeg est inchangé — seule la source des paramètres change.
+            const p = activePanes()[0] || panes.ig;
+            const template = templateOf(p);
+
             // Calculate effective frame height and centered Y position
-            const effectiveFrameHeight = Math.round(template.frame.height * (state.frameHeightPercent / 100));
+            const effectiveFrameHeight = Math.round(template.frame.height * (p.frameHeightPercent / 100));
             const originalCenterY = template.frame.y + template.frame.height / 2;
             const effectiveFrameY = originalCenterY - effectiveFrameHeight / 2;
-            
+
             const exportParams = {
+                // Plateau source (sert au rendu du template PNG)
+                paneKey: p.key,
                 // Template info
-                template: state.currentTemplate,
+                template: templateKeyOf(p),
                 templateWidth: template.width,
                 templateHeight: template.height,
                 // Frame info (with adjusted height and Y position for the template PNG)
@@ -2036,21 +2249,21 @@
                 // Video trim
                 trimStart: state.trimStart,
                 trimEnd: state.trimEnd,
-                // Media position/scale
-                imageScale: state.imageScale,
-                imageOffsetX: state.imageOffsetX,
-                imageOffsetY: state.imageOffsetY,
+                // Media position/scale — le cadrage du plateau exporté
+                imageScale: p.imageScale,
+                imageOffsetX: p.imageOffsetX,
+                imageOffsetY: p.imageOffsetY,
                 // Text
                 text: state.text,
                 textSize: state.textSize,
                 lineHeight: state.lineHeight,
-                textX: textBox ? textBox.left - CANVAS_PADDING : template.textArea.x,
-                textY: textBox ? textBox.top - CANVAS_PADDING : template.textArea.y,
+                textX: p.textBox ? p.textBox.left - CANVAS_PADDING : template.textArea.x,
+                textY: p.textBox ? p.textBox.top - CANVAS_PADDING : template.textArea.y,
                 // Overlay
                 overlayText: state.showOverlay ? state.overlayText : '',
                 // Watermark position and opacity
-                watermarkX: watermark ? watermark.left - CANVAS_PADDING : template.watermark.x,
-                watermarkY: watermark ? watermark.top - CANVAS_PADDING : template.watermark.y,
+                watermarkX: p.watermark ? p.watermark.left - CANVAS_PADDING : template.watermark.x,
+                watermarkY: p.watermark ? p.watermark.top - CANVAS_PADDING : template.watermark.y,
                 watermarkOpacity: state.watermarkOpacity,
             };
 
@@ -2128,17 +2341,18 @@
             fabric.Image.fromURL(LOGO_URL, (img) => {
                 if (img) {
                     logoImage = img;
-                    // Refresh watermark if canvas already initialized
-                    if (canvas && watermark) {
-                        const template = TEMPLATES[state.currentTemplate];
+                    // Refresh watermark on each pane already initialized
+                    eachPane(function(p) {
+                        if (!p.canvas || !p.watermark) return;
+                        const template = templateOf(p);
                         const wm = template.watermark;
                         const offset = CANVAS_PADDING;
-                        
+
                         // Remove old text watermark
-                        canvas.remove(watermark);
-                        
+                        p.canvas.remove(p.watermark);
+
                         // Add logo watermark
-                        watermark = new fabric.Image(logoImage.getElement(), {
+                        p.watermark = new fabric.Image(logoImage.getElement(), {
                             left: wm.x + offset,
                             top: wm.y + offset,
                             originX: 'right',
@@ -2152,18 +2366,21 @@
                             hoverCursor: 'move',
                             moveCursor: 'move'
                         });
-                        canvas.add(watermark);
-                        canvas.renderAll();
-                    }
+                        p.canvas.add(p.watermark);
+                        p.canvas.renderAll();
+                    });
                 }
             }, { crossOrigin: 'anonymous' });
         }
 
         // Générer le template PNG avec trou transparent pour la vidéo
         async function generateTemplatePNG(params) {
-            const template = TEMPLATES[state.currentTemplate];
+            // Le plateau source est celui choisi par exportVideo().
+            const p = panes[params.paneKey] || panes.ig;
+            const template = TEMPLATES[params.template] || templateOf(p);
+            const textBox = p.textBox;
             const offset = CANVAS_PADDING;
-            
+
             // Récupérer le texte directement depuis le textBox (priorité), puis params, puis state
             // Car l'utilisateur peut taper directement dans le textBox sans passer par l'input
             let textToRender = '';
@@ -2174,11 +2391,11 @@
             } else if (state.text) {
                 textToRender = state.text;
             }
-            
+
             // Prendre en compte le scale du textBox (si redimensionné manuellement)
             const textBoxScale = textBox ? (textBox.scaleX || 1) : 1;
             const textSizeToUse = (params.textSize || state.textSize || 60) * textBoxScale;
-            
+
             // Position du texte depuis textBox (Fabric.js) ou params
             const textXPos = params.textX !== undefined ? params.textX : (textBox ? textBox.left - offset : template.textArea.x);
             const textYPos = params.textY !== undefined ? params.textY : (textBox ? textBox.top - offset : template.textArea.y);
@@ -2260,9 +2477,10 @@
             // Le texte est maintenant dessiné AVANT le trou (voir plus haut)
             
             // Dessiner le logo watermark
+            const watermark = p.watermark;
             if (watermark && logoImage) {
                 ctx.save();
-                
+
                 // Position du watermark (depuis Fabric.js - originX: right, originY: bottom)
                 const wmLeft = watermark.left - offset;
                 const wmTop = watermark.top - offset;
@@ -2367,7 +2585,7 @@
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = `samourais_meme_${state.currentTemplate}_${Date.now()}.mp4`;
+                link.download = `samourais_meme_${params.template}_${Date.now()}.mp4`;
                 link.click();
                 URL.revokeObjectURL(url);
                 
@@ -2442,22 +2660,25 @@
         // EVENT LISTENERS
         // ============================================
         function setupEventListeners() {
-            // Format selection
+            // Format selection — NE PILOTE QUE le plateau Instagram :
+            // le plateau TikTok est fixe en 1080×1920.
             formatBtns.forEach(btn => {
                 btn.addEventListener('click', () => {
                     formatBtns.forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
                     state.currentTemplate = btn.dataset.format;
-                    state.imageOffsetX = 0;
-                    state.imageOffsetY = 0;
-                    state.imageScale = 100;
-                    state.frameHeightPercent = 100;
-                    
+
+                    const ig = panes.ig;
+                    ig.imageOffsetX = 0;
+                    ig.imageOffsetY = 0;
+                    ig.imageScale = 100;
+                    ig.frameHeightPercent = 100;
+
                     imageScaleSlider.value = 100;
                     imageScaleValue.textContent = '100%';
                     frameHeightSlider.value = 100;
                     frameHeightValue.textContent = '100%';
-                    
+
                     // Frame height slider available for all formats (1:1, 4:5, 9:16)
                     frameHeightSection.style.display = 'block';
 
@@ -2465,14 +2686,20 @@
                     // suivent le format choisi.
                     updateExportReadout();
 
-                    updateCanvasSize();
-                    createElements();
-                    
+                    // Le libellé du plateau Instagram suit le format.
+                    if (stageDimsIG) {
+                        const t = templateOf(ig);
+                        stageDimsIG.textContent = `${t.width}×${t.height}`;
+                    }
+
+                    updateCanvasSize(ig);
+                    createElements(ig);
+
                     if (state.imageSrc) {
-                        addImageToCanvas(state.imageSrc);
+                        addImageToCanvas(ig, state.imageSrc);
                     }
                     if (state.showOverlay && state.overlayText) {
-                        addOverlayText();
+                        addOverlayText(ig);
                     }
                     updateText(state.text);
                 });
@@ -2531,12 +2758,15 @@
                 updateFrameHeight(parseInt(e.target.value));
             });
 
-            // Select image button
+            // Select image button — sélectionne le média sur chaque plateau
+            // actif (deux canvas indépendants, deux sélections).
             selectImageBtn.addEventListener('click', () => {
-                if (imageObj) {
-                    canvas.setActiveObject(imageObj);
-                    canvas.renderAll();
-                }
+                activePanes().forEach(function(p) {
+                    if (p.imageObj) {
+                        p.canvas.setActiveObject(p.imageObj);
+                        p.canvas.renderAll();
+                    }
+                });
             });
 
             // Overlay toggle
@@ -2606,7 +2836,9 @@
                 flipHBtn.addEventListener('click', () => {
                     state.flipX = !state.flipX;
                     flipHBtn.setAttribute('aria-pressed', String(state.flipX));
-                    if (imageObj) { imageObj.set({ flipX: state.flipX }); canvas.requestRenderAll(); }
+                    eachPane(function(p) {
+                        if (p.imageObj) { p.imageObj.set({ flipX: state.flipX }); p.canvas.requestRenderAll(); }
+                    });
                     updateImageEditReadouts();
                 });
             }
@@ -2614,7 +2846,9 @@
                 flipVBtn.addEventListener('click', () => {
                     state.flipY = !state.flipY;
                     flipVBtn.setAttribute('aria-pressed', String(state.flipY));
-                    if (imageObj) { imageObj.set({ flipY: state.flipY }); canvas.requestRenderAll(); }
+                    eachPane(function(p) {
+                        if (p.imageObj) { p.imageObj.set({ flipY: state.flipY }); p.canvas.requestRenderAll(); }
+                    });
                     updateImageEditReadouts();
                 });
             }
@@ -2674,10 +2908,53 @@
             }
 
             // Window resize
-            window.addEventListener('resize', () => {
-                updateCanvasSize();
-                canvas.renderAll();
+            window.addEventListener('resize', updateAllCanvasSizes);
+
+            // ---- Interrupteurs de plateau (éditeur double) ----
+            eachPane(function(p) {
+                const btn = document.getElementById('toggle-' + p.key);
+                if (!btn) return;
+                btn.addEventListener('click', function() {
+                    p.enabled = !p.enabled;
+                    btn.setAttribute('aria-pressed', String(p.enabled));
+                    const sw = btn.querySelector('.toggle-switch');
+                    if (sw) sw.classList.toggle('active', p.enabled);
+                    const stage = document.getElementById(p.stageId);
+                    if (stage) stage.classList.toggle('is-off', !p.enabled);
+                    // L'autre plateau récupère la place libérée.
+                    updateAllCanvasSizes();
+                    updateExportReadout();
+                });
             });
+
+            // ---- Texte TikTok « POV » ----
+            if (povTextInput) {
+                povTextInput.addEventListener('input', function(e) {
+                    state.povText = e.target.value;
+                    ensurePovObject();
+                });
+            }
+            if (povStyleGroup) {
+                povStyleGroup.addEventListener('click', function(e) {
+                    const btn = e.target.closest('.seg__btn');
+                    if (!btn) return;
+                    state.povStyle = btn.dataset.povstyle === 'dark' ? 'dark' : 'light';
+                    povStyleGroup.querySelectorAll('.seg__btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    restylePovObject();
+                });
+            }
+
+            // ---- Dialogue de planification double ----
+            if (scheduleForm) {
+                scheduleForm.addEventListener('submit', function(e) {
+                    // `method="dialog"` ferme la boîte quel que soit le
+                    // bouton ; on ne crée les posts que sur « confirm ».
+                    if (e.submitter && e.submitter.value === 'confirm') {
+                        confirmSchedule();
+                    }
+                });
+            }
         }
 
         // ============================================
@@ -2766,11 +3043,155 @@
         }
 
         // ============================================
+        // TEXTE TIKTOK « POV »
+        // --------------------------------------------
+        // La typo du texte TikTok (Proxima Nova SemiBold) est COMMERCIALE :
+        // on sert Montserrat SemiBold (OFL), vendorisée dans
+        // /static/vendor/fonts/ avec sa licence OFL.txt. Le style natif
+        // TikTok est un bloc arrondi PAR LIGNE avec un léger débord — Fabric
+        // ne le fait pas nativement (textBackgroundColor = rectangles secs),
+        // on surcharge donc _renderTextLinesBackground sur L'INSTANCE.
+        //
+        // PIÈGE CANVAS : Fabric mesure le texte avec la police DISPONIBLE au
+        // moment du dessin. Si Montserrat n'est pas encore chargée, il dessine
+        // en police de repli SANS ERREUR et fige de mauvaises métriques. D'où
+        // l'attente explicite de document.fonts (FontFaceSet.load) avant la
+        // création du bloc, et une re-mesure après chargement.
+        // ============================================
+        const POV_FONT_SPEC = '600 48px Montserrat';
+        const POV_STYLES = {
+            light: { bg: '#ffffff', fill: '#000000' },
+            dark:  { bg: 'rgba(0, 0, 0, 0.65)', fill: '#ffffff' }
+        };
+        let povFontReady = false;
+        const povFontPromise = (document.fonts && document.fonts.load)
+            ? document.fonts.load(POV_FONT_SPEC).then(function(faces) {
+                povFontReady = true;
+                if (!faces.length) {
+                    console.warn('[editor] Montserrat SemiBold introuvable : le POV sortira en police de repli.');
+                }
+                return faces;
+            }).catch(function(err) {
+                povFontReady = true; // on ne bloque pas l'éditeur pour autant
+                console.error('[editor] chargement de Montserrat impossible', err);
+                return [];
+            })
+            : Promise.resolve([]);
+
+        /** Fond arrondi par ligne, façon TikTok (débord horizontal léger). */
+        function povRenderLinesBackground(ctx) {
+            if (!this.povBg) return;
+            const padX = this.fontSize * 0.38;   // débord latéral
+            const radius = this.fontSize * 0.30; // coins arrondis
+            const leftOffset = this._getLeftOffset();
+            let lineTop = this._getTopOffset();
+
+            ctx.save();
+            ctx.fillStyle = this.povBg;
+            for (let i = 0; i < this._textLines.length; i++) {
+                const heightOfLine = this.getHeightOfLine(i);
+                const lineWidth = this.getLineWidth(i);
+                if (lineWidth > 0) {
+                    const x = leftOffset + this._getLineLeftOffset(i) - padX;
+                    const w = lineWidth + padX * 2;
+                    const h = heightOfLine;
+                    const r = Math.min(radius, h / 2, w / 2);
+                    ctx.beginPath();
+                    ctx.moveTo(x + r, lineTop);
+                    ctx.lineTo(x + w - r, lineTop);
+                    ctx.quadraticCurveTo(x + w, lineTop, x + w, lineTop + r);
+                    ctx.lineTo(x + w, lineTop + h - r);
+                    ctx.quadraticCurveTo(x + w, lineTop + h, x + w - r, lineTop + h);
+                    ctx.lineTo(x + r, lineTop + h);
+                    ctx.quadraticCurveTo(x, lineTop + h, x, lineTop + h - r);
+                    ctx.lineTo(x, lineTop + r);
+                    ctx.quadraticCurveTo(x, lineTop, x + r, lineTop);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+                lineTop += heightOfLine;
+            }
+            ctx.restore();
+        }
+
+        /** Crée/actualise/retire le bloc POV du canvas TikTok. */
+        function ensurePovObject() {
+            const p = panes.tt;
+            if (!p.canvas) return;
+
+            if (!state.povText.trim()) {
+                if (p.povObj) {
+                    p.canvas.remove(p.povObj);
+                    p.povObj = null;
+                    p.canvas.renderAll();
+                }
+                return;
+            }
+
+            // PIÈGE CANVAS (voir en-tête de section) : pas de dessin avant
+            // que document.fonts ait résolu Montserrat.
+            if (!povFontReady) {
+                povFontPromise.then(ensurePovObject);
+                return;
+            }
+
+            const style = POV_STYLES[state.povStyle] || POV_STYLES.light;
+
+            if (p.povObj) {
+                p.povObj.set({ text: state.povText, fill: style.fill });
+                p.povObj.povBg = style.bg;
+                p.povObj.initDimensions();
+                p.canvas.renderAll();
+                return;
+            }
+
+            const template = templateOf(p); // story 1080×1920
+            const obj = new fabric.Textbox(state.povText, {
+                left: CANVAS_PADDING + template.width / 2,
+                top: CANVAS_PADDING + template.height * 0.28,
+                width: template.width * 0.72,
+                originX: 'center',
+                fontFamily: 'Montserrat',
+                fontWeight: 600,
+                fontSize: 48,
+                lineHeight: 1.35,
+                fill: style.fill,
+                textAlign: 'center',
+                splitByGrapheme: false,
+                hasControls: true,
+                cornerSize: 16,
+                hoverCursor: 'move',
+                moveCursor: 'move',
+                // Pas d'édition au double-clic : le POV s'écrit dans le champ
+                // dédié, comme la légende — un seul point de vérité.
+                editable: false
+            });
+            obj.povBg = style.bg;
+            obj._renderTextLinesBackground = povRenderLinesBackground;
+
+            p.povObj = obj;
+            p.canvas.add(obj);
+            p.canvas.bringToFront(obj);
+            if (p.watermark) p.canvas.bringToFront(p.watermark);
+            p.canvas.renderAll();
+        }
+
+        /** Bascule fond blanc/texte noir ↔ fond noir translucide/texte blanc. */
+        function restylePovObject() {
+            const p = panes.tt;
+            if (!p.povObj) { ensurePovObject(); return; }
+            const style = POV_STYLES[state.povStyle] || POV_STYLES.light;
+            p.povObj.set({ fill: style.fill, dirty: true });
+            p.povObj.povBg = style.bg;
+            p.canvas.renderAll();
+        }
+
+        // ============================================
         // INIT
         // ============================================
         function init() {
             loadLogo(); // Preload logo for watermark
-            initCanvas();
+            initCanvases();
             setupEventListeners();
             setupTimelineInteraction();
             // LOT C — les blocs de retouche et de sortie doivent refléter

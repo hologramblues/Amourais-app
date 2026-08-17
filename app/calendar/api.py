@@ -300,14 +300,28 @@ def publish_post(post_id: int):
 
 @calendar_api_bp.route("/calendar/posts/<int:post_id>/media", methods=["GET"])
 def serve_post_media(post_id: int):
-    """Serve the media file of a scheduled post."""
+    """
+    Serve the media file of a scheduled post.
+
+    Les posts créés par l'Éditeur (planification double) ne portent pas de
+    fichier média : leur export vit dans `thumbnail_path` (JPEG écrit par
+    create_post). Avant ce repli, le calendrier demandait ce média, recevait
+    404 et affichait « Sans média » alors que l'export existe sur le disque.
+    """
     db = SessionLocal()
     try:
         post = db.query(ScheduledPost).filter_by(id=post_id).first()
-        if not post or not post.media_path or not os.path.exists(post.media_path):
+        if not post:
             return jsonify({"error": "Media not found"}), 404
 
-        mime = "video/mp4" if post.media_type == "video" else "image/jpeg"
-        return send_file(post.media_path, mimetype=mime)
+        if post.media_path and os.path.exists(post.media_path):
+            mime = "video/mp4" if post.media_type == "video" else "image/jpeg"
+            return send_file(post.media_path, mimetype=mime)
+
+        # Repli : l'export de l'Éditeur, stocké comme vignette JPEG.
+        if post.thumbnail_path and os.path.exists(post.thumbnail_path):
+            return send_file(post.thumbnail_path, mimetype="image/jpeg")
+
+        return jsonify({"error": "Media not found"}), 404
     finally:
         db.close()

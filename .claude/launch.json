@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "editeur-test",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "DATA_DIR=/private/tmp/claude-501/-Users-jeremiegalan-SAMOURAIS-SCRAPPER/ab90a2f8-19cd-4e53-96ad-781ad84a5037/scratchpad/testscrape",
+        "PORT=8143",
+        "/Users/jeremiegalan/SAMOURAIS SCRAPPER/venv/bin/python",
+        "/Users/jeremiegalan/SAMOURAIS SCRAPPER/run.py"
+      ],
+      "port": 8143
+    }
+  ]
+}
