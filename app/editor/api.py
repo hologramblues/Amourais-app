@@ -2,9 +2,10 @@
 Editor API blueprint — handles video processing and media serving for the meme editor.
 
 Endpoints:
-    POST /api/editor/process-video  — FFmpeg video processing (port of Node.js server.js)
-    GET  /api/editor/media/<id>     — serve a scraped media file for use in the editor
-    GET  /api/editor/health         — check FFmpeg availability
+    POST /api/editor/process-video   — FFmpeg video processing (port of Node.js server.js)
+    POST /api/editor/save-video-meme — FFmpeg rendu d'UN plateau, sauvegardé dans le Viewer
+    GET  /api/editor/media/<id>      — serve a scraped media file for use in the editor
+    GET  /api/editor/health          — check FFmpeg availability
 """
 
 from __future__ import annotations
@@ -18,10 +19,46 @@ from loguru import logger
 from nanoid import generate as nanoid
 
 from app.config import DOWNLOAD_DIR, EDITOR_OUTPUT_DIR, EDITOR_UPLOAD_DIR
-from app.db import MediaItem, SessionLocal
+from app.db import MediaItem, SavedMeme, SessionLocal
 from app.editor.processing import cleanup_files, ensure_dirs, process_video
 
 editor_api_bp = Blueprint("editor_api", __name__)
+
+#: Plateformes admises pour le suffixe de fichier (-instagram / -tiktok).
+#: Liste blanche stricte : la valeur vient du client et finit dans un nom de
+#: fichier — tout ce qui n'est pas dedans est simplement ignoré.
+_PLATEFORMES_SUFFIXE = {"instagram", "tiktok"}
+
+
+def _ffmpeg_kwargs(params: dict) -> dict:
+    """Traduit le JSON `params` du client en arguments de process_video().
+
+    Chemin commun aux deux endpoints vidéo — le téléchargement direct et la
+    sauvegarde Viewer passent EXACTEMENT le même pipeline FFmpeg.
+    """
+    return {
+        "template_width": int(params.get("templateWidth", 1080)),
+        "template_height": int(params.get("templateHeight", 1080)),
+        "frame_x": int(params.get("frameX", 54)),
+        "frame_y": int(params.get("frameY", 195)),
+        "frame_width": int(params.get("frameWidth", 972)),
+        "frame_height": int(params.get("frameHeight", 810)),
+        "original_frame_y": (
+            int(params["originalFrameY"])
+            if "originalFrameY" in params and params["originalFrameY"] is not None
+            else None
+        ),
+        "original_frame_height": (
+            int(params["originalFrameHeight"])
+            if "originalFrameHeight" in params and params["originalFrameHeight"] is not None
+            else None
+        ),
+        "trim_start": float(params.get("trimStart", 0)),
+        "trim_end": float(params.get("trimEnd", 10)),
+        "image_scale": int(params.get("imageScale", 100)),
+        "image_offset_x": int(params.get("imageOffsetX", 0)),
+        "image_offset_y": int(params.get("imageOffsetY", 0)),
+    }
 
 
 @editor_api_bp.route("/editor/health", methods=["GET"])
@@ -81,27 +118,7 @@ def process_video_endpoint():
             video_path=video_path,
             template_path=template_path,
             output_path=output_path,
-            template_width=int(params.get("templateWidth", 1080)),
-            template_height=int(params.get("templateHeight", 1080)),
-            frame_x=int(params.get("frameX", 54)),
-            frame_y=int(params.get("frameY", 195)),
-            frame_width=int(params.get("frameWidth", 972)),
-            frame_height=int(params.get("frameHeight", 810)),
-            original_frame_y=(
-                int(params["originalFrameY"])
-                if "originalFrameY" in params and params["originalFrameY"] is not None
-                else None
-            ),
-            original_frame_height=(
-                int(params["originalFrameHeight"])
-                if "originalFrameHeight" in params and params["originalFrameHeight"] is not None
-                else None
-            ),
-            trim_start=float(params.get("trimStart", 0)),
-            trim_end=float(params.get("trimEnd", 10)),
-            image_scale=int(params.get("imageScale", 100)),
-            image_offset_x=int(params.get("imageOffsetX", 0)),
-            image_offset_y=int(params.get("imageOffsetY", 0)),
+            **_ffmpeg_kwargs(params),
         )
 
         # Send the output file, then clean up everything
@@ -123,6 +140,115 @@ def process_video_endpoint():
         logger.exception("Video processing failed: {}", exc)
         cleanup_files(video_path, template_path, output_path)
         return jsonify({"error": "Erreur serveur"}), 500
+
+
+@editor_api_bp.route("/editor/save-video-meme", methods=["POST"])
+def save_video_meme_endpoint():
+    """
+    Rend la vidéo d'UN plateau (FFmpeg) et la sauvegarde comme meme du Viewer.
+
+    LOT A — export vidéo double : le client appelle cet endpoint UNE fois par
+    plateau actif, SÉQUENTIELLEMENT (jamais deux ffmpeg concurrents — l'audit
+    a montré la corruption d'écritures concurrentes). Chaque appel est
+    autonome : si le second échoue, le premier meme est déjà en base et son
+    fichier déjà écrit — rien n'est perdu.
+
+    Multipart form data :
+        - video           : le fichier vidéo d'entrée
+        - template        : le PNG de surcouche (trou transparent)
+        - params          : JSON, mêmes clés que /editor/process-video
+        - platform        : instagram | tiktok (suffixe du nom de fichier)
+        - title, caption  : métadonnées du meme
+        - template_format : square | portrait | story
+
+    Retourne 201 + JSON {id, file_url} (pas le fichier : il vit dans le Viewer).
+    """
+    ensure_dirs()
+
+    if "video" not in request.files:
+        return jsonify({"error": "No video file uploaded"}), 400
+    if "template" not in request.files:
+        return jsonify({"error": "No template file uploaded"}), 400
+
+    video_file = request.files["video"]
+    template_file = request.files["template"]
+
+    vid_ext = os.path.splitext(video_file.filename or "video.mp4")[1] or ".mp4"
+    tpl_ext = os.path.splitext(template_file.filename or "template.png")[1] or ".png"
+
+    vid_id = nanoid()
+    video_path = str(EDITOR_UPLOAD_DIR / f"{vid_id}{vid_ext}")
+    template_path = str(EDITOR_UPLOAD_DIR / f"{vid_id}_tpl{tpl_ext}")
+
+    # Le fichier de sortie vit dans le répertoire des memes du Viewer
+    # (le même que /api/viewer/memes) : c'est un meme sauvegardé, pas un
+    # temporaire — il n'est PAS nettoyé après la réponse.
+    platform = (request.form.get("platform") or "").strip().lower()
+    suffix = f"-{platform}" if platform in _PLATEFORMES_SUFFIXE else ""
+    meme_dir = EDITOR_OUTPUT_DIR / "memes"
+    meme_dir.mkdir(parents=True, exist_ok=True)
+    output_id = nanoid()
+    output_path = str(meme_dir / f"{output_id}{suffix}.mp4")
+
+    video_file.save(video_path)
+    template_file.save(template_path)
+
+    try:
+        raw_params = request.form.get("params", "{}")
+        try:
+            params = json.loads(raw_params)
+        except json.JSONDecodeError:
+            params = {}
+
+        logger.info("Rendering video meme ({}) with params: {}", platform or "?", params)
+
+        process_video(
+            video_path=video_path,
+            template_path=template_path,
+            output_path=output_path,
+            **_ffmpeg_kwargs(params),
+        )
+
+        file_size = os.path.getsize(output_path)
+
+        db = SessionLocal()
+        try:
+            meme = SavedMeme(
+                title=request.form.get("title", ""),
+                caption=request.form.get("caption", ""),
+                media_type="video",
+                template_format=request.form.get("template_format", ""),
+                file_path=output_path,
+                file_size=file_size,
+            )
+            db.add(meme)
+            db.commit()
+            db.refresh(meme)
+            meme_id = meme.id
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+        logger.info("Saved video meme #{} to {}", meme_id, output_path)
+
+        return jsonify({
+            "id": meme_id,
+            "file_url": f"/api/viewer/memes/{meme_id}/file",
+            "message": "Meme video sauvegarde dans le Viewer",
+        }), 201
+
+    except Exception as exc:
+        logger.exception("Video meme save failed: {}", exc)
+        # Échec = aucune trace : pas de ligne en base (rollback ci-dessus),
+        # pas de fichier orphelin dans le répertoire des memes.
+        cleanup_files(output_path)
+        return jsonify({"error": "Erreur serveur"}), 500
+
+    finally:
+        # Les uploads sont toujours temporaires, succès ou non.
+        cleanup_files(video_path, template_path)
 
 
 @editor_api_bp.route("/editor/media/<int:media_id>", methods=["GET"])

@@ -143,7 +143,7 @@ def get_proxy_for_platform(platform: str) -> str:
 # Quand APIFY_TOKEN est posé, le pipeline fait passer Instagram par l'acteur
 # Apify au lieu du navigateur (cf. pipeline._choisir_extracteur). Le jeton est
 # relu À CHAUD via get_apify_settings(), comme les proxys.
-APIFY_ACTOR_DEFAULT = "apify~instagram-post-scraper"
+APIFY_ACTOR_DEFAULT = "apify~instagram-scraper"  # l'acteur reellement utilise par le proprietaire (2,70 $/1000 posts), verifie contre son vrai dataset
 APIFY_TOKEN = os.getenv("APIFY_TOKEN", "")
 APIFY_ACTOR = os.getenv("APIFY_ACTOR", "") or APIFY_ACTOR_DEFAULT
 

@@ -507,42 +507,10 @@
             p.snapLines = [];
         }
 
-        // ---- LOT B — aperçu collant sous 900px ----
-        // Sous ce seuil l'aperçu est un bandeau de ~45dvh qui ne montre
-        // qu'UN plateau ; la marge de travail desktop (CANVAS_PADDING =
-        // 350px de chaque côté) y réduirait le gabarit à ~120px de large.
-        // On cadre donc la VUE sur le gabarit + une marge réduite, par
-        // translation du viewport Fabric — les coordonnées des objets ne
-        // bougent pas, seule la fenêtre d'affichage change.
-        const MOBILE_VIEW_MARGIN = 28;
-        const mobileViewMq = window.matchMedia('(max-width: 899.98px)');
-
         function updateCanvasSize(p) {
             const template = templateOf(p);
             const { width, height } = template;
             const container = document.querySelector('.preview-area');
-
-            if (mobileViewMq.matches) {
-                // Un seul plateau visible, cadré sur le gabarit.
-                const visW = width + (MOBILE_VIEW_MARGIN * 2);
-                const visH = height + (MOBILE_VIEW_MARGIN * 2);
-                const switcher = document.getElementById('stage-switch');
-                const stage = document.getElementById(p.stageId);
-                const head = stage ? stage.querySelector('.stage-head') : null;
-                // Hauteur mangée par le chrome de l'aperçu : basculeur,
-                // en-tête du plateau, padding vertical du conteneur.
-                const chrome = (switcher ? switcher.offsetHeight + 8 : 0)
-                    + (head && head.offsetHeight ? head.offsetHeight + 6 : 28)
-                    + 16;
-                const maxW = Math.max(120, container.clientWidth - 24);
-                const maxH = Math.max(120, container.clientHeight - chrome);
-                p.scale = Math.min(maxW / visW, maxH / visH, 0.4);
-                p.canvas.setWidth(visW * p.scale);
-                p.canvas.setHeight(visH * p.scale);
-                const pan = (CANVAS_PADDING - MOBILE_VIEW_MARGIN) * p.scale;
-                p.canvas.setViewportTransform([p.scale, 0, 0, p.scale, -pan, -pan]);
-                return;
-            }
 
             // Deux plateaux côte à côte : chacun reçoit sa part de la
             // largeur. En pile (colonne, sous 1100px), chacun a tout.
@@ -561,9 +529,7 @@
 
             p.canvas.setWidth(totalWidth * p.scale);
             p.canvas.setHeight(totalHeight * p.scale);
-            // Transform complet et pas setZoom : setZoom (zoomToPoint) garde
-            // une translation résiduelle si on vient du cadrage mobile.
-            p.canvas.setViewportTransform([p.scale, 0, 0, p.scale, 0, 0]);
+            p.canvas.setZoom(p.scale);
         }
 
         function updateAllCanvasSizes() {
@@ -1983,10 +1949,7 @@
                 && p.textBox.text === 'Tape ton texte...';
             if (placeholderVisible) p.textBox.set({ visible: false });
             p.canvas.discardActiveObject();
-            // Transform identité et pas setZoom(1) : sous 900px le viewport
-            // porte une translation (cadrage mobile) que setZoom conserverait
-            // — l'export sortirait décalé. Sur desktop, strictement équivalent.
-            p.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+            p.canvas.setZoom(1);
             p.canvas.setWidth(template.width + (CANVAS_PADDING * 2));
             p.canvas.setHeight(template.height + (CANVAS_PADDING * 2));
             p.canvas.renderAll();
@@ -2654,9 +2617,7 @@
             const originalBg = p.canvas.backgroundColor;
             p.canvas.discardActiveObject();
             p.canvas.backgroundColor = '';
-            // Même garde que renderCanvasToDataURL : transform identité, pas
-            // setZoom(1) — la translation du cadrage mobile fausserait le PNG.
-            p.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+            p.canvas.setZoom(1);
             p.canvas.setWidth(template.width + (CANVAS_PADDING * 2));
             p.canvas.setHeight(template.height + (CANVAS_PADDING * 2));
             p.canvas.renderAll();
@@ -3524,108 +3485,12 @@
         }
 
         // ============================================
-        // LOT B — ÉDITEUR AU DOIGT (sous 900px)
-        // --------------------------------------------
-        // Trois interactions, TOUTES inertes au-dessus de 900px :
-        //   1. le basculeur Instagram/TikTok choisit le plateau AFFICHÉ
-        //      (les interrupteurs de fabrication #toggle-ig/tt sont
-        //      intouchés) ;
-        //   2. les boutons +/− refont le geste du slider « Zoom image »
-        //      — le build Fabric vendorisé (5.3.1 standard, sans le
-        //      module gestures/Event.js) ne sait pas pincer, et
-        //      détourner ses évènements touch casserait le glisser ;
-        //   3. les groupes d'outils deviennent des accordéons, un seul
-        //      ouvert à la fois (le repli est purement CSS : sur
-        //      desktop `.is-collapsed` n'a aucun effet).
-        // ============================================
-        function setupMobileUx() {
-            // ---- 1. Basculeur de plateau ----
-            const switcher = document.getElementById('stage-switch');
-            if (switcher && stagesEl) {
-                switcher.addEventListener('click', function(e) {
-                    const btn = e.target.closest('.stage-switch__btn');
-                    if (!btn) return;
-                    stagesEl.classList.toggle('show-tt', btn.dataset.stage === 'tt');
-                    switcher.querySelectorAll('.stage-switch__btn').forEach(function(b) {
-                        const active = (b === btn);
-                        b.classList.toggle('active', active);
-                        b.setAttribute('aria-pressed', String(active));
-                    });
-                    // Le plateau révélé reprend toute la place disponible.
-                    updateAllCanvasSizes();
-                });
-            }
-
-            // ---- 2. Zoom du média aux boutons ----
-            // Mêmes bornes et même portée que le slider (les deux plateaux) :
-            // un seul point de vérité, le slider reste synchronisé.
-            function nudgeImageScale(delta) {
-                const current = parseInt(imageScaleSlider.value, 10) || 100;
-                const next = Math.min(200, Math.max(50, current + delta));
-                if (next === current) return;
-                imageScaleSlider.value = next;
-                updateImageScale(next);
-            }
-            const zoomInBtn = document.getElementById('zoom-in-btn');
-            const zoomOutBtn = document.getElementById('zoom-out-btn');
-            if (zoomInBtn) zoomInBtn.addEventListener('click', function() { nudgeImageScale(10); });
-            if (zoomOutBtn) zoomOutBtn.addEventListener('click', function() { nudgeImageScale(-10); });
-
-            // ---- 3. Accordéons ----
-            const groups = Array.prototype.slice.call(
-                document.querySelectorAll('.sidebar__scroll .group'));
-
-            function setCollapsed(group, collapsed) {
-                group.classList.toggle('is-collapsed', collapsed);
-                const fold = group.querySelector('.group__fold');
-                if (fold) fold.setAttribute('aria-expanded', String(!collapsed));
-            }
-
-            groups.forEach(function(group) {
-                const head = group.querySelector('.group__head');
-                if (!head) return;
-                head.addEventListener('click', function(e) {
-                    // Desktop : les groupes ne se replient jamais.
-                    if (!mobileViewMq.matches) return;
-                    // Les boutons du bandeau (« Annuler »…) gardent leur rôle ;
-                    // seul le chevron ou le reste du bandeau replie.
-                    const btn = e.target.closest('button');
-                    if (btn && !btn.classList.contains('group__fold')) return;
-                    const willOpen = group.classList.contains('is-collapsed');
-                    if (willOpen) {
-                        // Un seul ouvert à la fois : ouvrir replie les autres.
-                        groups.forEach(function(g) { setCollapsed(g, g !== group); });
-                    } else {
-                        setCollapsed(group, true);
-                    }
-                });
-            });
-
-            // État de départ au doigt : tout replié sauf « Média », le
-            // premier geste utile (importer). Au clavier comme au doigt,
-            // chaque chevron reste opérable.
-            if (mobileViewMq.matches) {
-                const mediaGroup = groups.filter(function(g) {
-                    return g.getAttribute('aria-labelledby') === 'grp-media';
-                })[0] || groups[0];
-                groups.forEach(function(g) { setCollapsed(g, g !== mediaGroup); });
-            }
-
-            // ---- Franchissement du seuil (rotation, redimensionnement) ----
-            // Le cadrage du canvas change de formule : on recalcule.
-            const onViewChange = function() { updateAllCanvasSizes(); };
-            if (mobileViewMq.addEventListener) mobileViewMq.addEventListener('change', onViewChange);
-            else if (mobileViewMq.addListener) mobileViewMq.addListener(onViewChange);
-        }
-
-        // ============================================
         // INIT
         // ============================================
         function init() {
             loadLogo(); // Preload logo for watermark
             initCanvases();
             setupEventListeners();
-            setupMobileUx();
             setupTimelineInteraction();
             // LOT C — les blocs de retouche et de sortie doivent refléter
             // l'état AVANT tout chargement de média.

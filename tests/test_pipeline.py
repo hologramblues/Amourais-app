@@ -141,7 +141,7 @@ def _pipeline_sandbox(monkeypatch):
     # aussi `load_dotenv(override=True)`. Sans jeton, le backend reste
     # « navigateur » et `_choisir_extracteur` retombe sur `_EXTRACTORS`.
     monkeypatch.setattr(
-        pipeline, "get_apify_settings", lambda: ("", "apify~instagram-post-scraper")
+        pipeline, "get_apify_settings", lambda: ("", "apify~instagram-scraper")
     )
     monkeypatch.setattr(pipeline, "STORAGE_MODE", "local")
 

@@ -85,13 +85,6 @@
                 <section class="group" aria-labelledby="grp-format">
                     <div class="group__head">
                         <h2 class="group__title" id="grp-format">Format Instagram</h2>
-                        {# LOT B — chevron d'accordéon, visible UNIQUEMENT sous
-                           900px (editor.css). Sur desktop les groupes restent
-                           tous ouverts, rien ne change. #}
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-format">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
                     </div>
                     <div class="format-selector" role="group" aria-labelledby="grp-format">
                         <button class="format-btn" type="button" data-format="square" data-width="1080" data-height="1080">
@@ -120,10 +113,6 @@
                     <div class="group__head">
                         <h2 class="group__title" id="grp-media">M&eacute;dia</h2>
                         <span class="media-type-badge image" id="media-type-badge" style="display: none;">Image</span>
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-media">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
                     </div>
 
                     <!-- Sources d'import -->
@@ -233,10 +222,6 @@
                                 title="Annuler recadrage, rotation, retournement et r&eacute;glages">
                             Annuler
                         </button>
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-retouche">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
                     </div>
 
                     <div class="ctl ctl--stack">
@@ -303,10 +288,6 @@
                 <section class="group" id="output-tools" aria-labelledby="grp-sortie">
                     <div class="group__head">
                         <h2 class="group__title" id="grp-sortie">Fichier de sortie</h2>
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-sortie">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
                     </div>
 
                     <div class="ctl ctl--stack">
@@ -345,10 +326,6 @@
                 <section class="group" aria-labelledby="grp-texte">
                     <div class="group__head">
                         <h2 class="group__title" id="grp-texte">Texte du bandeau</h2>
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-texte">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
                     </div>
                     <textarea class="text-input" id="meme-text" placeholder="Quand tu r&eacute;alises que..."></textarea>
                     {# Le plateau TikTok est PLEIN ÉCRAN : il n'a pas de bandeau
@@ -376,10 +353,6 @@
                 <section class="group" id="pov-tools" aria-labelledby="grp-pov">
                     <div class="group__head">
                         <h2 class="group__title" id="grp-pov">Texte TikTok &#171;&nbsp;POV&nbsp;&#187;</h2>
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-pov">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
                     </div>
                     <textarea class="text-input" id="pov-text" rows="2"
                               placeholder="POV&nbsp;: tu ouvres l'app&#8230;"></textarea>
@@ -397,10 +370,6 @@
                 <section class="group" aria-labelledby="grp-reglages">
                     <div class="group__head">
                         <h2 class="group__title" id="grp-reglages">R&eacute;glages</h2>
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-reglages">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
                     </div>
 
                     <div class="ctl">
@@ -468,15 +437,6 @@
                l'image dans le cadre) se règle PAR canvas. L'interrupteur de
                chaque plateau retire le format des exports et de la
                planification. #}
-            {# LOT B — basculeur de plateau, visible UNIQUEMENT sous 900px
-               (editor.css). Sur mobile un seul plateau est affiché à la
-               fois : deux côte à côte seraient illisibles. Le basculeur ne
-               touche PAS aux interrupteurs de fabrication (#toggle-ig/tt),
-               il choisit seulement le plateau À L'ÉCRAN. #}
-            <div class="stage-switch" id="stage-switch" role="group" aria-label="Plateau affich&eacute;">
-                <button class="stage-switch__btn active" type="button" data-stage="ig" aria-pressed="true">Instagram</button>
-                <button class="stage-switch__btn" type="button" data-stage="tt" aria-pressed="false">TikTok</button>
-            </div>
             <div class="stages" id="stages">
                 <section class="canvas-stage" id="stage-ig" data-pane="ig">
                     <header class="stage-head">
@@ -506,14 +466,6 @@
                         <canvas id="meme-canvas-tt"></canvas>
                     </div>
                 </section>
-            </div>
-            {# LOT B — zoom du média au doigt, visible UNIQUEMENT sous 900px.
-               Le build Fabric vendorisé (5.3.1 standard, sans Event.js) ne
-               gère pas le pincement : ces deux boutons font le même geste
-               que le slider « Zoom image » (les deux plateaux ensemble). #}
-            <div class="preview-zoom" id="preview-zoom">
-                <button class="preview-zoom__btn" id="zoom-out-btn" type="button" aria-label="R&eacute;duire le m&eacute;dia">&#8722;</button>
-                <button class="preview-zoom__btn" id="zoom-in-btn" type="button" aria-label="Agrandir le m&eacute;dia">+</button>
             </div>
             <p class="help-text">
                 Cadre fixe &#8226; glisse l'image pour la repositionner &#8212; le cadrage se r&egrave;gle par canvas &#8226; zoom au slider ou aux poign&eacute;es

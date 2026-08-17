@@ -50,7 +50,7 @@ pytestmark = pytest.mark.extractor
 
 _PROFILE_URL = "https://www.instagram.com/samourais/"
 _JETON = "apify_api_jeton-de-test"
-_ACTEUR_DEFAUT = "apify~instagram-post-scraper"
+_ACTEUR_DEFAUT = "apify~instagram-scraper"
 
 #: 2023-11-14T22:13:20Z == FIXED_NOW — les horodatages ISO des charges utiles
 #: dérivent de FIXED_NOW, jamais de l'horloge murale (LOI ABSOLUE n°5).
