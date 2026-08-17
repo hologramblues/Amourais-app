@@ -544,9 +544,40 @@ class InstagramExtractor(PlatformExtractor):
                 result.media.append(MediaItemData(**item))
 
         # -- Phase 5: DOM fallback ------------------------------------------
-        if not result.media and not all_nodes:
-            logger.info("No media from JSON, attempting DOM fallback")
+        # Le déclencheur est `total_seen == 0`, PAS `not all_nodes`.
+        #
+        # Pourquoi : les `doc_id` GraphQL d'Instagram tournent toutes les 2 à 4
+        # semaines. Quand ils changent, l'interception continue de ramener des
+        # réponses — donc `all_nodes` est NON VIDE — mais leur forme a changé et
+        # `_media_items_from_node` n'en tire plus rien, sans lever la moindre
+        # erreur. L'ancienne condition `not all_nodes` laissait donc le repli
+        # VERROUILLÉ précisément dans le cas où il sert : le scrape rendait zéro
+        # média en silence, et le compte y ressemblait à un compte vide.
+        #
+        # `total_seen` est le bon signal parce qu'il compte les posts RECONNUS,
+        # quelle qu'en soit la source. Il reste à 0 aussi bien quand aucun nœud
+        # n'arrive que quand les nœuds arrivent mais sont illisibles.
+        # Et il ne se déclenche PAS à tort : un scrape quotidien sain dont tous
+        # les posts sont déjà connus a `total_seen > 0` et `result.media` vide.
+        if result.total_seen == 0:
+            if all_nodes:
+                # Signature d'un changement de schéma côté Instagram. À dire
+                # fort : c'est la seule trace qu'aura le propriétaire le jour
+                # où la rotation cassera le chemin JSON.
+                logger.warning(
+                    "{} noeud(s) JSON interceptes mais AUCUN post lisible — schema "
+                    "probablement modifie (rotation des doc_id GraphQL). Bascule "
+                    "sur le repli DOM.",
+                    len(all_nodes),
+                )
+            else:
+                logger.info("Aucun noeud JSON, bascule sur le repli DOM")
             self._dom_fallback(adaptor, result, seen_ids, known_post_ids, opts, cutoff_ts)
+            if result.total_seen:
+                logger.info(
+                    "Repli DOM : {} post(s) vu(s), {} media(s) retenu(s)",
+                    result.total_seen, len(result.media),
+                )
 
         logger.info(
             "Instagram extraction complete: {} media items, profile={}",

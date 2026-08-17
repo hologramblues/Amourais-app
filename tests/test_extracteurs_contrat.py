@@ -1074,3 +1074,92 @@ def test_twitter_un_legacy_non_dict_ne_leve_pas():
 def test_reddit_un_post_sans_media_exploitable_ne_produit_rien():
     """`_extract_media_from_post` : un post texte est ignoré silencieusement."""
     assert rd_mod._extract_media_from_post({"id": "abc", "title": "texte"}) == []
+
+
+# ===========================================================================
+# Rotation des `doc_id` GraphQL — le repli DOM doit se déclencher
+# ===========================================================================
+#
+# Instagram fait tourner les identifiants de ses requêtes GraphQL toutes les
+# 2 à 4 semaines. Quand ils changent, l'interception continue de ramener des
+# réponses — donc `all_nodes` est NON VIDE — mais leur forme a changé et
+# `_media_items_from_node` n'en tire plus rien, SANS lever d'erreur.
+#
+# L'ancien déclencheur du repli était `if not result.media and not all_nodes`.
+# Il restait donc verrouillé exactement dans ce cas : des nœuds existaient, le
+# repli ne partait pas, et le scrape rendait zéro média en silence — un compte
+# actif devenait indiscernable d'un compte vide.
+#
+# Le déclencheur est désormais `result.total_seen == 0` : il compte les posts
+# RECONNUS quelle qu'en soit la source, donc il reste à 0 aussi bien quand rien
+# n'arrive que quand ce qui arrive est illisible.
+
+
+def _payload_doc_id_tourne() -> _Payload:
+    """Nœuds JSON présents mais de forme inconnue + posts lisibles dans le DOM."""
+    # Le nœud doit passer `_collect_media_nodes` (:594) — donc porter un
+    # `shortcode` ET une clé média — mais ne rien donner à
+    # `_media_items_from_node` (:127), qui exige une URL exploitable.
+    # C'est exactement ce que produit une rotation de `doc_id` : la clé
+    # `image_versions2` est toujours là, sa forme INTERNE a changé, et
+    # `candidates` n'existe plus. Aucune exception n'est levée.
+    noeud_illisible = {
+        "shortcode": "SCjson1",
+        "image_versions2": {"forme_nouvelle": [{"uri": "https://cdn.invalid/x.jpg"}]},
+    }
+    blob = {
+        "require": [[
+            "PolarisProfilePostsQuery", "instance", [],
+            [{"user": {"edge_owner_to_timeline_media": {
+                "edges": [
+                    {"node": dict(noeud_illisible, shortcode="SCjson1")},
+                    {"node": dict(noeud_illisible, shortcode="SCjson2")},
+                ]
+            }}}],
+        ]]
+    }
+    liens = []
+    for code in ("SCdom1", "SCdom2", "SCdom3"):
+        img = _Element(attrib={"src": f"https://cdn.instagram.invalid/{code}.jpg"})
+        liens.append(_Element(attrib={"href": f"/p/{code}/"}, children={"img": [img]}))
+    adaptor = _FakeAdaptor(
+        selectors={
+            'script[type="application/json"]': [_Element(text=json.dumps(blob))],
+            'a[href*="/p/"], a[href*="/reel/"]': liens,
+            "title": [_Element(text="Les Samouraïs (@samourais)")],
+        },
+        text="Les Samouraïs (@samourais) • Photos et vidéos",
+    )
+    return _Payload(adaptor=adaptor, responses=[])
+
+
+def test_instagram_repli_dom_se_declenche_quand_les_noeuds_sont_illisibles(extraire):
+    """Des nœuds JSON illisibles ne doivent PAS bloquer le repli DOM.
+
+    C'est le scénario de la rotation des `doc_id`. Avant correction, le repli
+    était verrouillé par `not all_nodes` : `all_nodes` valant 2, il ne partait
+    jamais et l'extraction rendait 0 média sans erreur.
+    """
+    result, _ = extraire(_SPEC_IG, payload=_payload_doc_id_tourne())
+
+    assert [item.post_id for item in result.media] == ["SCdom1", "SCdom2", "SCdom3"]
+    assert result.total_seen == 3
+    assert result.fetch_error is None  # la plateforme a répondu : ce n'est pas un échec de fetch
+
+
+def test_instagram_repli_dom_ne_se_declenche_pas_sur_un_scrape_sain(extraire):
+    """Tout connu en quotidien : `media` est vide mais `total_seen` ne l'est pas.
+
+    Contre-épreuve du test précédent. Sans elle, on ne saurait pas distinguer
+    « le repli part quand il faut » de « le repli part tout le temps » — et un
+    repli qui part sur chaque scrape sain coûterait une passe DOM inutile en
+    écrasant des données JSON de meilleure qualité.
+    """
+    result, _ = extraire(
+        _SPEC_IG,
+        posts=[("111", FIXED_NOW), ("222", FIXED_NOW)],
+        known_post_ids={"SC111", "SC222"},
+    )
+
+    assert result.media == []          # rien de neuf
+    assert result.total_seen == 2      # mais on a bien VU deux posts
