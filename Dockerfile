@@ -3,7 +3,7 @@ FROM python:3.12-slim
 
 # FFmpeg + Chromium deps for scrapling/patchright headless browser
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg fonts-dejavu-core fonts-liberation curl \
+    ffmpeg fonts-dejavu-core fonts-liberation curl util-linux \
     libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
     libcups2 libdrm2 libdbus-1-3 libxkbcommon0 \
     libatspi2.0-0 libxcomposite1 libxdamage1 libxfixes3 \
@@ -54,14 +54,16 @@ COPY --chown=appuser:appuser . .
 # volume is mounted (e.g. DATA_DIR=/data with volume at /data).
 # The app creates subdirs at startup via ensure_data_dirs().
 #
-# ⚠️ POINT A VERIFIER AU PREMIER DEPLOIEMENT : un volume monte sur /data
-# RECOUVRE le repertoire de l'image, y compris son proprietaire. Le `chown`
-# ci-dessus ne garantit donc l'accessibilite que pour un volume vierge. Si
-# Railway monte le volume en root:root, `ensure_data_dirs()` levera une
-# PermissionError au demarrage et le conteneur redemarrera en boucle (echec
-# BRUYANT et immediat, visible dans les logs : « CANNOT WRITE to DATA_DIR »).
-# Correctif si le cas se presente : ENTRYPOINT root qui `chown` /data puis
-# abandonne ses privileges (`su`/`setpriv`) avant d'exec-er gunicorn.
+# Un volume monte sur /data RECOUVRE le repertoire de l'image, proprietaire
+# compris : le `chown` ci-dessus ne vaut donc que pour un volume vierge, et
+# Railway monte un volume neuf en root:root. Sans traitement, appuser ne
+# pourrait pas ecrire et `ensure_data_dirs()` ferait redemarrer le conteneur
+# en boucle.
+# TRAITE par docker-entrypoint.sh : il demarre en root, ajuste la propriete du
+# volume, puis abandonne ses privileges (setpriv) avant d'exec-er gunicorn.
+# Le processus final tourne donc en appuser. Si le chown est impossible, le
+# point d'entree le DIT et laisse demarrer : c'est alors le diagnostic de
+# volume de run.py qui tranchera, bruyamment (« CANNOT WRITE to DATA_DIR »).
 ENV DATA_DIR=/data
 
 # Railway injects PORT env var; fallback 8080
@@ -105,6 +107,13 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 #   --graceful-timeout 30  Doit rester SUPERIEUR a SHUTDOWN_WAIT_SECONDS
 #                 (defaut 8 s dans run.py), sinon gunicorn SIGKILLe le worker
 #                 avant la fin de l'arret gracieux.
+# Le conteneur DEMARRE en root pour que le point d'entree puisse ajuster la
+# propriete du volume monte sur /data — un volume neuf arrive en root:root et
+# recouvre le `chown` fait au build. Le point d'entree abandonne ensuite ses
+# privileges : le processus final tourne bien en appuser, jamais en root.
+USER root
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+
 CMD exec gunicorn \
     --bind "0.0.0.0:${PORT:-8080}" \
     --workers 1 \

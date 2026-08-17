@@ -198,12 +198,90 @@ def test_scheduler_enabled_0_est_une_trappe_de_secours(run_isole, monkeypatch):
 
 
 @pytest.mark.static_check
-def test_le_conteneur_ne_tourne_pas_en_root():
+def test_le_processus_final_ne_tourne_pas_en_root():
+    """L'invariant est que le PROCESSUS final ne soit pas root, pas que la
+    dernière directive `USER` porte un nom précis.
+
+    Deux architectures le satisfont, et le Dockerfile a basculé de la première
+    vers la seconde :
+
+    1. dernier `USER` non-root — le conteneur démarre déjà dégradé ;
+    2. dernier `USER root` MAIS un `ENTRYPOINT` qui abandonne ses privilèges.
+
+    La 2 est devenue nécessaire : un volume monté sur /data recouvre le
+    répertoire de l'image, propriétaire compris, et Railway le monte en
+    root:root. Avec la 1, `ensure_data_dirs()` levait une PermissionError et le
+    conteneur redémarrait en boucle. Le point d'entrée ajuste donc la propriété
+    du volume en root, puis passe la main à appuser via `setpriv`.
+
+    Ce test vérifie l'invariant RÉEL, et refuse un `USER root` qui ne serait
+    pas rattrapé par un point d'entrée dégradant les privilèges — sans quoi il
+    suffirait d'ajouter `USER root` pour le rendre muet.
+    """
     contenu = DOCKERFILE.read_text(encoding="utf-8")
     users = [l.split()[1] for l in contenu.splitlines()
              if l.strip().startswith("USER ") and len(l.split()) > 1]
     assert users, "aucune directive USER : le conteneur tourne en root (lot 4.3)"
-    assert users[-1] != "root", "le dernier USER est root"
+
+    if users[-1] != "root":
+        return  # architecture 1
+
+    # Architecture 2 : le dernier USER est root, l'ENTRYPOINT doit dégrader.
+    entrypoints = [l for l in contenu.splitlines()
+                   if l.strip().startswith("ENTRYPOINT")]
+    assert entrypoints, (
+        "le dernier USER est root et aucun ENTRYPOINT ne vient degrader les "
+        "privileges : le processus final tournerait en root"
+    )
+
+    script = DOCKERFILE.parent / "docker-entrypoint.sh"
+    assert script.exists(), (
+        "l'ENTRYPOINT est declare mais docker-entrypoint.sh est absent"
+    )
+    # Les COMMENTAIRES sont retirés avant de chercher : ce fichier explique
+    # longuement pourquoi il utilise `setpriv`, et une recherche naïve sur le
+    # texte entier resterait verte sur un script qui ne dégrade plus rien.
+    # (Constaté par mutation : le test passait encore après suppression des
+    # deux `exec setpriv`.)
+    lignes_de_code = [
+        ligne.strip() for ligne in script.read_text(encoding="utf-8").splitlines()
+        if ligne.strip() and not ligne.strip().startswith("#")
+    ]
+    # On exige une ligne qui EXEC réellement l'outil de dégradation, pas la
+    # simple présence du mot. Deux mutations successives ont montré la
+    # faiblesse d'une recherche de chaîne : après suppression des `exec
+    # setpriv`, le mot subsistait dans la garde `command -v setpriv` et dans
+    # le message d'erreur « ni setpriv ni su-exec », et le test restait vert.
+    OUTILS = ("setpriv", "su-exec", "gosu")
+    degradations = [
+        l for l in lignes_de_code
+        if l.startswith("exec ") and any(outil in l for outil in OUTILS)
+    ]
+    assert degradations, (
+        "aucune ligne n'EXEC un outil de degradation de privileges : le "
+        "processus final tournerait en root"
+    )
+    assert all("appuser" in l for l in degradations), (
+        f"la degradation ne vise pas appuser : {degradations}"
+    )
+
+
+@pytest.mark.static_check
+def test_le_point_dentree_traite_le_volume_monte():
+    """Le volume monté recouvre /data et son propriétaire — il faut l'ajuster.
+
+    Sans ce `chown`, l'utilisateur non-root ne peut pas écrire dans le volume
+    Railway et le conteneur redémarre en boucle. C'est le défaut que le
+    Dockerfile documentait sans le traiter.
+    """
+    script = DOCKERFILE.parent / "docker-entrypoint.sh"
+    if not script.exists():
+        pytest.skip("pas d'ENTRYPOINT : architecture a USER non-root")
+    corps = script.read_text(encoding="utf-8")
+    assert "chown" in corps, "le point d'entree n'ajuste pas la propriete du volume"
+    assert "DATA_DIR" in corps, (
+        "le point d'entree ne lit pas DATA_DIR : il chownerait un chemin fige"
+    )
 
 
 @pytest.mark.static_check
