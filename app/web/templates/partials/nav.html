@@ -58,18 +58,14 @@
     text-decoration: none;
     white-space: nowrap;
   }
-  .s-logo-mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--sp-7, 24px);
-    height: var(--sp-7, 24px);
-    flex-shrink: 0;
-    border-radius: var(--nav-radius, 4px);
-    background: var(--nav-accent, #E21B3C);
-    color: #ffffff; /* toujours sur aplat accent : reste blanc dans les 2 thèmes */
-    font-size: var(--text-mini, 0.75rem);
-    line-height: 1;
+  .s-logo-img {
+    /* PNG 2000x489 (ratio ~4.1) : la hauteur pilote, la largeur suit (~115px).
+       28px et non 24 : le lettrage graffiti perd ses contours en dessous.
+       Verifie a l'ecran dans les DEUX themes — le contour clair du dessin le
+       rend lisible sur fond sombre sans filtre. */
+    height: 28px;
+    width: auto;
+    display: block;
   }
 
   /* ---- Liens ---- */
@@ -449,9 +445,11 @@
 </style>
 
 <header class="s-header">
-  <a href="/" class="s-logo">
-    <span class="s-logo-mark" aria-hidden="true">&#x2694;</span>
-    <span>Samourais</span>
+  <a href="/" class="s-logo" aria-label="Samourais — retour au Dashboard">
+    {# Le vrai logo (PNG 2000x489, fond transparent) remplace le glyphe + texte.
+       `alt` vide + aria-label sur le lien : le lecteur d'ecran annonce une
+       fois « Samourais », pas l'image ET le texte. #}
+    <img class="s-logo-img" src="/static/samourais_logo_transparent_smooth.png?v={{ asset_version('samourais_logo_transparent_smooth.png') }}" alt="" aria-hidden="true">
   </a>
 
   <button type="button" class="s-nav-toggle" aria-expanded="false" aria-controls="s-nav-list"
