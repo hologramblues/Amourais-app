@@ -154,7 +154,7 @@
     <details class="mb-3" {% if not env.get('APIFY_TOKEN') %}open{% endif %}>
       <summary>Comment ca marche ?</summary>
       <div style="padding-top: 0.5rem;">
-        <p><strong>Backend de secours PAYANT : quand un jeton est pose ici, le scrape Instagram passe par l'API Apify au lieu du navigateur.</strong></p>
+        <p><strong>Backend de secours PAYANT : quand un jeton est pose ici, le scrape Instagram, TikTok et Twitter passe par l'API Apify au lieu du navigateur.</strong></p>
         <ol style="padding-left: var(--sp-6); color: var(--s-text-secondary); font-size: var(--text-small); line-height: 2;">
           <li>Cree un compte sur <a href="https://console.apify.com/" target="_blank" rel="noopener">console.apify.com</a></li>
           <li>Recupere ton jeton : Settings &rarr; <strong>API tokens</strong></li>
@@ -162,7 +162,7 @@
         </ol>
         <p style="color: var(--s-text-secondary); font-size: var(--text-small);">
           Chaque post rapporte est facture par Apify. Laisse le jeton <strong>vide</strong> pour revenir au scrape navigateur (cookies + proxy).
-          Les autres plateformes (TikTok, Twitter, Reddit) restent sur le navigateur dans tous les cas.
+          Le jeton est commun ; chaque plateforme a son propre acteur ci-dessous. Reddit reste toujours sur le navigateur.
         </p>
       </div>
     </details>
@@ -178,9 +178,21 @@
       </label>
 
       <label>
-        Acteur (APIFY_ACTOR)
-        <input type="text" name="APIFY_ACTOR" value="{{ env.get('APIFY_ACTOR', '') }}" placeholder="apify~instagram-post-scraper">
-        <small>Defaut : apify~instagram-post-scraper &mdash; format <code>utilisateur~nom-de-l-acteur</code></small>
+        Acteur Instagram (APIFY_ACTOR)
+        <input type="text" name="APIFY_ACTOR" value="{{ env.get('APIFY_ACTOR', '') }}" placeholder="apify~instagram-scraper">
+        <small>Defaut : apify~instagram-scraper &mdash; format <code>utilisateur~nom-de-l-acteur</code></small>
+      </label>
+
+      <label>
+        Acteur TikTok (TIKTOK_ACTOR)
+        <input type="text" name="TIKTOK_ACTOR" value="{{ env.get('TIKTOK_ACTOR', '') }}" placeholder="clockworks~tiktok-scraper">
+        <small>Defaut : clockworks~tiktok-scraper</small>
+      </label>
+
+      <label>
+        Acteur Twitter/X (TWITTER_ACTOR)
+        <input type="text" name="TWITTER_ACTOR" value="{{ env.get('TWITTER_ACTOR', '') }}" placeholder="easyapi~twitter-x-video-downloader">
+        <small>Defaut : easyapi~twitter-x-video-downloader &mdash; telechargeur de video (URL de tweet)</small>
       </label>
 
       <button type="submit" class="mt-1">Sauvegarder</button>

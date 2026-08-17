@@ -34,8 +34,8 @@ ALLOWED_ENV_KEYS = frozenset({
     "GOOGLE_REFRESH_TOKEN", "GDRIVE_ROOT_FOLDER_NAME", "STORAGE_MODE",
     # Instagram Graph API
     "FB_APP_ID", "FB_APP_SECRET", "IG_ACCESS_TOKEN", "IG_USER_ID",
-    # Apify (backend de scrape Instagram par API — lot A)
-    "APIFY_TOKEN", "APIFY_ACTOR",
+    # Apify (backend de scrape par API — lot A + multi-plateforme)
+    "APIFY_TOKEN", "APIFY_ACTOR", "TIKTOK_ACTOR", "TWITTER_ACTOR",
     # Scraper tuning
     "DEFAULT_SCRAPE_INTERVAL_MINUTES", "BROWSER_POOL_SIZE", "SCROLL_PAUSE_MS",
     "MAX_SCROLLS", "DELAY_BETWEEN_PROFILES_MS", "BACKFILL_MAX_SCROLLS",

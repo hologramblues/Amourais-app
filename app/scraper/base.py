@@ -38,6 +38,11 @@ class ExtractOptions:
     backfill_from: Optional[float] = None  # unix timestamp — oldest date
     backfill_to: Optional[float] = None  # unix timestamp — newest date
     proxy: Optional[str] = None  # http://user:pass@host:port
+    # Borne incrémentale (lot B) : date ISO du post le plus récent DÉJÀ en base
+    # pour ce profil. Le backend Apify la passe à l'acteur via
+    # `onlyPostsNewerThan` pour ne PAYER que les posts réellement nouveaux ;
+    # None (profil neuf / premier run) => scrape complet borné par resultsLimit.
+    only_posts_newer_than: Optional[str] = None
 
 
 @dataclass

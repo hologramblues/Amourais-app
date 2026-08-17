@@ -27,7 +27,8 @@ from scrapling.fetchers import StealthyFetcher
 from app.scraper.base import MediaItemData
 from app.scraper.downloaders import download_media, DownloadResult
 
-from app.config import SESSIONS_DIR, get_proxy_for_platform
+from app.config import SESSIONS_DIR, get_apify_settings, get_proxy_for_platform
+from app.scraper.instagram_apify import ApifyQuickError, extraire_post_unique
 
 
 # ---------------------------------------------------------------------------
@@ -573,7 +574,20 @@ def _try_instagram_embed(post_id: str, post_url: str) -> list[MediaItemData]:
 
 
 def _extract_instagram(url: str, post_id: str) -> list[MediaItemData]:
-    """Extract media from a single Instagram post/reel."""
+    """Extract media from a single Instagram post/reel.
+
+    Quand `APIFY_TOKEN` est posé (lot B), on passe par Apify : bien plus fiable
+    que la page `embed`, et le champ `type` de l'item tranche image vs vidéo
+    exactement comme le scrape de profil. Une panne Apify remonte en
+    `ApifyQuickError` (message actionnable) — jamais un repli muet sur l'embed
+    qui masquerait l'échec. Sans jeton, on garde le chemin embed + navigateur.
+    """
+    token, _acteur = get_apify_settings()
+    if token:
+        # Peut lever ApifyQuickError : `quick_download` la transforme en erreur
+        # visible et actionnable pour l'utilisateur.
+        return extraire_post_unique(url)
+
     # Fast path: the public embed page needs no browser and no cookies.
     items = _try_instagram_embed(post_id, url)
     if items:
@@ -1514,6 +1528,13 @@ def quick_download(url: str) -> QuickDownloadResult:
     # Extract media items
     try:
         media_items = handler(url, post_id)
+    except ApifyQuickError as exc:
+        # Échec Apify VISIBLE et actionnable (loi n°8) : le message est déjà en
+        # français et ne porte aucun chemin ni trace, on le remonte tel quel.
+        logger.info("Quick download Apify a échoué pour {}: {}", url[:120], exc)
+        return QuickDownloadResult(
+            platform=platform, post_id=post_id, post_url=url, error=str(exc),
+        )
     except Exception as exc:
         logger.exception("Quick download extraction failed: {}", exc)
         return QuickDownloadResult(

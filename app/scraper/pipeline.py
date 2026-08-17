@@ -11,7 +11,8 @@ import hashlib
 import os
 import subprocess
 import time
-from datetime import datetime
+from collections.abc import Iterable
+from datetime import datetime, timezone
 from pathlib import Path
 
 from loguru import logger
@@ -55,24 +56,39 @@ def _get_extractor(platform: str) -> PlatformExtractor:
     return cls()
 
 
+# Plateformes branchables sur Apify (lot A) : (module, classe). Le registre
+# navigateur `_EXTRACTORS` n'est PAS touché — il reste celui des 4 extracteurs
+# sous contrat (tests/test_extracteurs_contrat.py). Reddit n'a pas d'acteur
+# Apify : il reste toujours sur le navigateur.
+_BACKENDS_APIFY: dict[str, tuple[str, str]] = {
+    "instagram": ("app.scraper.instagram_apify", "InstagramApifyExtractor"),
+    "tiktok": ("app.scraper.tiktok_apify", "TikTokApifyExtractor"),
+    "twitter": ("app.scraper.twitter_apify", "TwitterApifyExtractor"),
+}
+
+
 def _choisir_extracteur(platform: str) -> tuple[PlatformExtractor, str]:
     """Aiguillage du backend d'extraction (lot A) : (extracteur, nom du backend).
 
-    Instagram passe par l'API Apify quand `APIFY_TOKEN` est posé — le jeton
-    est relu À CHAUD (`get_apify_settings` recharge le .env persistant, comme
-    les proxys), donc poser ou retirer le jeton dans Réglages change de
-    backend au scrape suivant, sans redémarrage. Toutes les autres plateformes
-    — et Instagram sans jeton — restent sur le backend navigateur.
+    Instagram, TikTok et Twitter passent par l'API Apify quand `APIFY_TOKEN`
+    est posé — le jeton est relu À CHAUD (`get_apify_settings` recharge le .env
+    persistant, comme les proxys), donc poser ou retirer le jeton dans Réglages
+    change de backend au scrape suivant, sans redémarrage. Reddit — et les trois
+    autres sans jeton — restent sur le backend navigateur. Chaque module Apify
+    résout ENSUITE son propre acteur (`get_apify_settings_for`).
 
     `_EXTRACTORS` n'est PAS modifié : le registre reste celui des extracteurs
     navigateur sous contrat (tests/test_extracteurs_contrat.py).
     """
-    if platform == "instagram":
+    cible = _BACKENDS_APIFY.get(platform)
+    if cible is not None:
         token, _acteur = get_apify_settings()
         if token:
-            from app.scraper.instagram_apify import InstagramApifyExtractor
+            import importlib
 
-            return InstagramApifyExtractor(), "apify"
+            module = importlib.import_module(cible[0])
+            classe = getattr(module, cible[1])
+            return classe(), "apify"
     return _get_extractor(platform), "navigateur"
 
 
@@ -192,6 +208,31 @@ def empreintes(chemin: str | Path, media_type: str | None = None) -> tuple[str |
 def _now_ts() -> int:
     """Current unix timestamp as integer."""
     return int(datetime.now().timestamp())
+
+
+def borne_incrementale(posted_ats: Iterable[int | None]) -> str | None:
+    """Date ISO (UTC) du média le plus récent d'un profil — borne `onlyPostsNewerThan`.
+
+    INCRÉMENTAL ÉCONOMIQUE (lot B). Reçoit les `posted_at` (timestamps unix,
+    éventuellement None) des médias DÉJÀ en base pour un profil, et rend la date
+    du plus récent au format `YYYY-MM-DDTHH:MM:SSZ` — le « dernier téléchargé »
+    qui sert de point de départ au prochain run. L'acteur Apify ne ramènera
+    alors QUE les posts strictement plus récents (le média-borne lui-même est
+    déjà connu), donc seuls les nouveaux posts sont facturés.
+
+    Rend None quand aucun média daté n'existe — profil NEUF ou premier run :
+    pas de borne, donc scrape complet (borné par `resultsLimit`).
+
+    Fonction PURE : aucune I/O, aucune dépendance à l'horloge — entièrement
+    testable sans base ni réseau.
+    """
+    valides = [int(t) for t in posted_ats if t is not None]
+    if not valides:
+        return None
+    plus_recent = max(valides)
+    return datetime.fromtimestamp(plus_recent, tz=timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
 
 
 def _plateforme_non_atteinte(result) -> str | None:
@@ -320,12 +361,31 @@ def _run_scrape_job_inner(db, job_id: int) -> None:  # noqa: C901 (complexity ac
     # 4. Get known post IDs for deduplication
     # ------------------------------------------------------------------
     known_rows = (
-        db.query(MediaItem.post_id)
+        db.query(MediaItem.post_id, MediaItem.posted_at)
         .filter(MediaItem.profile_id == profile.id)
         .all()
     )
     known_post_ids: set[str] = {row[0] for row in known_rows}
     logger.debug("Known post IDs for profile {}: {}", profile.id, len(known_post_ids))
+
+    # ------------------------------------------------------------------
+    # 4b. Fenêtre incrémentale (lot B) — ne PAYER que les posts nouveaux.
+    #     Le dernier média daté du profil devient le point de départ ; l'acteur
+    #     Apify ne ramènera que les posts plus récents (cf. instagram_apify).
+    #     Réservé au mode `daily` : un `backfill` veut au contraire remonter le
+    #     temps, une borne « plus récent que » le viderait. Profil neuf =>
+    #     borne None => premier run complet.
+    # ------------------------------------------------------------------
+    if scrape_mode != "backfill":
+        options.only_posts_newer_than = borne_incrementale(
+            row[1] for row in known_rows
+        )
+        if options.only_posts_newer_than:
+            logger.info(
+                "Incrémental @{} : point de départ = {} (seuls les posts plus "
+                "récents seront demandés)",
+                profile.username, options.only_posts_newer_than,
+            )
 
     # ------------------------------------------------------------------
     # 5. Extract media from platform

@@ -71,6 +71,15 @@ def _client() -> httpx.Client:
     return httpx.Client(timeout=httpx.Timeout(_TIMEOUT_S))
 
 
+class ApifyQuickError(RuntimeError):
+    """Échec d'un quick-download Instagram routé par Apify.
+
+    Porte un message français ACTIONNABLE (jamais un chemin ni une trace) :
+    `quick_download` l'affiche tel quel, ce qui respecte la loi « échec Apify
+    VISIBLE, jamais un résultat vide silencieux » sans fuiter d'interne.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Petites conversions tolérantes (un champ manquant vaut None, jamais KeyError)
 # ---------------------------------------------------------------------------
@@ -151,15 +160,39 @@ def _username_depuis_url(profile_url: str) -> str | None:
 def _media_dun_noeud(noeud: dict) -> tuple[str, str] | None:
     """(media_type, media_url) d'un nœud, ou None si aucune URL exploitable.
 
-    La vidéo prime sur l'image : quand les deux existent (un reel avec sa
-    vignette), c'est la vidéo qu'on veut stocker.
+    SIGNAL DE TYPE (lot B) — le champ FIABLE de `apify~instagram-scraper` :
+    chaque item porte `type` ∈ {"Video", "Image", "Sidecar"} et `videoUrl`
+    n'apparaît QUE sur les vidéos. On tranche donc :
+
+        media_type = "video"  si  type == "Video"  OU  videoUrl présent
+        media_type = "image"  sinon
+
+    C'est bien plus sûr que l'ancien embed, qui devinait à partir de balises.
+    `type` peut manquer (acteurs « variante » qui ne livrent que `video_url` /
+    `displayUrl`) : le repli sur la présence de `videoUrl` couvre ce cas.
+    La vidéo prime sur l'image quand les deux URLs coexistent (un reel porte
+    aussi sa vignette `displayUrl`) : c'est la vidéo qu'on stocke.
+
+    Un `Sidecar` (carrousel) n'est jamais mappé ici : `_items_dun_post`
+    descend dans ses enfants, et CHAQUE enfant porte SON propre `type` — une
+    image et une vidéo peuvent coexister dans le même carrousel.
     """
+    type_brut = _texte(noeud.get("type"))
+    type_est_video = type_brut is not None and type_brut.strip().lower() == "video"
+
     video = _texte(_premier(noeud, "videoUrl", "video_url"))
-    if video:
-        return ("video", video)
     image = _texte(
         _premier(noeud, "displayUrl", "display_url", "imageUrl", "image_url")
     )
+
+    if type_est_video or video:
+        # Vidéo selon le type OU la présence de videoUrl. On préfère l'URL
+        # vidéo ; à défaut (type "Video" mais videoUrl absent, acteur partiel)
+        # on retombe sur l'image plutôt que de perdre le média.
+        url = video or image
+        if url:
+            return ("video", url)
+        return None
     if image:
         return ("image", image)
     return None
@@ -326,6 +359,103 @@ def _message_erreur_http(status: int, acteur: str, corps: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _appeler_apify(
+    token: str, acteur: str, charge: dict
+) -> tuple[list | None, str | None]:
+    """Lance l'acteur en synchrone et rend (items, None) OU (None, message).
+
+    Le SEUL point d'appel réseau du module — partagé par l'extraction de profil
+    et le quick-download d'un post. Toute panne (timeout, réseau, 4xx, corps
+    illisible, forme inattendue) revient en message français actionnable ;
+    jamais une exception ne s'échappe d'ici, jamais un vide muet.
+    """
+    url = _API_URL_TEMPLATE.format(acteur=quote(acteur, safe="~"))
+    try:
+        with _client() as client:
+            reponse = client.post(url, params={"token": token}, json=charge)
+    except httpx.TimeoutException:
+        return None, (
+            f"Apify n'a pas répondu en {int(_TIMEOUT_S)} s : l'acteur "
+            f"« {acteur} » est peut-être surchargé ou trop lent — réessaie "
+            "plus tard, ou choisis un acteur plus rapide dans Réglages."
+        )
+    except httpx.HTTPError as exc:
+        return None, (
+            f"Connexion à l'API Apify impossible : {exc}. Vérifie le réseau "
+            "sortant du conteneur."
+        )
+
+    if not (200 <= reponse.status_code < 300):
+        return None, _message_erreur_http(
+            reponse.status_code, acteur, reponse.text
+        )
+
+    try:
+        items = reponse.json()
+    except ValueError:
+        return None, (
+            "Réponse Apify illisible (le corps n'est pas du JSON) — "
+            f"acteur « {acteur} », statut {reponse.status_code}."
+        )
+
+    if not isinstance(items, list):
+        return None, (
+            "Réponse Apify inattendue (un tableau d'items était attendu) — "
+            f"acteur « {acteur} »."
+        )
+
+    return items, None
+
+
+def extraire_post_unique(url: str) -> list[MediaItemData]:
+    """Quick-download d'UN post Instagram via Apify (URL collée : /p/, /reel/, /tv/).
+
+    Bien plus fiable que la page `embed`, et surtout : le `type` de l'item
+    (« Video » | « Image » | « Sidecar ») tranche image vs vidéo, exactement
+    comme pour le scrape de profil. Un carrousel rend PLUSIEURS MediaItemData,
+    chacun avec son propre type.
+
+    Lève `ApifyQuickError` (message actionnable) sur toute panne, y compris un
+    dataset sans média exploitable — JAMAIS une liste vide silencieuse.
+    """
+    token, acteur = get_apify_settings()
+    if not token:
+        raise ApifyQuickError(
+            "APIFY_TOKEN n'est pas configuré — renseigne-le dans Réglages "
+            "(section Apify) avant d'utiliser le backend Apify."
+        )
+
+    charge = {"directUrls": [url], "resultsLimit": 1}
+    logger.info("Apify quick-download: acteur {} pour {}", acteur, url)
+
+    items, erreur = _appeler_apify(token, acteur, charge)
+    if erreur is not None:
+        raise ApifyQuickError(erreur)
+
+    medias: list[MediaItemData] = []
+    descriptions: list[str] = []
+    for brut in items:
+        if not isinstance(brut, dict):
+            continue
+        post_id, items_du_post = _items_dun_post(brut)
+        if post_id is None:
+            description = _texte(_premier(brut, "errorDescription", "error"))
+            if description:
+                descriptions.append(description)
+            continue
+        medias.extend(items_du_post)
+
+    if not medias:
+        detail = f" Détail de l'acteur : {descriptions[0][:200]}" if descriptions else ""
+        raise ApifyQuickError(
+            f"L'acteur Apify « {acteur} » n'a renvoyé aucun média pour ce lien "
+            "Instagram : post privé, supprimé, ou lien invalide — vérifie le "
+            "lien, ou réessaie plus tard." + detail
+        )
+
+    return medias
+
+
 class InstagramApifyExtractor(PlatformExtractor):
     """Backend Instagram par l'API Apify — même contrat que les 4 extracteurs."""
 
@@ -360,50 +490,41 @@ class InstagramApifyExtractor(PlatformExtractor):
             "directUrls": [profile_url],
             "resultsLimit": limite,
         }
-        url = _API_URL_TEMPLATE.format(acteur=quote(acteur, safe="~"))
+
+        # INCRÉMENTAL ÉCONOMIQUE (lot B) — le pipeline pose sur les options la
+        # date du post le plus récent DÉJÀ en base pour ce profil. On la passe
+        # à l'acteur via `onlyPostsNewerThan` (nom exact vérifié dans la doc de
+        # apify~instagram-scraper ; formats acceptés : "YYYY-MM-DD" ou ISO
+        # complet, UTC). Un run quotidien ne PAIE alors que les posts nouveaux.
+        #
+        # REPLI SÛR : si l'acteur ne connaît pas ce champ, il l'ignore (les
+        # acteurs Apify ignorent les clés inconnues, cf. en-tête de module) et
+        # `resultsLimit` + le filtrage `known_post_ids` reprennent la main — le
+        # scrape reste correct, seule l'optimisation de coût est inactive. On ne
+        # casse JAMAIS le scrape pour une économie.
+        borne = getattr(options, "only_posts_newer_than", None)
+        if borne:
+            charge["onlyPostsNewerThan"] = borne
+            logger.info(
+                "Apify: fenêtre incrémentale onlyPostsNewerThan={} — seuls les "
+                "posts plus récents sont demandés (et facturés) pour @{}",
+                borne, username or profile_url,
+            )
+        else:
+            logger.debug(
+                "Apify: pas de borne incrémentale (profil neuf ou premier run) "
+                "— scrape complet borné par resultsLimit={} pour @{}",
+                limite, username or profile_url,
+            )
 
         logger.info(
             "Apify: lancement de l'acteur {} pour @{} (limite {} posts)",
             acteur, username or profile_url, limite,
         )
 
-        try:
-            with _client() as client:
-                reponse = client.post(url, params={"token": token}, json=charge)
-        except httpx.TimeoutException:
-            result.fetch_error = (
-                f"Apify n'a pas répondu en {int(_TIMEOUT_S)} s : l'acteur "
-                f"« {acteur} » est peut-être surchargé ou trop lent — réessaie "
-                "plus tard, ou choisis un acteur plus rapide dans Réglages."
-            )
-            return result
-        except httpx.HTTPError as exc:
-            result.fetch_error = (
-                f"Connexion à l'API Apify impossible : {exc}. Vérifie le réseau "
-                "sortant du conteneur."
-            )
-            return result
-
-        if not (200 <= reponse.status_code < 300):
-            result.fetch_error = _message_erreur_http(
-                reponse.status_code, acteur, reponse.text
-            )
-            return result
-
-        try:
-            items = reponse.json()
-        except ValueError:
-            result.fetch_error = (
-                "Réponse Apify illisible (le corps n'est pas du JSON) — "
-                f"acteur « {acteur} », statut {reponse.status_code}."
-            )
-            return result
-
-        if not isinstance(items, list):
-            result.fetch_error = (
-                "Réponse Apify inattendue (un tableau d'items était attendu) — "
-                f"acteur « {acteur} »."
-            )
+        items, erreur = _appeler_apify(token, acteur, charge)
+        if erreur is not None:
+            result.fetch_error = erreur
             return result
 
         erreurs_acteur: list[str] = []
@@ -446,7 +567,27 @@ class InstagramApifyExtractor(PlatformExtractor):
                 logger.debug("Apify: item ignoré (forme inattendue) : {}", exc)
 
         if result.total_seen == 0:
-            # Dataset vide ou intégralement illisible : JAMAIS un vide muet.
+            # Dataset vide : DEUX causes opposées, à ne surtout pas confondre.
+            #
+            #  (a) Une borne incrémentale était posée et RIEN de plus récent
+            #      n'existe. C'est le SUCCÈS de l'optimisation, pas une panne :
+            #      c'est même l'état stable normal d'un compte scrapé deux fois
+            #      par jour. Poser `fetch_error` ici ferait échouer le job
+            #      CHAQUE jour avec un message faux — « c'est le succès qui
+            #      provoque l'échec ». On rend donc un résultat vide SANS
+            #      erreur : le pipeline le traduit en `empty`/`completed`.
+            #
+            #  (b) Aucune borne (profil neuf, premier run) et pourtant zéro
+            #      post : là c'est vraiment suspect — profil privé, inexistant,
+            #      ou acteur incompatible. `fetch_error` est légitime.
+            if borne:
+                logger.info(
+                    "Apify: aucun post plus récent que {} pour @{} — rien de "
+                    "nouveau (l'incrémental a fait son travail).",
+                    borne, username or profile_url,
+                )
+                return result
+
             detail = f" Détail de l'acteur : {erreurs_acteur[0][:200]}" if erreurs_acteur else ""
             result.fetch_error = (
                 f"L'acteur Apify « {acteur} » n'a renvoyé aucun post pour "

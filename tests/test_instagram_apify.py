@@ -499,12 +499,16 @@ def test_aiguillage_a_chaud_suit_le_env_persistant(env_apify_reel):
     assert backend == "navigateur"
 
 
-def test_aiguillage_ne_touche_pas_les_autres_plateformes(env_apify_reel):
+def test_aiguillage_reddit_reste_navigateur_meme_avec_jeton(env_apify_reel):
+    """Reddit n'a pas d'acteur Apify : il reste sur le navigateur, jeton ou non.
+
+    (Depuis le lot A TikTok/Twitter, seule Reddit ne bascule jamais ; le
+    basculement de TikTok et Twitter est couvert par test_tiktok_twitter_apify.)
+    """
     env_apify_reel.write_text(f"APIFY_TOKEN={_JETON}\n", encoding="utf-8")
 
-    for plateforme in ("tiktok", "twitter", "reddit"):
-        _, backend = pipeline._choisir_extracteur(plateforme)
-        assert backend == "navigateur", f"{plateforme} ne doit jamais passer par Apify"
+    _, backend = pipeline._choisir_extracteur("reddit")
+    assert backend == "navigateur", "Reddit ne doit jamais passer par Apify"
 
 
 def test_aiguillage_ne_pollue_pas_le_registre(env_apify_reel):

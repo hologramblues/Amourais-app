@@ -144,23 +144,61 @@ def get_proxy_for_platform(platform: str) -> str:
 # Apify au lieu du navigateur (cf. pipeline._choisir_extracteur). Le jeton est
 # relu À CHAUD via get_apify_settings(), comme les proxys.
 APIFY_ACTOR_DEFAULT = "apify~instagram-scraper"  # l'acteur reellement utilise par le proprietaire (2,70 $/1000 posts), verifie contre son vrai dataset
+#: Acteurs par plateforme (lot A — TikTok/Twitter). Chaque plateforme branchée
+#: sur Apify a SON acteur, avec un défaut vérifié dans la console du
+#: propriétaire et un champ dédié dans Réglages, sur le modèle d'APIFY_ACTOR.
+TIKTOK_ACTOR_DEFAULT = "clockworks~tiktok-scraper"
+TWITTER_ACTOR_DEFAULT = "easyapi~twitter-x-video-downloader"
 APIFY_TOKEN = os.getenv("APIFY_TOKEN", "")
 APIFY_ACTOR = os.getenv("APIFY_ACTOR", "") or APIFY_ACTOR_DEFAULT
+TIKTOK_ACTOR = os.getenv("TIKTOK_ACTOR", "") or TIKTOK_ACTOR_DEFAULT
+TWITTER_ACTOR = os.getenv("TWITTER_ACTOR", "") or TWITTER_ACTOR_DEFAULT
+
+#: (variable d'environnement de l'acteur, acteur par défaut) par plateforme.
+#: Le JETON est commun à toutes les plateformes ; seul l'acteur diffère.
+_APIFY_ACTEUR_PAR_PLATEFORME: dict[str, tuple[str, str]] = {
+    "instagram": ("APIFY_ACTOR", APIFY_ACTOR_DEFAULT),
+    "tiktok": ("TIKTOK_ACTOR", TIKTOK_ACTOR_DEFAULT),
+    "twitter": ("TWITTER_ACTOR", TWITTER_ACTOR_DEFAULT),
+}
 
 
 def get_apify_settings() -> tuple[str, str]:
-    """(jeton, acteur) Apify, relus À CHAUD depuis le .env persistant.
+    """(jeton, acteur Instagram) Apify, relus À CHAUD depuis le .env persistant.
 
     Même mécanique que `get_proxy_for_platform` : le fichier de réglages du
     volume est rechargé à chaque appel pour qu'un jeton posé (ou retiré) dans
     l'écran Réglages prenne effet au scrape suivant, sans redémarrage.
     L'acteur vide retombe sur `APIFY_ACTOR_DEFAULT`.
+
+    Conservée telle quelle pour `instagram_apify` et l'aiguillage du pipeline
+    (seul le jeton y compte) ; TikTok/Twitter passent par
+    `get_apify_settings_for`.
     """
     from dotenv import load_dotenv
     load_dotenv(SETTINGS_ENV, override=True)
 
     token = (os.getenv("APIFY_TOKEN") or "").strip()
     acteur = (os.getenv("APIFY_ACTOR") or "").strip() or APIFY_ACTOR_DEFAULT
+    return token, acteur
+
+
+def get_apify_settings_for(platform: str) -> tuple[str, str]:
+    """(jeton, acteur) Apify pour *platform*, relus À CHAUD du .env persistant.
+
+    Le jeton `APIFY_TOKEN` est partagé ; l'acteur dépend de la plateforme
+    (`APIFY_ACTOR`, `TIKTOK_ACTOR`, `TWITTER_ACTOR`) et retombe sur le défaut
+    vérifié de la plateforme quand la variable est vide. Une plateforme
+    inconnue retombe sur l'acteur Instagram par défaut.
+    """
+    from dotenv import load_dotenv
+    load_dotenv(SETTINGS_ENV, override=True)
+
+    token = (os.getenv("APIFY_TOKEN") or "").strip()
+    env_key, defaut = _APIFY_ACTEUR_PAR_PLATEFORME.get(
+        platform, ("APIFY_ACTOR", APIFY_ACTOR_DEFAULT)
+    )
+    acteur = (os.getenv(env_key) or "").strip() or defaut
     return token, acteur
 
 
