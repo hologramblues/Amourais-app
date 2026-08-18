@@ -781,3 +781,63 @@ class TestGardeFouDataDir:
         assert "if not DATA_DIR_EXPLICITE:" in source
         assert "logger.warning(" in source.split("if not DATA_DIR_EXPLICITE:")[1][:800]
         assert "PRODUCTION" in source.split("if not DATA_DIR_EXPLICITE:")[1][:800]
+
+
+# ===========================================================================
+# Couverture Apify — une session morte ne crie plus quand Apify porte le scrape
+# ===========================================================================
+#
+# Depuis le backend Apify, la session navigateur d'instagram/tiktok/twitter
+# n'est plus que le chemin de repli. Une alerte rouge quotidienne pour un repli
+# inutilisé apprendrait au propriétaire à ignorer les alertes — la maladie
+# exacte que cet écran soigne. L'état reste FACTUEL (« déconnecté »), seule
+# l'URGENCE tombe, et le message dit pourquoi.
+
+
+def _etat_deconnecte(plateforme="instagram"):
+    from app.scraper.session_health import ETAT_DECONNECTE, EtatSession
+
+    return EtatSession(
+        plateforme=plateforme, etat=ETAT_DECONNECTE,
+        message="Cookie expiré : ds_user_id.", source="cookies",
+    )
+
+
+def test_session_morte_couverte_par_apify_nest_plus_urgente(monkeypatch):
+    """Jeton posé -> l'état reste 'déconnecté' mais urgent tombe, message annoté."""
+    from app.scraper import session_health as sante
+
+    monkeypatch.setattr(sante, "_etat_brut", lambda p, m=None: _etat_deconnecte(p))
+    monkeypatch.setenv("APIFY_TOKEN", "apify_api_test")
+
+    etat = sante.etat_courant("instagram")
+    assert etat.etat == sante.ETAT_DECONNECTE  # toujours factuel
+    assert etat.urgent is False                # mais plus d'alarme
+    assert etat.couverte_par_apify is True
+    assert "Apify" in etat.message             # et le message dit pourquoi
+    assert etat.en_dict()["urgent"] is False
+
+
+def test_session_morte_sans_apify_reste_urgente(monkeypatch):
+    """Sans jeton, rien ne change : la session morte crie, comme avant."""
+    from app.scraper import session_health as sante
+
+    monkeypatch.setattr(sante, "_etat_brut", lambda p, m=None: _etat_deconnecte(p))
+    monkeypatch.delenv("APIFY_TOKEN", raising=False)
+
+    etat = sante.etat_courant("instagram")
+    assert etat.urgent is True
+    assert etat.couverte_par_apify is False
+    assert "Apify" not in etat.message
+
+
+def test_reddit_reste_urgent_meme_avec_jeton(monkeypatch):
+    """Reddit n'a pas d'acteur Apify : sa session reste pleinement significative."""
+    from app.scraper import session_health as sante
+
+    monkeypatch.setattr(sante, "_etat_brut", lambda p, m=None: _etat_deconnecte(p))
+    monkeypatch.setenv("APIFY_TOKEN", "apify_api_test")
+
+    etat = sante.etat_courant("reddit")
+    assert etat.urgent is True
+    assert etat.couverte_par_apify is False

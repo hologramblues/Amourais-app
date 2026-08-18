@@ -296,10 +296,19 @@ class EtatSession:
     indices: list[str] = field(default_factory=list)
     #: Cette plateforme a-t-elle une sonde éprouvée sur une vraie page morte ?
     sonde_verifiee: bool = False
+    #: Le scrape de cette plateforme passe par Apify : la session navigateur
+    #: n'est plus que le chemin de repli, son état ne justifie pas d'alerte.
+    couverte_par_apify: bool = False
 
     @property
     def urgent(self) -> bool:
-        """Vrai quand l'état demande une action du propriétaire."""
+        """Vrai quand l'état demande une action du propriétaire.
+
+        Une session morte n'appelle AUCUNE action tant qu'Apify porte le
+        scrape : l'état reste affiché (factuel), l'alarme se tait.
+        """
+        if self.couverte_par_apify:
+            return False
         return self.etat in (ETAT_DECONNECTE, ETAT_BLOQUE)
 
     def en_dict(self) -> dict[str, Any]:
@@ -318,6 +327,7 @@ class EtatSession:
             "indices": list(self.indices),
             "urgent": self.urgent,
             "sonde_verifiee": self.sonde_verifiee,
+            "couverte_par_apify": self.couverte_par_apify,
         }
 
 
@@ -1140,7 +1150,44 @@ def lire_etat_enregistre(plateforme: str) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 # LECTURE COMBINÉE — ce que l'UI affiche
 # ---------------------------------------------------------------------------
+def _couverte_par_apify(plateforme: str) -> bool:
+    """Vrai quand le scrape de *plateforme* passe par Apify, pas le navigateur.
+
+    Lu À CHAUD (comme l'aiguillage du pipeline) : poser ou retirer le jeton
+    dans Réglages change la réponse sans redémarrage. Reddit n'a pas d'acteur
+    Apify chez le propriétaire : sa session reste pleinement significative.
+    """
+    if plateforme not in ("instagram", "tiktok", "twitter"):
+        return False
+    try:
+        from app.config import get_apify_settings_for
+
+        token, _ = get_apify_settings_for(plateforme)
+        return bool(token)
+    except Exception:  # noqa: BLE001 — un souci de config ne casse pas l'écran
+        return False
+
+
 def etat_courant(plateforme: str, maintenant: int | None = None) -> EtatSession:
+    """Verdict retenu, TEMPÉRÉ par la couverture Apify.
+
+    L'état reste FACTUEL — une session morte est dite morte — mais quand la
+    plateforme est scrapée via Apify, cette session ne sert plus qu'au chemin
+    de repli : crier « urgent » chaque jour pour un repli inutilisé apprend au
+    propriétaire à ignorer les alertes, ce qui est exactement la maladie que
+    cet écran soigne. L'urgence tombe donc, et le message le dit.
+    """
+    resultat = _etat_brut(plateforme, maintenant)
+    if resultat.urgent and _couverte_par_apify(plateforme):
+        resultat.couverte_par_apify = True
+        resultat.message = (
+            f"{resultat.message} — Sans effet sur le scrape : cette plateforme "
+            "passe par Apify, la session navigateur n'est que le chemin de repli."
+        )
+    return resultat
+
+
+def _etat_brut(plateforme: str, maintenant: int | None = None) -> EtatSession:
     """Fusionne le signal passif et le dernier verdict de sonde.
 
     Arbitrage, dans cet ordre :
