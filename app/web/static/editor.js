@@ -144,7 +144,9 @@
             showOverlay: false,
             // Texte TikTok « POV » — rendu sur le canvas TikTok uniquement.
             povText: '',
-            povStyle: 'light',   // 'light' = fond blanc/texte noir, 'dark' = fond noir translucide/texte blanc
+            // 'outline' = texte blanc a contour noir (le style TikTok le plus courant),
+            // 'light' = fond blanc/texte noir, 'dark' = fond noir translucide/texte blanc
+            povStyle: 'outline',
             // Watermark state — opacité constante, voir WATERMARK_OPACITY
             watermarkOpacity: WATERMARK_OPACITY,
             // ---- Retouche image (LOT C) ----
@@ -3396,10 +3398,37 @@
         // création du bloc, et une re-mesure après chargement.
         // ============================================
         const POV_FONT_SPEC = '600 48px Montserrat';
+        // Les trois styles natifs de TikTok. `bg: null` = aucun bloc de fond :
+        // `povRenderLinesBackground` sort immédiatement, seul le contour reste.
+        //
+        // PIÈGE FABRIC pour le style « contour » : sans `paintFirst: 'stroke'`,
+        // le contour est peint PAR-DESSUS le remplissage et ronge l'intérieur
+        // des lettres — le texte paraît maigre et sale. En le peignant d'abord,
+        // le contour reste derrière et épaissit la lettre vers l'extérieur,
+        // comme le fait TikTok.
         const POV_STYLES = {
-            light: { bg: '#ffffff', fill: '#000000' },
-            dark:  { bg: 'rgba(0, 0, 0, 0.65)', fill: '#ffffff' }
+            light:   { bg: '#ffffff', fill: '#000000', stroke: null },
+            dark:    { bg: 'rgba(0, 0, 0, 0.65)', fill: '#ffffff', stroke: null },
+            outline: { bg: null, fill: '#ffffff', stroke: '#000000' }
         };
+
+        //: Épaisseur du contour, PROPORTIONNELLE au corps : un contour fixe
+        //: disparaît sur un grand texte et noie un petit.
+        const POV_STROKE_RATIO = 0.13;
+
+        /** Propriétés de contour à appliquer (ou à retirer) selon le style. */
+        function povStrokeProps(style, fontSize) {
+            if (!style.stroke) {
+                return { stroke: null, strokeWidth: 0 };
+            }
+            return {
+                stroke: style.stroke,
+                strokeWidth: Math.max(2, Math.round(fontSize * POV_STROKE_RATIO)),
+                paintFirst: 'stroke',
+                strokeLineJoin: 'round',
+                strokeLineCap: 'round'
+            };
+        }
         let povFontReady = false;
         const povFontPromise = (document.fonts && document.fonts.load)
             ? document.fonts.load(POV_FONT_SPEC).then(function(faces) {
@@ -3475,7 +3504,10 @@
             const style = POV_STYLES[state.povStyle] || POV_STYLES.light;
 
             if (p.povObj) {
-                p.povObj.set({ text: state.povText, fill: style.fill });
+                p.povObj.set(Object.assign(
+                    { text: state.povText, fill: style.fill },
+                    povStrokeProps(style, p.povObj.fontSize)
+                ));
                 p.povObj.povBg = style.bg;
                 p.povObj.initDimensions();
                 p.canvas.renderAll();
@@ -3503,6 +3535,7 @@
                 // dédié, comme la légende — un seul point de vérité.
                 editable: false
             });
+            obj.set(povStrokeProps(style, obj.fontSize));
             obj.povBg = style.bg;
             obj._renderTextLinesBackground = povRenderLinesBackground;
 
