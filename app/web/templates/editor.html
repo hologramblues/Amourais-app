@@ -439,13 +439,17 @@
                    mais lus et écrits par les steppers, donc aucun
                    gestionnaire d'editor.js n'a changé de cible. #}
                 <div class="wiz-steppers">
-                    <div class="ctl ctl--stack">
-                        <span class="ctl-label" id="lbl-textsize">Taille</span>
-                        <div class="stepper" role="group" aria-labelledby="lbl-textsize">
-                            <button class="stepper__btn" type="button" id="text-size-down" aria-label="R&eacute;duire la taille du texte">&#8722;</button>
-                            <output class="stepper__value" id="text-size-readout" for="text-size">42&nbsp;px</output>
-                            <button class="stepper__btn" type="button" id="text-size-up" aria-label="Augmenter la taille du texte">+</button>
-                        </div>
+                    {# CURSEUR, pas stepper : on vise une taille d'un geste au
+                       lieu d'incrementer douze fois. C'est le curseur REEL
+                       (#text-size) qu'on remonte ici — il etait deja la source
+                       de verite, simplement cache plus bas. Rien a synchroniser :
+                       il n'y a qu'un seul element. #}
+                    <div class="ctl ctl--stack zoom-pane">
+                        <label class="ctl-label" for="text-size">Taille
+                            <output class="zoom-out-val" id="text-size-readout" for="text-size">42&nbsp;px</output>
+                        </label>
+                        <input type="range" class="slider" id="text-size"
+                               min="24" max="72" step="2" value="42">
                     </div>
                     <div class="ctl ctl--stack">
                         <span class="ctl-label" id="lbl-lineheight">Interligne</span>
@@ -458,9 +462,10 @@
                 </div>
 
                 <div class="wiz-hidden-range">
-                    <label class="ctl-label" for="text-size">Taille du texte (r&eacute;glage fin)</label>
-                    <input type="range" class="slider" id="text-size" min="24" max="72" value="42">
-                    <output class="slider-value" id="text-size-value" for="text-size">42px</output>
+                    {# #text-size a ete REMONTE dans le panneau, visible. Le
+                       laisser ici aurait cree un id en double — le premier
+                       gagne, le second devient un controle mort. #}
+                    <output class="slider-value" id="text-size-value" for="text-size" hidden>42px</output>
                     <label class="ctl-label" for="line-height">Interlignage (r&eacute;glage fin)</label>
                     <input type="range" class="slider" id="line-height" min="80" max="200" value="120" step="5">
                     <output class="slider-value" id="line-height-value" for="line-height">1.2</output>

@@ -373,9 +373,13 @@ body {
 
 .wiz-selinfo { min-height: calc(var(--text-micro) * 1.4); }
 
+/* Deux colonnes tant qu'il n'y avait que des steppers compacts. La taille du
+   texte est passée en CURSEUR : à 65px de large il devenait impointable. Une
+   colonne, donc — un curseur a besoin de course pour être visé d'un geste,
+   ce qui était toute la raison de l'abandonner le stepper. */
 .wiz-steppers {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: var(--sp-5);
 }
 

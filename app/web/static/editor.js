@@ -57,8 +57,8 @@
         //   TikTok    : bord droit, CENTRÉ EN HAUTEUR, et plus discret encore —
         //               le bas de l'écran y est mangé par les libellés de
         //               l'application (pseudo, légende, boutons).
-        const WATERMARK_FRAME_RATIO = 0.32; // Instagram — était 0.70, réduit de plus de moitié
-        const WATERMARK_TIKTOK_RATIO  = 0.22; // TikTok — plus discret encore
+        const WATERMARK_FRAME_RATIO = 0.45; // Instagram — 0.70 était trop gros, 0.32 trop petit
+        const WATERMARK_TIKTOK_RATIO  = 0.30; // TikTok — plus discret qu'Instagram, mais lisible
         const WATERMARK_BLEED_RATIO = 0.035;
 
         /** Largeur cible du filigrane, en fraction de la largeur du cadre.
@@ -4210,10 +4210,10 @@
             });
 
             // ---- Taille du texte : 24 → 72 px, pas de 2 ----
-            const sizeUp = document.getElementById('text-size-up');
-            const sizeDown = document.getElementById('text-size-down');
-            if (sizeUp) sizeUp.addEventListener('click', function () { nudgeRange(textSizeSlider, 2, 24, 72); });
-            if (sizeDown) sizeDown.addEventListener('click', function () { nudgeRange(textSizeSlider, -2, 24, 72); });
+            // Le stepper a laissé place au CURSEUR #text-size lui-même, remonté
+            // dans le panneau. Il porte déjà son propre écouteur `input` : il
+            // n'y a plus rien à câbler ici, et les deux boutons ont disparu du
+            // gabarit — garder leurs gestionnaires aurait été du code mort.
 
             // ---- Interligne : 0,8 → 2,0, pas de 0,1 ----
             const lineUp = document.getElementById('line-height-up');

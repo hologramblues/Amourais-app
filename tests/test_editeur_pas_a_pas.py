@@ -247,11 +247,11 @@ def test_lavertissement_dexport_video_est_conserve(html):
 def test_le_filigrane_est_calcule_sur_le_cadre(js):
     """Largeur 70 % du cadre, débord 3,5 % — deux constantes, pas deux
     coordonnées écrites en dur par gabarit."""
-    assert "const WATERMARK_FRAME_RATIO = 0.32;" in js, (
-        "Instagram : le filigrane doit rester a 0.32 — il etait a 0.70, juge "
-        "trop gros par le proprietaire et reduit de plus de moitie."
+    assert "const WATERMARK_FRAME_RATIO = 0.45;" in js, (
+        "Instagram : 0.45. Reglage en deux temps par le proprietaire — 0.70 "
+        "etait trop gros, 0.32 trop petit."
     )
-    assert "const WATERMARK_TIKTOK_RATIO  = 0.22;" in js, (
+    assert "const WATERMARK_TIKTOK_RATIO  = 0.30;" in js, (
         "TikTok : filigrane encore plus discret que sur Instagram."
     )
     # TikTok l ancre au bord DROIT, CENTRE EN HAUTEUR (le bas de l ecran y est
@@ -345,8 +345,15 @@ def test_les_steppers_bornent_comme_le_handoff(js, html):
     )
     # (le sens inverse du zoom n a plus de bouton : le curseur couvre les
     #  deux sens d un seul geste)
-    assert "nudgeRange(textSizeSlider, 2, 24, 72)" in js
-    assert "nudgeRange(textSizeSlider, -2, 24, 72)" in js
+    # La taille du texte n est plus un stepper : c est le curseur #text-size
+    # lui-meme, remonte dans le panneau (source de verite unique, rien a
+    # synchroniser). Ses bornes vivent donc dans le GABARIT.
+    assert 'id="text-size"' in html and 'min="24" max="72"' in html, (
+        "le curseur de taille borne 24-72 px dans le gabarit"
+    )
+    assert "text-size-up" not in html, (
+        "l ancien stepper de taille ne doit plus exister"
+    )
     assert "nudgeRange(lineHeightSlider, 10, 80, 200)" in js
     assert "nudgeRange(lineHeightSlider, -10, 80, 200)" in js
 
