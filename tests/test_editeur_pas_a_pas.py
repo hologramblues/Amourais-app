@@ -123,7 +123,11 @@ IDS_CONSTRUITS_EN_JS = {
 }
 
 #: Préfixes concaténés à une clé de plateau : `'toggle-' + p.key`.
-PREFIXES_DYNAMIQUES = ("toggle-", "export-shot-", "export-tag-")
+# Préfixes concaténés en JS ('zoom-' + suffixe). Chacun DOIT être couvert
+# par `test_les_plateaux_repondent_aux_prefixes_concatenes` : déclarer un
+# préfixe ici sans l'y ajouter reviendrait à créer un angle mort.
+PREFIXES_DYNAMIQUES = ("toggle-", "export-shot-", "export-tag-",
+                       "zoom-", "zoom-readout-")
 
 
 def test_tout_element_reclame_par_editor_js_existe_dans_le_gabarit(js, html):
@@ -146,7 +150,8 @@ def test_tout_element_reclame_par_editor_js_existe_dans_le_gabarit(js, html):
 
 def test_les_plateaux_repondent_aux_prefixes_concatenes(html):
     """`'toggle-' + p.key`, `'export-tag-' + p.key` : les deux clés existent."""
-    for prefixe in ("toggle", "export-shot", "export-tag"):
+    for prefixe in ("toggle", "export-shot", "export-tag",
+                    "zoom", "zoom-readout"):
         for cle in ("ig", "tt"):
             assert f'id="{prefixe}-{cle}"' in html, f"{prefixe}-{cle}"
 
@@ -242,7 +247,16 @@ def test_lavertissement_dexport_video_est_conserve(html):
 def test_le_filigrane_est_calcule_sur_le_cadre(js):
     """Largeur 70 % du cadre, débord 3,5 % — deux constantes, pas deux
     coordonnées écrites en dur par gabarit."""
-    assert "const WATERMARK_FRAME_RATIO = 0.70;" in js
+    assert "const WATERMARK_FRAME_RATIO = 0.32;" in js, (
+        "Instagram : le filigrane doit rester a 0.32 — il etait a 0.70, juge "
+        "trop gros par le proprietaire et reduit de plus de moitie."
+    )
+    assert "const WATERMARK_TIKTOK_RATIO  = 0.22;" in js, (
+        "TikTok : filigrane encore plus discret que sur Instagram."
+    )
+    # TikTok l ancre au bord DROIT, CENTRE EN HAUTEUR (le bas de l ecran y est
+    # mange par les libelles de l application).
+    assert "originY: 'center'" in js, "TikTok : filigrane centre en hauteur"
     assert "const WATERMARK_BLEED_RATIO = 0.035;" in js
     assert "function placeWatermark(p)" in js
     assert "function effectiveFrame(p)" in js
@@ -318,11 +332,19 @@ def test_la_grille_est_inerte_au_pointeur(js):
 # 6. Les steppers écrivent dans les curseurs d'origine
 # ---------------------------------------------------------------------------
 
-def test_les_steppers_bornent_comme_le_handoff(js):
+def test_les_steppers_bornent_comme_le_handoff(js, html):
     """Zoom 100→200 pas de 10 ; taille 24→72 pas de 2 ; interligne
     0,8→2,0 pas de 0,1."""
-    assert "nudgeRange(imageScaleSlider, 10, 100, 200)" in js
-    assert "nudgeRange(imageScaleSlider, -10, 100, 200)" in js
+    # Le zoom n est plus un stepper partage : c est UN CURSEUR PAR PLATEAU
+    # (un 4:5 et un 9:16 ne se cadrent pas au meme zoom).
+    assert "appliquerZoom(pane, v)" in js, (
+        "chaque curseur de zoom ne doit toucher QUE son plateau"
+    )
+    assert 'id="zoom-ig"' in html and 'id="zoom-tt"' in html, (
+        "un curseur de zoom par plateau doit exister dans le gabarit"
+    )
+    # (le sens inverse du zoom n a plus de bouton : le curseur couvre les
+    #  deux sens d un seul geste)
     assert "nudgeRange(textSizeSlider, 2, 24, 72)" in js
     assert "nudgeRange(textSizeSlider, -2, 24, 72)" in js
     assert "nudgeRange(lineHeightSlider, 10, 80, 200)" in js

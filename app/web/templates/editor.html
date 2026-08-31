@@ -267,12 +267,26 @@
                    il tombait sous la ligne de flottaison du panneau au
                    doigt : le geste le plus courant de l'étape demandait
                    un défilement. #}
+                {# UN CURSEUR PAR PLATEAU. Un 4:5 et un 9:16 ne se cadrent pas
+                   au même zoom : un réglage partagé obligeait à rogner l'un
+                   pour sauver l'autre. Curseurs et non boutons −/+ : on vise
+                   une valeur d'un geste au lieu d'incrémenter dix fois. #}
                 <div class="ctl ctl--stack" id="zoom-ctl">
-                    <span class="ctl-label" id="lbl-zoom">Zoom du m&eacute;dia</span>
-                    <div class="stepper" role="group" aria-labelledby="lbl-zoom">
-                        <button class="stepper__btn" type="button" id="zoom-out-btn" aria-label="R&eacute;duire le m&eacute;dia">&#8722;</button>
-                        <output class="stepper__value" id="zoom-readout" for="image-scale">100&nbsp;%</output>
-                        <button class="stepper__btn" type="button" id="zoom-in-btn" aria-label="Agrandir le m&eacute;dia">+</button>
+                    <div class="zoom-pane" id="zoom-pane-ig">
+                        <label class="ctl-label" for="zoom-ig">Zoom Instagram
+                            <output class="zoom-out-val" id="zoom-readout-ig" for="zoom-ig">100&nbsp;%</output>
+                        </label>
+                        <input type="range" class="slider" id="zoom-ig"
+                               min="50" max="200" step="1" value="100"
+                               aria-label="Zoom du m&eacute;dia sur le plateau Instagram">
+                    </div>
+                    <div class="zoom-pane" id="zoom-pane-tt">
+                        <label class="ctl-label" for="zoom-tt">Zoom TikTok
+                            <output class="zoom-out-val" id="zoom-readout-tt" for="zoom-tt">100&nbsp;%</output>
+                        </label>
+                        <input type="range" class="slider" id="zoom-tt"
+                               min="50" max="200" step="1" value="100"
+                               aria-label="Zoom du m&eacute;dia sur le plateau TikTok">
                     </div>
                 </div>
 

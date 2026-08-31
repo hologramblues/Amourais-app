@@ -2061,3 +2061,21 @@ body {
        maquette desktop. */
     .library-grid { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* ---- Zoom : un curseur par plateau ----
+   Un 4:5 et un 9:16 ne se cadrent pas au même zoom. Deux curseurs plutôt
+   qu'un stepper partagé : on vise une valeur d'un geste au lieu de cliquer
+   dix fois, et chaque plateau garde le sien. */
+.zoom-pane + .zoom-pane { margin-top: var(--sp-5); }
+.zoom-pane .ctl-label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-3);
+}
+.zoom-out-val {
+    font-variant-numeric: var(--numeric);
+    font-weight: var(--weight-semibold);
+    color: var(--fg-2);
+}

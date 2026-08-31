@@ -51,8 +51,21 @@
         // et sur le plateau TikTok plein écran. Sur ce dernier le cadre
         // EST le canvas : le dépassement sort donc du fichier exporté,
         // ce qui est exactement l'effet demandé.
-        const WATERMARK_FRAME_RATIO = 0.70;
+        // Taille et ancrage du filigrane, PAR PLATEAU — un 4:5 et un 9:16
+        // n'ont ni la même largeur utile ni la même zone de sécurité.
+        //   Instagram : coin bas-droit, avec un léger débord.
+        //   TikTok    : bord droit, CENTRÉ EN HAUTEUR, et plus discret encore —
+        //               le bas de l'écran y est mangé par les libellés de
+        //               l'application (pseudo, légende, boutons).
+        const WATERMARK_FRAME_RATIO = 0.32; // Instagram — était 0.70, réduit de plus de moitié
+        const WATERMARK_TIKTOK_RATIO  = 0.22; // TikTok — plus discret encore
         const WATERMARK_BLEED_RATIO = 0.035;
+
+        /** Largeur cible du filigrane, en fraction de la largeur du cadre.
+         *  `p.key` est le même discriminant que `templateOf` : 'ig' | 'tt'. */
+        function watermarkRatio(p) {
+            return p.key === 'tt' ? WATERMARK_TIKTOK_RATIO : WATERMARK_FRAME_RATIO;
+        }
 
         /** Cadre EFFECTIF du plateau (la hauteur suit « Hauteur du cadre »). */
         function effectiveFrame(p) {
@@ -110,7 +123,7 @@
             if (!p.watermark) return;
             const f = effectiveFrame(p);
             const bleed = f.width * WATERMARK_BLEED_RATIO;
-            const target = f.width * WATERMARK_FRAME_RATIO;
+            const target = f.width * watermarkRatio(p);
             // `width` d'un fabric.Image est la largeur NATURELLE de la
             // source : le facteur d'échelle s'en déduit directement.
             const natural = p.watermark.width || 1;
@@ -124,11 +137,27 @@
             // coin de l'IMAGE — d'où le rattrapage de la marge transparente.
             const padRight = natural * (1 - ink.r) * scale;
             const padBottom = naturalH * (1 - ink.b) * scale;
+            // TikTok : bord droit, CENTRÉ EN HAUTEUR. Instagram : coin
+            // bas-droit avec débord, comme avant.
+            const surTikTok = (p.key === 'tt');
+            const ancrage = surTikTok
+                ? {
+                    originX: 'right',
+                    originY: 'center',
+                    left: CANVAS_PADDING + f.x + f.width + bleed + padRight,
+                    top:  CANVAS_PADDING + f.y + f.height / 2
+                  }
+                : {
+                    originX: 'right',
+                    originY: 'bottom',
+                    left: CANVAS_PADDING + f.x + f.width + bleed + padRight,
+                    top:  CANVAS_PADDING + f.y + f.height + bleed + padBottom
+                  };
             p.watermark.set({
-                originX: 'right',
-                originY: 'bottom',
-                left: CANVAS_PADDING + f.x + f.width + bleed + padRight,
-                top: CANVAS_PADDING + f.y + f.height + bleed + padBottom,
+                originX: ancrage.originX,
+                originY: ancrage.originY,
+                left: ancrage.left,
+                top: ancrage.top,
                 scaleX: scale,
                 scaleY: scale,
                 opacity: state.watermarkOpacity / 100,
@@ -1510,19 +1539,36 @@
 
         // Le slider agit sur LES DEUX plateaux (même geste qu'avant) ; le
         // zoom par poignées, lui, reste propre au plateau manipulé.
-        function updateImageScale(percentage) {
-            imageScaleValue.textContent = percentage + '%';
-            eachPane(function(p) {
-                p.imageScale = percentage;
-                if (p.imageObj && p.imageObj._baseScale) {
-                    const newScale = p.imageObj._baseScale * (percentage / 100);
-                    p.imageObj.set({
-                        scaleX: newScale,
-                        scaleY: newScale
-                    });
-                    p.canvas.renderAll();
-                }
+        /** Applique un zoom à UN plateau. `p.imageScale` existait déjà par
+         *  plateau : seul le contrôle était partagé, ce qui forçait les deux
+         *  formats à porter le même cadrage. */
+        function appliquerZoom(p, percentage) {
+            p.imageScale = percentage;
+            if (p.imageObj && p.imageObj._baseScale) {
+                const newScale = p.imageObj._baseScale * (percentage / 100);
+                p.imageObj.set({ scaleX: newScale, scaleY: newScale });
+                p.canvas.renderAll();
+            }
+        }
+
+        /** Remet les deux curseurs et leurs valeurs au diapason de l'état. */
+        function syncZoomControls() {
+            [['ig', panes.ig], ['tt', panes.tt]].forEach(function(paire) {
+                const suffixe = paire[0], pane = paire[1];
+                const curseur = document.getElementById('zoom-' + suffixe);
+                const lecture = document.getElementById('zoom-readout-' + suffixe);
+                const valeur = Math.round(pane.imageScale || 100);
+                if (curseur) curseur.value = valeur;
+                if (lecture) lecture.textContent = valeur + ' %';
             });
+        }
+
+        // Conservé pour les appels existants (réinitialisation, chargement
+        // d'un média) : met les DEUX plateaux à la même valeur de départ.
+        function updateImageScale(percentage) {
+            if (imageScaleValue) imageScaleValue.textContent = percentage + '%';
+            eachPane(function(p) { appliquerZoom(p, percentage); });
+            syncZoomControls();
         }
 
         function updateFrameHeight(percentage) {
@@ -3863,7 +3909,6 @@
         const librarySearch = document.getElementById('library-search');
         const librarySearchWrap = document.getElementById('library-search-wrap');
         const libraryGrid = document.getElementById('library-grid');
-        const zoomReadout = document.getElementById('zoom-readout');
         const textSizeReadout = document.getElementById('text-size-readout');
         const lineHeightReadout = document.getElementById('line-height-readout');
         const exportCards = document.getElementById('export-cards');
@@ -3952,9 +3997,9 @@
         }
 
         function syncStepperReadouts() {
-            if (zoomReadout && imageScaleSlider) {
-                zoomReadout.textContent = Math.round(parseFloat(imageScaleSlider.value)) + ' %';
-            }
+            // Le zoom n'est plus un stepper partagé mais DEUX curseurs, un par
+            // plateau : sa remise au diapason vit dans `syncZoomControls`.
+            syncZoomControls();
             if (textSizeReadout && textSizeSlider) {
                 textSizeReadout.textContent = Math.round(parseFloat(textSizeSlider.value)) + ' px';
             }
@@ -4151,13 +4196,17 @@
             // Le curseur « Zoom fin » (50 → 200) reste la source de
             // vérité et reste atteignable dans la retouche avancée :
             // aucune valeur possible avant ne devient impossible.
-            const zoomInBtn = document.getElementById('zoom-in-btn');
-            const zoomOutBtn = document.getElementById('zoom-out-btn');
-            if (zoomInBtn) zoomInBtn.addEventListener('click', function () {
-                nudgeRange(imageScaleSlider, 10, 100, 200);
-            });
-            if (zoomOutBtn) zoomOutBtn.addEventListener('click', function () {
-                nudgeRange(imageScaleSlider, -10, 100, 200);
+            // UN CURSEUR PAR PLATEAU — chacun ne touche QUE le sien.
+            [['ig', panes.ig], ['tt', panes.tt]].forEach(function(paire) {
+                const suffixe = paire[0], pane = paire[1];
+                const curseur = document.getElementById('zoom-' + suffixe);
+                const lecture = document.getElementById('zoom-readout-' + suffixe);
+                if (!curseur) return;
+                curseur.addEventListener('input', function () {
+                    const v = parseInt(curseur.value, 10);
+                    if (lecture) lecture.textContent = v + ' %';
+                    appliquerZoom(pane, v);
+                });
             });
 
             // ---- Taille du texte : 24 → 72 px, pas de 2 ----
