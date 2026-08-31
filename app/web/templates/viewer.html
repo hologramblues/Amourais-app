@@ -150,6 +150,15 @@
             aria-pressed="false" aria-controls="v-dup"
             title="Rechercher les doublons">Doublons</button>
 
+    <!-- ═══ TRI RAPIDE (refonte « PAS-À-PAS », §3) ═══
+         L'entrée du mode plein écran où l'on note et où l'on écrit la
+         phrase du futur meme, une carte à la fois. C'est un mode PENSÉ
+         AU DOIGT, d'où le bouton primaire : c'est la seule action de
+         cette barre qui ouvre un écran entier. -->
+    <button type="button" class="btn btn--primary" id="btn-tri"
+            aria-haspopup="dialog" aria-controls="v-tri"
+            title="Trier au swipe : note + phrase du meme">⇄ Tri rapide</button>
+
     <span class="toolbar__spacer"></span>
 
     <!-- V16 : le total de la vue courante, en chiffre, toujours à l'écran. -->
@@ -166,30 +175,9 @@
     <button type="button" class="btn btn--sm v-chips__clear" id="btn-clear-filters">Tout effacer</button>
   </div>
 
-  <!-- V11 : barre d'actions, avec le NOMBRE exact, 4 actions au plus. -->
-  <div class="v-selbar" id="v-selbar" hidden role="region" aria-label="Actions sur la sélection">
-    <strong class="v-selbar__count num" id="sel-count">0</strong>
-    <span class="v-selbar__label" id="sel-label">élément sélectionné</span>
-    <span class="toolbar__spacer"></span>
-    <button type="button" class="btn btn--sm" id="btn-sel-all">Tout sélectionner</button>
-    <button type="button" class="btn btn--sm" id="btn-sel-none">Désélectionner</button>
-
-    <!-- V20 : ajout par LOT depuis la sélection multiple déjà en place. -->
-    <div class="v-pop" id="pop-addto">
-      <button type="button" class="btn btn--sm v-pop__trigger"
-              aria-expanded="false" aria-haspopup="true">Ajouter à…</button>
-      <div class="v-pop__panel popover" role="dialog" aria-label="Ajouter à une collection" hidden>
-        <p class="menu-label">Collections</p>
-        <div class="v-addto__list" id="addto-list"></div>
-        <button type="button" class="btn btn--sm v-addto__new" id="btn-addto-new">
-          + Nouvelle collection…
-        </button>
-      </div>
-    </div>
-
-    <button type="button" class="btn btn--sm" id="btn-sel-download">Télécharger</button>
-    <button type="button" class="btn btn--sm btn--danger" id="btn-sel-delete">Supprimer</button>
-  </div>
+  <!-- La barre de sélection n'est plus ici : la maquette la pose EN BAS
+       de l'écran, au ras des vignettes qu'on vient de cocher (§4). Elle
+       vit désormais juste avant </body>, en barre fixe. -->
 </div>
 
 <!-- Zone de messages : remplace alert(). role=status, donc annoncé, mais
@@ -262,6 +250,105 @@
     <div class="v-inspector__body" id="v-inspector-body"></div>
   </aside>
 </div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     BARRE DE SÉLECTION (V11) — EN BAS D'ÉCRAN
+     Le nombre exact, puis les actions. Elle était sous la barre
+     d'outils ; la refonte la pose en bas, contre le pouce sur
+     mobile et sous la grille sur desktop (§4). Le contenu, les
+     identifiants et le câblage sont inchangés : seul l'endroit
+     où elle se dessine a bougé.
+     ═══════════════════════════════════════════════════════════ -->
+<div class="v-selbar" id="v-selbar" hidden role="region" aria-label="Actions sur la sélection">
+  <strong class="v-selbar__count num" id="sel-count">0</strong>
+  <span class="v-selbar__label" id="sel-label">élément sélectionné</span>
+  <span class="toolbar__spacer"></span>
+  <button type="button" class="btn btn--sm" id="btn-sel-all">Tout sélectionner</button>
+  <button type="button" class="btn btn--sm" id="btn-sel-none">Désélectionner</button>
+
+  <!-- V20 : ajout par LOT depuis la sélection multiple déjà en place. -->
+  <div class="v-pop" id="pop-addto">
+    <button type="button" class="btn btn--sm v-pop__trigger"
+            aria-expanded="false" aria-haspopup="true">Ajouter à…</button>
+    <div class="v-pop__panel popover" role="dialog" aria-label="Ajouter à une collection" hidden>
+      <p class="menu-label">Collections</p>
+      <div class="v-addto__list" id="addto-list"></div>
+      <button type="button" class="btn btn--sm v-addto__new" id="btn-addto-new">
+        + Nouvelle collection…
+      </button>
+    </div>
+  </div>
+
+  <button type="button" class="btn btn--sm" id="btn-sel-download">Télécharger</button>
+  <button type="button" class="btn btn--sm btn--danger" id="btn-sel-delete">Supprimer</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TRI RAPIDE (§3) — écran plein, une carte à la fois.
+     Un ÉCRAN, pas une modale : il recouvre la galerie, garde son
+     propre en-tête et se ferme par la croix. La pile est bâtie
+     par viewer.js à partir des médias DÉJÀ chargés et DÉJÀ
+     filtrés : le tri ne montre jamais autre chose que la vue
+     courante.
+     ═══════════════════════════════════════════════════════════ -->
+<section class="v-tri" id="v-tri" hidden role="dialog" aria-modal="true" aria-label="Tri rapide">
+  <header class="v-tri__head">
+    <strong class="v-tri__titre">Tri rapide</strong>
+    <span class="v-tri__compteur num" id="tri-compteur">0 / 0</span>
+    <button type="button" class="v-tri__fermer" id="btn-tri-close"
+            aria-label="Fermer le tri rapide">&#x2715;</button>
+  </header>
+
+  <!-- Progression : 4px d'accent, la seule mesure d'avancement. -->
+  <div class="v-tri__jauge" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+       aria-valuenow="0" id="tri-jauge" aria-label="Avancement du tri">
+    <span class="v-tri__jauge-barre" id="tri-jauge-barre"></span>
+  </div>
+
+  <!-- La PILE : la carte suivante est visible derrière, inclinée de 2°.
+       Elle n'est que du décor — aria-hidden, aucune cible. -->
+  <div class="v-tri__pile" id="tri-pile">
+   <div class="v-tri__scene">
+    <div class="v-tri__fantome" aria-hidden="true"></div>
+    <article class="v-tri__carte" id="tri-carte">
+      <div class="v-tri__vue" id="tri-vue"></div>
+      <div class="v-tri__corps">
+        <p class="v-tri__source" id="tri-source"></p>
+        <p class="v-tri__meta" id="tri-meta"></p>
+        <div class="v-tri__etoiles" id="tri-etoiles" role="group" aria-label="Noter ce média"></div>
+        <label class="v-tri__label" for="tri-phrase">Ta phrase pour le meme</label>
+        <input type="text" class="v-tri__phrase" id="tri-phrase" maxlength="500"
+               autocomplete="off" placeholder="ex. Quand tu réalises que…">
+      </div>
+      <span class="v-tri__indice v-tri__indice--pass" id="tri-indice-pass" aria-hidden="true">← Passer</span>
+      <span class="v-tri__indice v-tri__indice--keep" id="tri-indice-keep" aria-hidden="true">Garder →</span>
+    </article>
+   </div>
+  </div>
+
+  <!-- Fin de pile : le bilan, puis deux sorties. -->
+  <div class="v-tri__fin" id="tri-fin" hidden>
+    <p class="v-tri__fin-titre">Tri terminé</p>
+    <p class="v-tri__fin-bilan" id="tri-bilan"></p>
+    <button type="button" class="btn btn--primary" id="btn-tri-retour">Retour à la galerie</button>
+    <button type="button" class="btn" id="btn-tri-restart">Recommencer</button>
+  </div>
+
+  <footer class="v-tri__pied" id="tri-pied">
+    <p class="v-tri__aide">← passer · → garder · note et phrase suivent le média dans l'éditeur</p>
+    <div class="v-tri__boutons">
+      <button type="button" class="btn v-tri__btn" id="btn-tri-undo">↶ Annuler</button>
+      <button type="button" class="btn v-tri__btn" id="btn-tri-pass">Passer</button>
+      <button type="button" class="btn btn--primary v-tri__btn" id="btn-tri-keep">Garder</button>
+    </div>
+  </footer>
+</section>
+
+<!-- Toasts : bandeau encré en bas d'écran, 1,6 s, role=status. Jamais un
+     alert() — et jamais un bouton à fermer : un toast qui exige un clic
+     n'est plus un toast. Les ERREURS, elles, restent dans #v-notices,
+     où elles attendent qu'on les acquitte. -->
+<div class="v-toasts" id="v-toasts" role="status" aria-live="polite"></div>
 
 <!-- ═══ APERÇU (V15) ═══ -->
 <div id="lightbox" class="lightbox" hidden>

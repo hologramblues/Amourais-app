@@ -63,6 +63,25 @@
     // préférence de poste de travail, pas un état de vue partageable.
     collections: { liste: [], panneau: true },
 
+    // ─── Tri rapide (refonte « PAS-À-PAS », §3) ──────────────
+    // `notes` et `phrases` du prototype se séparent ici : la PHRASE vit
+    // sur l'item lui-même (`item.phrase`, servi par la liste), donc rien
+    // à dupliquer ; seule MA note a besoin d'un cache, la liste ne
+    // transportant que la moyenne du média.
+    // `hist` est la pile des décisions — c'est elle, et rien d'autre,
+    // que « Annuler » dépile.
+    tri: {
+      ouvert: false,
+      index: 0,
+      hist: [],        // [{id, action:"keep"|"pass"}]
+      notes: {},       // {id: 1..5} — ma note, en attendant le serveur
+      dx: 0,           // décalage du doigt, en px
+      anim: 0,         // ±500 pendant la sortie animée, 0 sinon
+      drag: null,      // origine du glissé, null hors geste
+      minuterie: null,
+      jeton: 0,        // annule la réponse d'une carte déjà quittée
+    },
+
     // ─── Doublons (V27/V28/V29) ──────────────────────────────
     // `exact` et `similar` sont deux résultats de scan DISTINCTS, gardés
     // côte à côte : basculer de mode n'en jette aucun.
@@ -119,6 +138,29 @@
     if (genre !== "danger") {
       setTimeout(function () { el.remove(); }, 6000);
     }
+    return el;
+  }
+
+  /**
+   * TOAST — accusé de réception, pas un message à acquitter.
+   *
+   * Bandeau encré au bas de l'écran, 1,6 s, sans bouton : il confirme un
+   * geste qui a RÉUSSI (« Gardé ✓ », « Phrase enregistrée ✓ »). Le
+   * conteneur porte role=status une fois pour toutes — le poser sur
+   * chaque toast rejouerait l'annonce à chaque insertion.
+   *
+   * Un ÉCHEC ne passe jamais par ici : il va dans notifier(), où il reste
+   * jusqu'à ce qu'on l'ait lu. Un message qui disparaît tout seul n'est
+   * pas une façon d'annoncer que rien n'a été enregistré.
+   */
+  function toast(texte) {
+    var hote = $("v-toasts");
+    if (!hote) return;
+    var el = document.createElement("div");
+    el.className = "v-toast";
+    el.textContent = texte;
+    hote.appendChild(el);
+    setTimeout(function () { el.remove(); }, 1600);
     return el;
   }
 
@@ -689,9 +731,12 @@
     }
     meta.appendChild(span("v-tile__platform", etiquettePlateforme(item.platform || item.template_format)));
     meta.appendChild(span("v-tile__date", dateCourte(dateEffective(item))));
-    meta.appendChild(span("v-tile__rating", item.avg_rating > 0 ? "★ " + item.avg_rating : ""));
     meta.appendChild(span("v-tile__duration", item.duration ? duree(item.duration) : ""));
     meta.appendChild(span("v-tile__dims", item.width && item.height ? item.width + "×" + item.height : ""));
+    // La note EN DERNIER : la légende de la maquette est « date à gauche,
+    // note ★ à droite », et c'est le `margin-left:auto` de .v-tile__rating
+    // qui l'y pousse — encore faut-il qu'elle ferme la ligne.
+    meta.appendChild(span("v-tile__rating", item.avg_rating > 0 ? "★ " + item.avg_rating : ""));
     fig.appendChild(meta);
 
     return fig;
@@ -1037,6 +1082,9 @@
     $("sel-count").textContent = n;
     $("sel-label").textContent = n > 1 ? "éléments sélectionnés" : "élément sélectionné";
     $("v-selbar").hidden = n === 0;
+    // La barre est FIXE en bas d'écran : sans cette réserve sous la grille,
+    // elle recouvrirait la dernière rangée de vignettes.
+    document.body.classList.toggle("has-selbar", n > 0);
     grid.querySelectorAll(".v-tile").forEach(function (t) {
       t.classList.toggle("is-selected", state.selection.has(parseInt(t.dataset.id, 10)));
     });
@@ -1548,6 +1596,23 @@
 
   function installerClavier() {
     document.addEventListener("keydown", function (e) {
+      // Tri rapide ouvert : il recouvre tout, donc il capte tout. Les
+      // flèches y valent les deux gestes, 1–5 valent les étoiles.
+      if (!$("v-tri").hidden) {
+        if (dansUnChamp(e)) {
+          if (e.key === "Escape") e.target.blur();
+          return;
+        }
+        if (e.key === "Escape") { e.preventDefault(); fermerTri(); }
+        else if (e.key === "ArrowRight") { e.preventDefault(); deciderTri("keep"); }
+        else if (e.key === "ArrowLeft") { e.preventDefault(); deciderTri("pass"); }
+        else if (e.key >= "1" && e.key <= "5") {
+          var courant = triCourant();
+          if (courant) { e.preventDefault(); noterTri(courant, parseInt(e.key, 10)); }
+        }
+        return;
+      }
+
       // Aperçu ouvert : il capte les flèches et Échap.
       if (!lightbox.hidden) {
         if (dansUnChamp(e)) {
@@ -2495,6 +2560,435 @@
   }
 
   // ============================================================
+  // 10 quater. TRI RAPIDE (refonte « PAS-À-PAS », §3)
+  // ------------------------------------------------------------
+  // Un écran plein, une carte à la fois. On note (5 étoiles), on écrit
+  // la phrase du futur meme, puis on GARDE (glissé à droite) ou on
+  // PASSE (glissé à gauche). L'éditeur relira la phrase à son étape
+  // « Texte » : c'est tout l'intérêt du mode.
+  //
+  // DEUX PERSISTANCES, DEUX ROUTES, ET AUCUNE INVENTION :
+  //   - la note passe par POST /api/viewer/media/<id>/rate, exactement
+  //     comme les étoiles de l'aperçu (même corps, même pseudo demandé
+  //     au point d'usage) ;
+  //   - la phrase passe par POST /api/viewer/media/<id>/phrase, la
+  //     route ajoutée au socle, calquée à la ligne près sur `rate`.
+  // Les deux écrivent en base, donc les deux survivent au rechargement.
+  //
+  // LA PILE NE SORT PAS DE LA VUE COURANTE : elle est bâtie sur
+  // `itemsCourants()`, c'est-à-dire les médias déjà chargés SOUS LES
+  // FILTRES ACTIFS. Trier « les 30 derniers jours notés ≥ 3 » est donc
+  // un filtre puis un tri, pas un mode de plus à régler.
+  // ============================================================
+
+  // Les trois constantes du geste. Le prototype fait autorité : au-delà
+  // de 80px la décision est prise, la sortie parcourt 500px en 200ms.
+  var TRI_SEUIL = 80;
+  var TRI_SORTIE = 500;
+  var TRI_DUREE = 200;
+  // Pente de l'inclinaison : la carte tourne de dx/30 degrés, soit un peu
+  // moins de 3° au seuil. Assez pour se sentir, trop peu pour gêner.
+  var TRI_PENTE = 30;
+
+  /** Les médias triables : la vue courante, dans son ordre affiché. */
+  function triItems() {
+    return state.tab === "media" ? state.items : [];
+  }
+
+  function triCourant() {
+    return triItems()[state.tri.index] || null;
+  }
+
+  function ouvrirTri() {
+    // La note et la phrase sont des colonnes de MEDIA_ITEMS. Un meme
+    // enregistré n'en a pas : le dire plutôt que d'ouvrir un écran vide.
+    if (state.tab !== "media") {
+      toast("Le tri rapide ne trie que l'onglet Médias.");
+      return;
+    }
+    var items = triItems();
+    if (!items.length) {
+      toast("Aucun média à trier sous ces filtres.");
+      return;
+    }
+    state.tri.ouvert = true;
+    // Le pied du Tri rapide occupe le bas de l'écran : les toasts doivent
+    // se poser au-dessus de lui, pas dessus (règle CSS `.tri-ouvert`).
+    document.body.classList.add("tri-ouvert");
+    state.tri.index = 0;
+    state.tri.hist = [];
+    state.tri.dx = 0;
+    state.tri.anim = 0;
+    state.tri.drag = null;
+    // Même mécanique de gel que l'aperçu (V15) : le corps est figé À SA
+    // PLACE, jamais privé de son défilement — sinon iOS saute en haut.
+    state.scrollAvantApercu = window.scrollY;
+    $("v-tri").hidden = false;
+    verrouillerDefilement(true);
+    rendreTri();
+    $("btn-tri-close").focus();
+  }
+
+  function fermerTri() {
+    if ($("v-tri").hidden) return;
+    // Une phrase tapée mais pas encore quittée du doigt serait perdue :
+    // on la pousse avant de fermer.
+    enregistrerPhraseCourante();
+    clearTimeout(state.tri.minuterie);
+    state.tri.ouvert = false;
+    state.tri.drag = null;
+    document.body.classList.remove("tri-ouvert");
+    $("v-tri").hidden = true;
+    verrouillerDefilement(false);
+    window.scrollTo(0, state.scrollAvantApercu);
+    // Les notes viennent de changer : les légendes ★ de la grille aussi.
+    mettreEnPage();
+    $("btn-tri").focus();
+  }
+
+  /**
+   * Compteur et jauge. Le dénominateur est le TOTAL DE LA VUE tel que le
+   * serveur l'annonce — pas le nombre de cartes déjà téléchargées. Dire
+   * « 12 / 60 » quand la vue en compte 312 serait un chiffre faux.
+   */
+  function majCompteurTri() {
+    var charges = triItems().length;
+    var total = state.total || charges;
+    var i = Math.min(state.tri.index, total);
+    var pct = total ? Math.round(i / total * 100) : 0;
+    $("tri-jauge-barre").style.width = pct + "%";
+    $("tri-jauge").setAttribute("aria-valuenow", String(pct));
+    $("tri-compteur").textContent = (i >= total ? total : i + 1) + " / " + total;
+  }
+
+  /**
+   * Réapprovisionnement de la pile.
+   * Le corps est gelé pendant le tri, donc le chargement continu de la
+   * grille ne se déclenche plus : sans ça, le tri s'arrêterait à la
+   * première page et annoncerait « terminé » au 60e média d'une vue qui
+   * en compte 300. On va chercher la suite TROIS cartes avant la fin.
+   */
+  function reapprovisionnerTri() {
+    var charges = triItems().length;
+    if (state.chargement || state.page >= state.pages) return;
+    if (state.tri.index < charges - 3) return;
+    chargerMedias(true).then(function () {
+      if (!state.tri.ouvert) return;
+      // Si la pile était VIDE, on redessine : il n'y a pas de carte à
+      // l'écran, donc aucune saisie en cours à écraser. Sinon on se
+      // contente du compteur — repeindre la carte effacerait une phrase
+      // en train d'être tapée.
+      if (state.tri.index >= charges) rendreTri();
+      else majCompteurTri();
+    });
+  }
+
+  /** Rendu complet de l'écran : compteur, jauge, carte ou bilan. */
+  function rendreTri() {
+    var items = triItems();
+    var total = items.length;
+    var i = state.tri.index;
+    var fini = i >= total;
+
+    majCompteurTri();
+    reapprovisionnerTri();
+
+    $("tri-pile").hidden = fini;
+    $("tri-pied").hidden = fini;
+    $("tri-fin").hidden = !fini;
+
+    if (fini) {
+      var gardes = state.tri.hist.filter(function (h) { return h.action === "keep"; }).length;
+      var passes = state.tri.hist.length - gardes;
+      $("tri-bilan").textContent =
+        gardes + " gardés · " + passes + " passés · notes et phrases enregistrées";
+      return;
+    }
+
+    var item = items[i];
+    // Plus rien derrière la dernière carte : le fantôme mentirait.
+    $("tri-pile").classList.toggle("is-derniere", i >= total - 1);
+
+    var vue = $("tri-vue");
+    vue.replaceChildren();
+    var img = document.createElement("img");
+    img.src = item.thumb_url || item.file_url || item.media_url || "";
+    img.alt = item.caption || (item.media_type === "video" ? "Vidéo" : "Image");
+    img.decoding = "async";
+    vue.appendChild(img);
+
+    $("tri-source").textContent = sourceTri(item);
+    $("tri-meta").textContent = metaTri(item);
+    $("tri-phrase").value = item.phrase || "";
+    rendreEtoilesTri(item);
+    chargerMaNote(item);
+
+    // La carte arrive EN PLACE : sans coupure de transition, elle
+    // reviendrait en glissant depuis les ±500px de la carte précédente.
+    var carte = $("tri-carte");
+    state.tri.dx = 0;
+    state.tri.anim = 0;
+    carte.style.transition = "none";
+    appliquerGesteTri();
+    void carte.offsetWidth;
+    carte.style.transition = "";
+
+    $("btn-tri-undo").disabled = state.tri.hist.length === 0;
+  }
+
+  function sourceTri(item) {
+    var p = etiquettePlateforme(item.platform);
+    var u = item.profile_username;
+    if (p && u) return p + " · @" + u;
+    return p || (u ? "@" + u : "Média");
+  }
+
+  function metaTri(item) {
+    var bouts = [];
+    var d = dateCourte(dateEffective(item));
+    if (d) bouts.push(d);
+    if (item.width && item.height) bouts.push(item.width + "×" + item.height);
+    bouts.push(item.used ? "déjà utilisé" : "jamais utilisé");
+    return bouts.join(" · ");
+  }
+
+  /**
+   * La note affichée sur la carte.
+   * `state.tri.notes` retient MA note dès que je l'ai posée ; à défaut on
+   * part de la moyenne du média, la seule note que la liste transporte.
+   * chargerMaNote() vient corriger si ma note diffère de la moyenne.
+   */
+  function noteTri(item) {
+    if (typeof state.tri.notes[item.id] === "number") return state.tri.notes[item.id];
+    return Math.round(item.avg_rating || 0);
+  }
+
+  function etoileSvg(pleine) {
+    var NS = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("fill", pleine ? "currentColor" : "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    var p = document.createElementNS(NS, "path");
+    p.setAttribute("d", "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77 5.82 21.02 7 14.14 2 9.27l6.91-1.01z");
+    svg.appendChild(p);
+    return svg;
+  }
+
+  function rendreEtoilesTri(item) {
+    var hote = $("tri-etoiles");
+    hote.replaceChildren();
+    var valeur = noteTri(item);
+    for (var i = 1; i <= 5; i++) {
+      (function (n) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "v-tri__etoile";
+        b.setAttribute("aria-label", n + " sur 5");
+        b.setAttribute("aria-pressed", n <= valeur ? "true" : "false");
+        b.appendChild(etoileSvg(n <= valeur));
+        b.addEventListener("click", function () { noterTri(item, n); });
+        hote.appendChild(b);
+      })(i);
+    }
+  }
+
+  /**
+   * Ma note exacte, quand elle diffère de la moyenne.
+   * Une seule requête, pour la carte AFFICHÉE, et un jeton qui annule la
+   * réponse si l'on a déjà glissé plus loin : sans lui, une réponse lente
+   * repeindrait les étoiles de la carte SUIVANTE.
+   */
+  function chargerMaNote(item) {
+    if (!user) return;
+    if (typeof state.tri.notes[item.id] === "number") return;
+    var jeton = ++state.tri.jeton;
+    fetch(API + "/media/" + item.id)
+      .then(function (r) { return r.json(); })
+      .then(function (detail) {
+        if (jeton !== state.tri.jeton || detail.error) return;
+        var mienne = (detail.ratings || []).find(function (r) { return r.user_name === user; });
+        if (!mienne) return;
+        state.tri.notes[item.id] = mienne.rating;
+        if (triCourant() === item) rendreEtoilesTri(item);
+      })
+      .catch(function () { /* la moyenne reste affichée : rien de faux */ });
+  }
+
+  function noterTri(item, valeur) {
+    assurerPseudo().then(function (pseudo) {
+      if (!pseudo) return;
+      var avant = state.tri.notes[item.id];
+      // Retour immédiat : au doigt, une étoile qui attend le réseau
+      // passe pour un tap raté et se fait taper deux fois.
+      state.tri.notes[item.id] = valeur;
+      rendreEtoilesTri(item);
+      return fetch(API + "/media/" + item.id + "/rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_name: pseudo, rating: valeur }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.error) throw new Error(data.error);
+          item.avg_rating = data.avg_rating;
+          item.rating_count = data.rating_count;
+          toast("Note enregistrée ✓");
+        })
+        .catch(function () {
+          // L'échec REVIENT en arrière : une étoile allumée qui n'est pas
+          // en base est un mensonge que l'éditeur paierait plus tard.
+          if (typeof avant === "number") state.tri.notes[item.id] = avant;
+          else delete state.tri.notes[item.id];
+          if (triCourant() === item) rendreEtoilesTri(item);
+          notifier("La note n'a pas pu être enregistrée.", "danger");
+        });
+    });
+  }
+
+  /** Écrit la phrase si — et seulement si — elle a changé. */
+  function enregistrerPhrase(item, valeur) {
+    var v = (valeur || "").trim();
+    var avant = item.phrase || "";
+    if (v === avant) return Promise.resolve();
+    item.phrase = v || null;
+    return fetch(API + "/media/" + item.id + "/phrase", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phrase: v }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) throw new Error(data.error);
+        item.phrase = data.phrase;
+        toast(data.phrase ? "Phrase enregistrée ✓" : "Phrase effacée");
+      })
+      .catch(function () {
+        item.phrase = avant || null;
+        notifier("La phrase n'a pas pu être enregistrée.", "danger");
+      });
+  }
+
+  function enregistrerPhraseCourante() {
+    var item = triCourant();
+    if (!item) return Promise.resolve();
+    return enregistrerPhrase(item, $("tri-phrase").value);
+  }
+
+  /**
+   * L'unique endroit qui écrit la transformation de la carte.
+   * `anim` (la sortie) prime sur `dx` (le doigt) : pendant les 200ms de
+   * sortie, plus rien ne suit le pointeur.
+   */
+  function appliquerGesteTri() {
+    var carte = $("tri-carte");
+    var x = state.tri.anim || state.tri.dx;
+    carte.style.transform = "translateX(" + x + "px) rotate(" + (x / TRI_PENTE) + "deg)";
+    carte.style.opacity = state.tri.anim ? "0" : "1";
+    $("tri-indice-keep").style.opacity = String(Math.min(1, Math.max(0, x / TRI_SEUIL)));
+    $("tri-indice-pass").style.opacity = String(Math.min(1, Math.max(0, -x / TRI_SEUIL)));
+  }
+
+  function deciderTri(action) {
+    var item = triCourant();
+    if (!item || state.tri.anim) return;
+    // La phrase part AVANT que la carte ne quitte l'écran.
+    enregistrerPhraseCourante();
+    state.tri.drag = null;
+    $("tri-carte").classList.remove("is-drag");
+    state.tri.anim = action === "keep" ? TRI_SORTIE : -TRI_SORTIE;
+    appliquerGesteTri();
+    toast(action === "keep" ? "Gardé ✓" : "Passé");
+    clearTimeout(state.tri.minuterie);
+    state.tri.minuterie = setTimeout(function () {
+      state.tri.hist.push({ id: item.id, action: action });
+      state.tri.index += 1;
+      rendreTri();
+    }, TRI_DUREE);
+  }
+
+  /** Annuler DÉPILE la dernière décision et revient sur sa carte. */
+  function annulerTri() {
+    if (!state.tri.hist.length) return;
+    // Une phrase tapée mais pas encore quittée du doigt serait perdue :
+    // « Annuler » revient sur la carte PRÉCÉDENTE, donc il quitte la carte
+    // courante exactement comme le fait un glissé ou la croix. Les trois
+    // sorties doivent pousser la saisie en cours — sinon la seule façon de
+    // perdre une phrase dans cet écran serait de se raviser.
+    enregistrerPhraseCourante();
+    clearTimeout(state.tri.minuterie);
+    state.tri.hist.pop();
+    state.tri.index = Math.max(0, state.tri.index - 1);
+    state.tri.anim = 0;
+    state.tri.dx = 0;
+    rendreTri();
+    toast("Décision annulée");
+  }
+
+  function recommencerTri() {
+    clearTimeout(state.tri.minuterie);
+    state.tri.index = 0;
+    state.tri.hist = [];
+    state.tri.dx = 0;
+    state.tri.anim = 0;
+    rendreTri();
+  }
+
+  /**
+   * Le geste. pointerdown sur la carte, move/up sur la FENÊTRE : un doigt
+   * qui sort de la carte en cours de glissé ne doit pas figer le geste.
+   */
+  function installerGestesTri() {
+    var carte = $("tri-carte");
+
+    carte.addEventListener("pointerdown", function (e) {
+      if (state.tri.anim) return;
+      // Les étoiles et le champ sont des CIBLES, pas une poignée : un tap
+      // dessus ne doit jamais devenir un glissé.
+      if (e.target.closest(".v-tri__etoiles") || e.target.closest(".v-tri__phrase")) return;
+      state.tri.drag = e.clientX - state.tri.dx;
+      carte.classList.add("is-drag");
+    });
+
+    window.addEventListener("pointermove", function (e) {
+      if (state.tri.drag === null) return;
+      state.tri.dx = e.clientX - state.tri.drag;
+      appliquerGesteTri();
+    });
+
+    function relacher() {
+      if (state.tri.drag === null) return;
+      state.tri.drag = null;
+      carte.classList.remove("is-drag");
+      var dx = state.tri.dx;
+      if (dx > TRI_SEUIL) deciderTri("keep");
+      else if (dx < -TRI_SEUIL) deciderTri("pass");
+      else { state.tri.dx = 0; appliquerGesteTri(); }
+    }
+    window.addEventListener("pointerup", relacher);
+    window.addEventListener("pointercancel", relacher);
+
+    // La phrase part au `change` — donc à la sortie du champ ou sur
+    // Entrée. Pas à chaque frappe : ce serait une requête par lettre.
+    $("tri-phrase").addEventListener("change", function () {
+      enregistrerPhraseCourante();
+    });
+    $("tri-phrase").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); $("tri-phrase").blur(); }
+    });
+
+    $("btn-tri").addEventListener("click", ouvrirTri);
+    $("btn-tri-close").addEventListener("click", fermerTri);
+    $("btn-tri-retour").addEventListener("click", fermerTri);
+    $("btn-tri-restart").addEventListener("click", recommencerTri);
+    $("btn-tri-undo").addEventListener("click", annulerTri);
+    $("btn-tri-pass").addEventListener("click", function () { deciderTri("pass"); });
+    $("btn-tri-keep").addEventListener("click", function () { deciderTri("keep"); });
+  }
+
+  // ============================================================
   // 11. HELPERS D'AFFICHAGE
   // ============================================================
 
@@ -2753,6 +3247,7 @@
     installerBarre();
     installerPopovers();
     installerGrille();
+    installerGestesTri();
     installerClavier();
 
     // AUCUNE demande de pseudo ici. L'écran affiche les médias, point.
@@ -2792,5 +3287,11 @@
     chargerCollections: chargerCollections,
     chargerDoublons: chargerDoublons,
     groupesSimilaires: groupesSimilaires,
+    ouvrirTri: ouvrirTri,
+    fermerTri: fermerTri,
+    deciderTri: deciderTri,
+    annulerTri: annulerTri,
+    rendreTri: rendreTri,
+    toast: toast,
   };
 })();

@@ -39,8 +39,9 @@
   /* Ces deux-là ne sont réglés que par le script, jamais en dur. */
   --v-total-h: 0px;
   /* Largeur de la colonne des collections (V20). Plus étroite que
-     --sidebar-w : elle ne porte que des noms, pas une navigation. */
-  --v-collections-w: 200px;
+     --sidebar-w : elle ne porte que des noms, pas une navigation.
+     Largeur portée à 210px par la maquette (§4). */
+  --v-collections-w: 210px;
 
   display: block;          /* samourais.css met body en colonne flex */
   min-height: 100vh;
@@ -76,16 +77,25 @@
   top: var(--header-h);
   z-index: var(--z-sticky);
   background: var(--bg-1);
-  border-bottom: var(--border-w) solid var(--border-1);
+  border-bottom: var(--divider-w) solid var(--border-1);
 }
 
+/* UNE SEULE RANGÉE (§4). `wrap` faisait retomber la barre sur deux ou
+   trois lignes dès qu'un écran était un peu étroit, et la maquette n'en
+   veut qu'une. On ne RETIRE aucun contrôle pour y arriver : la rangée
+   défile horizontalement dans son propre conteneur, exactement comme
+   elle le faisait déjà sous 768px. Rien ne disparaît, rien ne s'empile. */
 .v-toolbar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-4);
+  scrollbar-width: none;
 }
+.v-toolbar::-webkit-scrollbar { display: none; }
+.v-toolbar > * { flex-shrink: 0; }
 
 .v-toolbar .btn,
 .v-toolbar button,
@@ -94,56 +104,81 @@
   height: var(--btn-h);
 }
 
-/* --- Onglets Médias / Memes --- */
+/* --- Onglets Médias / Memes : un SEGMENTED, comme dans l'éditeur ---
+   Même forme et même état actif que `.seg__btn` / `.import-tab` de
+   editor.css : boutons jointifs par une gouttière de 4px, chacun avec
+   son filet, et l'actif en APLAT PLEIN --accent-solid à texte inversé.
+   Deux écrans voisins ne peuvent pas traiter le même contrôle
+   autrement : c'est la seule raison d'être de ce bloc. */
 .v-tabs {
   display: flex;
-  gap: var(--sp-1);
-  padding: var(--sp-1);
-  background: var(--bg-2);
-  border-radius: var(--radius-control);
+  gap: var(--sp-2);
+  padding: 0;
+  background: transparent;
 }
 .v-tab {
-  height: var(--menu-row-h);
-  padding: 0 var(--sp-5);
-  border: 0;
+  display: inline-flex;
+  align-items: center;
+  height: var(--btn-h);
+  padding: 0 var(--sp-3);
+  background: var(--bg-2);
+  border: var(--border-w) solid var(--border-1);
   border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--fg-3);
-  font-size: var(--text-small);
+  color: var(--fg-2);
+  font-size: var(--text-mini);
   font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-quick) var(--ease),
+              border-color var(--t-quick) var(--ease),
+              color var(--t-quick) var(--ease);
 }
-.v-toolbar .v-tab { height: var(--menu-row-h); }
+@media (any-hover: hover) and (any-pointer: fine) {
+  .v-tab:hover { border-color: var(--border-3); color: var(--fg-1); }
+}
 .v-tab.is-active {
-  background: var(--bg-1);
-  color: var(--fg-1);
-  font-weight: var(--weight-semibold);
-  border: var(--border-w) solid var(--border-2);
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+  color: var(--fg-on-accent);
+}
+@media (any-hover: hover) and (any-pointer: fine) {
+  .v-tab.is-active:hover {
+    background: var(--accent-solid-hover);
+    border-color: var(--accent-solid-hover);
+    color: var(--fg-on-accent);
+  }
 }
 .v-tab__count {
-  margin-left: var(--sp-3);
+  margin-left: var(--sp-2);
   color: var(--fg-3);
   font-size: var(--text-micro);
   font-variant-numeric: var(--numeric);
 }
+/* Le compte suit le libellé sur l'aplat : sinon il y disparaît. */
+.v-tab.is-active .v-tab__count { color: var(--fg-on-accent); }
 
 /* --- Recherche --- */
-.v-search { flex: 0 1 240px; min-width: 140px; }
+.v-search { flex: 0 1 220px; min-width: 120px; }
 .v-search__input { width: 100%; }
 
 /* --- Selects de la barre : largeur fixée, sinon samourais.css les
        étire à 100% et la barre passe sur deux rangées. --- */
-.v-select { width: auto; min-width: 128px; }
+.v-select { width: auto; min-width: 104px; }
 
 /* --- Popovers (filtres, affichage) --- */
 .v-pop { position: relative; }
 .v-pop__trigger { gap: var(--sp-2); }
+/* Badge compteur de « Filtres » : un JETON ACCENT PLEIN, comme dans la
+   maquette. Le rose pâle précédent se confondait avec le fond du bouton
+   dès que la barre passait sur une surface claire. */
 .v-pop__badge {
   min-width: var(--icon-md);
   padding: 0 var(--sp-2);
-  border-radius: var(--radius-pill);
-  background: var(--accent-soft);
-  color: var(--accent);
+  border-radius: var(--radius-control);
+  background: var(--accent-solid);
+  color: var(--fg-on-accent);
   font-size: var(--text-micro);
+  font-weight: var(--weight-medium);
   font-variant-numeric: var(--numeric);
 }
 .v-pop__panel {
@@ -226,29 +261,46 @@
 }
 .v-check input { width: var(--icon-md); margin-top: 0; }
 
-/* --- Segments : Ratios / Carrés --- */
+/* --- Segments : Ratios / Carrés, et les modes de doublons ---
+   Même famille que `.v-tab` ci-dessus et que `.seg__btn` de editor.css :
+   un seul traitement du segmented dans toute l'app. */
 .v-seg {
   display: flex;
-  padding: var(--sp-1);
-  gap: var(--sp-1);
-  background: var(--bg-2);
-  border-radius: var(--radius-control);
+  padding: 0;
+  gap: var(--sp-2);
+  background: transparent;
 }
 .v-seg__btn {
-  height: var(--menu-row-h);
-  padding: 0 var(--sp-4);
-  border: 0;
+  display: inline-flex;
+  align-items: center;
+  height: var(--btn-h);
+  padding: 0 var(--sp-3);
+  background: var(--bg-2);
+  border: var(--border-w) solid var(--border-1);
   border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--fg-3);
+  color: var(--fg-2);
   font-size: var(--text-mini);
   font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-quick) var(--ease),
+              border-color var(--t-quick) var(--ease),
+              color var(--t-quick) var(--ease);
 }
-.v-toolbar .v-seg__btn { height: var(--menu-row-h); }
+@media (any-hover: hover) and (any-pointer: fine) {
+  .v-seg__btn:hover { border-color: var(--border-3); color: var(--fg-1); }
+}
 .v-seg__btn.is-active {
-  background: var(--bg-1);
-  color: var(--fg-1);
-  border: var(--border-w) solid var(--border-2);
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+  color: var(--fg-on-accent);
+}
+@media (any-hover: hover) and (any-pointer: fine) {
+  .v-seg__btn.is-active:hover {
+    background: var(--accent-solid-hover);
+    border-color: var(--accent-solid-hover);
+    color: var(--fg-on-accent);
+  }
 }
 
 /* --- Densité (V1) --- */
@@ -256,15 +308,24 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: 0 var(--sp-3);
+  padding: 0;
 }
 .v-density__mark { color: var(--fg-4); font-size: var(--text-micro); }
 .v-density__mark--lg { font-size: var(--text-small); }
-.v-density input[type="range"] { width: 84px; cursor: pointer; }
+.v-density input[type="range"] { width: 68px; cursor: pointer; }
 
-/* --- Total de la vue (V16) --- */
+/* --- Total de la vue (V16) ---
+   COLLÉ AU BORD DROIT, quoi qu'il arrive. La barre défile désormais
+   horizontalement quand elle est à l'étroit ; sans ce `sticky`, le
+   total — le seul chiffre que V16 exige d'avoir SOUS LES YEUX en
+   permanence — sortirait du champ dès qu'une fenêtre se rétrécit.
+   Le fond opaque est ce qui l'empêche de se superposer aux contrôles
+   qui passent dessous. */
 .v-total {
-  padding-right: var(--sp-3);
+  position: sticky;
+  right: 0;
+  padding: 0 var(--sp-3) 0 var(--sp-5);
+  background: var(--bg-1);
   font-size: var(--text-mini);
   color: var(--fg-3);
   white-space: nowrap;
@@ -281,8 +342,8 @@
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  padding: var(--sp-3) var(--sp-4);
-  border-top: var(--border-w) solid var(--border-1);
+  padding: var(--sp-3) var(--sp-5);
+  border-top: var(--divider-w) solid var(--border-1);
   background: var(--bg-2);
 }
 .v-chips[hidden] { display: none; }
@@ -298,17 +359,37 @@
 .v-chips__clear { margin-left: auto; }
 
 /* ============================================================
-   4. BARRE DE SÉLECTION (V11)
+   4. BARRE DE SÉLECTION (V11) — EN BAS D'ÉCRAN
+   ------------------------------------------------------------
+   La maquette (§4) la pose au pied de la fenêtre, pas sous la
+   barre d'outils : les vignettes qu'on vient de cocher et les
+   actions qui les concernent se retrouvent au même bout de
+   l'écran. Fixe, donc toujours atteignable sans remonter.
    ============================================================ */
 .v-selbar {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: var(--z-sticky);
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  padding: var(--sp-3) var(--sp-4);
-  border-top: var(--border-w) solid var(--accent-border);
+  padding: var(--sp-3) var(--sp-5);
+  border-top: var(--divider-w) solid var(--border-1);
   background: var(--accent-soft);
+  box-shadow: var(--shadow-medium);
 }
 .v-selbar[hidden] { display: none; }
+/* La grille doit pouvoir se dérouler jusqu'en bas SOUS la barre : sans
+   cette réserve, la dernière rangée reste inaccessible. La classe est
+   posée par le script en même temps que la barre s'affiche. */
+.v-body.has-selbar .v-workspace { padding-bottom: calc(var(--tap-min) + var(--sp-7)); }
+
+/* « Ajouter à… » s'ouvre VERS LE HAUT depuis une barre du bas : ouvert
+   vers le bas, le panneau tomberait hors de l'écran. */
+.v-selbar .v-pop__panel {
+  top: auto;
+  bottom: calc(100% + var(--sp-2));
+}
 .v-selbar__count {
   font-size: var(--text-regular);
   font-weight: var(--weight-bold);
@@ -476,19 +557,25 @@
 /* --- Métadonnées, en bas de vignette ---
    Posées sur une surface pleine du thème plutôt que sur un voile noir :
    c'est la seule façon de rester lisible dans les deux thèmes SANS
-   écrire une seule couleur brute. */
+   écrire une seule couleur brute.
+   REFONTE : la maquette pose une LÉGENDE pleine largeur au pied de la
+   vignette — date à gauche, note ★ à droite, en accent. On garde le
+   bandeau en surimpression plutôt qu'un <figcaption> qui coulerait sous
+   l'image : la hauteur de chaque tuile est calculée AVANT l'arrivée des
+   images (V5), et une légende hors-cadre ferait mentir ce calcul. */
 .v-tile__meta {
   position: absolute;
-  bottom: var(--sp-2);
-  left: var(--sp-2);
+  bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 1;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--sp-3);
-  max-width: calc(100% - var(--sp-4));
+  max-width: 100%;
   height: var(--chip-h);
   padding: 0 var(--sp-3);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-control);
   background: var(--bg-1);
   color: var(--fg-2);
   font-size: var(--text-micro);
@@ -498,7 +585,14 @@
   pointer-events: none;
 }
 .v-tile__date { font-variant-numeric: var(--numeric); }
-.v-tile__rating { color: var(--warning); font-variant-numeric: var(--numeric); }
+/* La note file au bord droit : c'est la lecture de la maquette, date à
+   gauche / ★ à droite. `auto` ne pousse rien quand la note est absente. */
+.v-tile__rating {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: var(--numeric);
+}
 .v-tile__dims, .v-tile__duration { font-variant-numeric: var(--numeric); color: var(--fg-3); }
 
 /* V25 : chaque propriété se coupe séparément, sans bouton Appliquer. */
@@ -801,7 +895,7 @@
   overflow-y: auto;
   padding: var(--sp-4) var(--sp-3);
   background: var(--bg-1);
-  border-right: var(--border-w) solid var(--border-1);
+  border-right: var(--divider-w) solid var(--border-1);
 }
 .v-collections[hidden] { display: none; }
 
@@ -857,9 +951,13 @@
   .v-col-row__pick:hover { background: var(--bg-2); color: var(--fg-1); }
   .v-col-row__act:hover { background: var(--bg-3); color: var(--fg-1); }
 }
+/* Collection active : fond accent-100 ET barre intérieure de 3px à
+   gauche (§4). La barre est ce qui rend l'item repérable en balayant la
+   colonne du regard — le fond pâle seul ne suffisait pas. */
 .v-col-row.is-on .v-col-row__pick,
 .v-col-row__pick--all.is-on {
   background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--color-accent);
   color: var(--accent);
   font-weight: var(--weight-medium);
 }
@@ -1193,6 +1291,9 @@
   .v-toolbar::-webkit-scrollbar { display: none; }
   .v-toolbar > * { flex-shrink: 0; }
 
+  /* Le Tri rapide passe EN TÊTE au doigt : c'est le mode conçu pour
+     cet écran-là, il ne doit pas se mériter par un défilement. */
+  #btn-tri   { order: 0; }
   .v-search  { flex: 0 0 110px; min-width: 110px; order: 1; }
   #pop-filters { order: 2; }
   .v-density { order: 3; padding: 0; }
@@ -1237,6 +1338,21 @@
   .v-facet, .v-check { height: auto; min-height: var(--tap-min); }
   .v-date { height: var(--tap-min); }
 
+  /* Barre de sélection : elle garde ses six actions au doigt, en une
+     bande qui défile plutôt qu'en pavé de boutons empilés. */
+  .v-selbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    scrollbar-width: none;
+  }
+  .v-selbar::-webkit-scrollbar { display: none; }
+  .v-selbar > * { flex-shrink: 0; }
+  .v-selbar .btn { min-height: var(--tap-min); height: var(--tap-min); }
+  .v-selbar .toolbar__spacer { display: none; }
+  .v-body.has-selbar .v-workspace { padding-bottom: calc(var(--tap-min) + var(--sp-8)); }
+
   .lightbox { flex-direction: column; }
   .lightbox-main { flex: 1 1 auto; min-height: 45vh; }
   .lightbox-media { height: auto; }
@@ -1249,4 +1365,308 @@
 @media (prefers-reduced-motion: reduce) {
   .v-tile.is-loading { animation: none; }
   * { transition-duration: 1ms !important; }
+}
+
+/* ============================================================
+   14. TRI RAPIDE (refonte « PAS-À-PAS », §3)
+   ------------------------------------------------------------
+   Un écran plein, une carte à la fois : on note, on écrit la
+   phrase du futur meme, on garde ou on passe au doigt. Pensé
+   pour 375×812 d'abord ; il fonctionne aussi à la souris, où
+   le glisser reste un glisser.
+
+   RÈGLE TENUE ICI COMME AILLEURS : le média reste EN COULEUR.
+   Aucun `filter` n'est appliqué à l'image de la carte.
+   ============================================================ */
+.v-tri {
+  /* Trois mesures propres à cet écran, nommées plutôt que semées
+     en dur dans les règles — même procédé que --v-thumb. */
+  --v-tri-etoile: 26px;   /* étoile tappable de la maquette */
+  --v-tri-bouton: 46px;   /* hauteur des trois boutons du pied */
+  --v-tri-label: 0.625rem; /* 10px — le label « TA PHRASE… » */
+
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+  overscroll-behavior: contain;
+}
+.v-tri[hidden] { display: none; }
+
+/* --- En-tête : titre, compteur n/N, croix --- */
+.v-tri__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: var(--divider-w) solid var(--border-1);
+}
+.v-tri__titre {
+  font-family: var(--font-heading);
+  font-size: var(--text-large);
+  font-weight: var(--weight-bold);
+}
+/* Compteur : jeton accent PLEIN, comme dans la maquette. */
+.v-tri__compteur {
+  padding: var(--sp-1) var(--sp-4);
+  background: var(--accent-solid);
+  border-radius: var(--radius-control);
+  color: var(--fg-on-accent);
+  font-size: var(--text-mini);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: var(--numeric);
+}
+.v-tri__fermer {
+  margin-left: auto;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--fg-2);
+  font-size: var(--text-regular);
+  cursor: pointer;
+}
+@media (any-hover: hover) and (any-pointer: fine) {
+  .v-tri__fermer:hover { background: var(--bg-2); color: var(--fg-1); }
+}
+
+/* --- Progression : 4px d'accent, rien d'autre --- */
+.v-tri__jauge {
+  flex: none;
+  height: var(--sp-2);
+  background: var(--bg-3);
+}
+.v-tri__jauge-barre {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--color-accent);
+  transition: width var(--t-regular) var(--ease);
+}
+
+/* --- La pile --- */
+.v-tri__pile {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-6) var(--sp-7);
+}
+.v-tri__pile[hidden] { display: none; }
+
+/* La SCÈNE donne au fantôme la boîte de la carte : sans elle, il se
+   calait sur la largeur de l'écran et se transformait, sur desktop, en
+   grand aplat gris derrière une petite carte centrée. */
+.v-tri__scene {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+}
+
+/* La carte SUIVANTE, en décor : plus étroite que la carte du dessus,
+   dépassant d'un cheveu par le haut, inclinée de 2°. Elle dit qu'il
+   reste quelque chose derrière. Aucune cible, aucun contenu. */
+.v-tri__fantome {
+  position: absolute;
+  left: var(--sp-6);
+  right: var(--sp-6);
+  top: calc(-1 * var(--sp-5));
+  bottom: var(--sp-6);
+  background: var(--bg-3);
+  transform: rotate(2deg);
+}
+/* Dernière carte de la pile : plus rien derrière, donc plus de fantôme. */
+.v-tri__pile.is-derniere .v-tri__fantome { display: none; }
+
+.v-tri__carte {
+  position: relative;
+  width: 100%;
+  background: var(--bg-1);
+  border: var(--border-w) solid var(--border-1);
+  box-shadow: var(--shadow-high);
+  cursor: grab;
+  /* Sans ça, le navigateur mobile s'approprie le geste horizontal et
+     `pointermove` n'arrive jamais. */
+  touch-action: none;
+  transition: transform var(--t-regular) var(--ease), opacity var(--t-regular) var(--ease);
+}
+/* Pendant le glissé, la carte colle au doigt : aucune transition. */
+.v-tri__carte.is-drag { cursor: grabbing; transition: none; }
+
+.v-tri__vue {
+  display: block;
+  height: 250px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.v-tri__vue img,
+.v-tri__vue video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* EN COULEUR. Pas de filtre, jamais. */
+}
+
+.v-tri__corps { padding: var(--sp-5) var(--sp-6) var(--sp-6); }
+.v-tri__source {
+  margin-bottom: var(--sp-1);
+  font-size: var(--text-small);
+  font-weight: var(--weight-semibold);
+}
+.v-tri__meta { font-size: var(--text-mini); color: var(--fg-3); }
+
+/* --- Cinq étoiles tappables --- */
+.v-tri__etoiles {
+  display: flex;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+}
+.v-tri__etoile {
+  width: var(--tap-min);
+  height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.v-tri__etoile svg { width: var(--v-tri-etoile); height: var(--v-tri-etoile); }
+
+.v-tri__label {
+  display: block;
+  margin: var(--sp-5) 0 var(--sp-2);
+  font-size: var(--v-tri-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.v-tri__phrase {
+  width: 100%;
+  height: var(--tap-min);
+  font-size: var(--text-small);
+}
+
+/* --- Les deux étiquettes de geste, en fondu --- */
+.v-tri__indice {
+  position: absolute;
+  top: var(--sp-5);
+  padding: var(--sp-1) var(--sp-4);
+  border-radius: var(--radius-control);
+  font-size: var(--text-mini);
+  font-weight: var(--weight-medium);
+  opacity: 0;
+  transition: opacity var(--t-quick) var(--ease);
+  pointer-events: none;
+}
+.v-tri__indice--pass {
+  left: var(--sp-5);
+  border: var(--border-w) solid var(--border-2);
+  background: var(--bg-1);
+  color: var(--fg-2);
+}
+.v-tri__indice--keep {
+  right: var(--sp-5);
+  background: var(--accent-solid);
+  color: var(--fg-on-accent);
+}
+
+/* --- Fin de pile --- */
+.v-tri__fin {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-5);
+  padding: var(--sp-8) var(--sp-7);
+  text-align: center;
+}
+.v-tri__fin[hidden] { display: none; }
+.v-tri__fin-titre {
+  font-family: var(--font-heading);
+  font-size: var(--title-3);
+  font-weight: var(--weight-bold);
+}
+.v-tri__fin-bilan { font-size: var(--text-small); color: var(--fg-3); }
+
+/* --- Pied : les trois équivalents au clic des deux gestes --- */
+.v-tri__pied {
+  flex: none;
+  padding: var(--sp-5) var(--sp-5) var(--sp-6);
+  border-top: var(--divider-w) solid var(--border-1);
+  background: var(--bg-canvas);
+}
+.v-tri__pied[hidden] { display: none; }
+.v-tri__aide {
+  margin-bottom: var(--sp-4);
+  font-size: var(--text-mini);
+  color: var(--fg-3);
+}
+.v-tri__boutons { display: flex; gap: var(--sp-4); }
+.v-tri__btn {
+  flex: 1;
+  min-height: var(--v-tri-bouton);
+  height: var(--v-tri-bouton);
+  justify-content: center;
+}
+
+/* Écran étroit et bas de plafond : la vue se réduit avant que la carte
+   ne déborde. C'est la seule chose qui cède — la phrase et les étoiles
+   ne quittent JAMAIS la carte. */
+@media (max-height: 720px) {
+  .v-tri__vue { height: 180px; }
+  .v-tri__pile { padding: var(--sp-4) var(--sp-5); }
+}
+
+/* ============================================================
+   15. TOASTS
+   ------------------------------------------------------------
+   Bandeau encré, centré en bas d'écran, 1,6 s, role=status sur
+   le conteneur. Il ne porte AUCUN bouton : un message qu'il faut
+   acquitter n'est pas un toast, c'est un bandeau — et les
+   bandeaux, eux, restent dans #v-notices.
+   La couleur vient de --fg-1 sur --bg-canvas, donc « noir sur
+   clair » en thème clair et l'inverse en sombre, sans une seule
+   couleur brute.
+   ============================================================ */
+.v-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: var(--sp-7);
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  width: max-content;
+  max-width: calc(100vw - var(--sp-8));
+  pointer-events: none;
+}
+/* Le bas de l'écran n'est pas toujours libre : la barre de sélection y
+   vit, et le pied du Tri rapide encore plus haut. Le toast se pose
+   AU-DESSUS d'eux — posé dessous, il recouvrait « Passer ». */
+.v-body.has-selbar .v-toasts { bottom: calc(var(--tap-min) + var(--sp-7)); }
+.v-body.tri-ouvert .v-toasts { bottom: calc(var(--tap-min) + var(--sp-9) + var(--sp-7)); }
+
+.v-toast {
+  padding: var(--sp-4) var(--sp-6);
+  border-radius: var(--radius-control);
+  background: var(--fg-1);
+  color: var(--bg-canvas);
+  font-size: var(--text-small);
+  font-weight: var(--weight-medium);
+  box-shadow: var(--shadow-medium);
 }
