@@ -60,6 +60,9 @@
         const WATERMARK_FRAME_RATIO = 0.45; // Instagram — 0.70 était trop gros, 0.32 trop petit
         const WATERMARK_TIKTOK_RATIO  = 0.30; // TikTok — plus discret qu'Instagram, mais lisible
         const WATERMARK_BLEED_RATIO = 0.035;
+        //: TikTok : RETRAIT depuis le bord droit (et non débord). Le cadre y
+        //: occupe tout le canvas — déborder revient à sortir de l'image.
+        const WATERMARK_TIKTOK_INSET = 0.035;
 
         /** Largeur cible du filigrane, en fraction de la largeur du cadre.
          *  `p.key` est le même discriminant que `templateOf` : 'ig' | 'tt'. */
@@ -137,14 +140,18 @@
             // coin de l'IMAGE — d'où le rattrapage de la marge transparente.
             const padRight = natural * (1 - ink.r) * scale;
             const padBottom = naturalH * (1 - ink.b) * scale;
-            // TikTok : bord droit, CENTRÉ EN HAUTEUR. Instagram : coin
-            // bas-droit avec débord, comme avant.
+            // TikTok : bord droit, CENTRÉ EN HAUTEUR — et RENTRÉ, pas débordé.
+            // Le `bleed` d'Instagram fait mordre le logo hors du cadre : c'est
+            // voulu là-bas, où le cadre flotte dans une marge. Sur TikTok le
+            // cadre EST le canvas : le même débord poussait le logo à cheval
+            // sur le bord, donc coupé à l'export. On l'INVERSE en retrait.
             const surTikTok = (p.key === 'tt');
+            const retrait = f.width * WATERMARK_TIKTOK_INSET;
             const ancrage = surTikTok
                 ? {
                     originX: 'right',
                     originY: 'center',
-                    left: CANVAS_PADDING + f.x + f.width + bleed + padRight,
+                    left: CANVAS_PADDING + f.x + f.width - retrait + padRight,
                     top:  CANVAS_PADDING + f.y + f.height / 2
                   }
                 : {
