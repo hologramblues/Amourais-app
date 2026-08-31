@@ -18,15 +18,19 @@
     })();
   </script>
   <style>
-    html { background: #f4f5f7; }
-    @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #0a0b0d; } }
-    html[data-theme="dark"] { background: #0a0b0d; }
+    html { background: #f3f2f2; }
+    @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #131211; } }
+    html[data-theme="dark"] { background: #131211; }
   </style>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=JetBrains+Mono:wght@400;500&display=swap">
+  {#- ── TYPOGRAPHIE — PLUS AUCUN APPEL À GOOGLE FONTS ──────────────────
+      Le lien Inter/JetBrains Mono qui se trouvait ici bloquait le rendu
+      sur une feuille de style tierce. La refonte Modernist compose en
+      ARCHIVO, et Archivo est VENDORISÉE : ses @font-face vivent dans
+      tokens.css, ses .woff2 dans /static/vendor/fonts/, comme Fabric.js
+      et Montserrat avant elle. Plus aucune police n'est nommée ici, donc
+      plus rien à télécharger d'un CDN — et plus rien à perdre s'il tombe.
+      Ordre de chargement inchangé : tokens.css AVANT tout autre CSS. -#}
 
   {#- tokens.css AVANT tout autre CSS : c'est la source unique. samourais.css
       apporte les composants partagés (jeton .chip, bandeau .banner, bouton

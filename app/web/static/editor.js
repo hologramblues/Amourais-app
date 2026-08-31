@@ -25,6 +25,217 @@
         const WATERMARK_OPACITY = 50;
 
         // ============================================
+        // FILIGRANE — POSÉ, JAMAIS RÉGLÉ
+        // --------------------------------------------
+        // Le logo était un objet Fabric SÉLECTIONNABLE et
+        // REDIMENSIONNABLE, posé sur deux coordonnées écrites en dur
+        // dans chaque gabarit (TEMPLATES[*].watermark) et mises à
+        // l'échelle 0,15 quelle que soit la taille du cadre. D'où les
+        // « positions et tailles hasardeuses » : chaque composition
+        // sortait avec un logo à un endroit différent, parce qu'on
+        // pouvait l'attraper d'un doigt en visant le canvas.
+        //
+        // Il est désormais CALCULÉ à partir du cadre effectif, à
+        // chaque reconstruction et à chaque changement de hauteur de
+        // cadre, et il n'est ni sélectionnable ni évènementiel. Aucun
+        // réglage n'est exposé : ni position, ni taille, ni opacité.
+        //
+        //   largeur      = 70 % de la LARGEUR DU CADRE ;
+        //   dépassement  = 3,5 % de cette même largeur, à droite ET en
+        //                  bas — le logo mord le bord du cadre au lieu
+        //                  de flotter dedans ;
+        //   ancrage      = coin bas-droit (originX/Y right/bottom).
+        //
+        // Les deux ratios sont relatifs au cadre et non en pixels
+        // absolus : le même appoint visuel sur un cadre 1:1, 4:5, 9:16
+        // et sur le plateau TikTok plein écran. Sur ce dernier le cadre
+        // EST le canvas : le dépassement sort donc du fichier exporté,
+        // ce qui est exactement l'effet demandé.
+        const WATERMARK_FRAME_RATIO = 0.70;
+        const WATERMARK_BLEED_RATIO = 0.035;
+
+        /** Cadre EFFECTIF du plateau (la hauteur suit « Hauteur du cadre »). */
+        function effectiveFrame(p) {
+            const template = templateOf(p);
+            const frame = template.frame;
+            const percent = isFullBleed(p) ? 100 : p.frameHeightPercent;
+            const height = Math.round(frame.height * (percent / 100));
+            const y = (frame.y + frame.height / 2) - height / 2;
+            return { x: frame.x, y: y, width: frame.width, height: height };
+        }
+
+        // Boîte d'ENCRE du PNG du logo, en fraction de ses dimensions
+        // naturelles — mesurée une fois, au chargement (voir measureLogoInk).
+        // samourais_logo_transparent_smooth.png fait 2000×489 mais son tracé
+        // ne va que de x=186 à x=1785 et de y=88 à y=407 : 10,7 % de vide à
+        // droite et 16,8 % en bas. Sans cette mesure, « 70 % de la largeur
+        // du cadre » donnerait un logo VISIBLE à 56 %, et le dépassement
+        // serait intégralement mangé par la marge transparente — le logo
+        // rentrerait dans le cadre au lieu de le mordre.
+        // Les deux consignes ne se vérifient à l'œil que sur l'encre.
+        let logoInk = null;
+
+        function measureLogoInk(el) {
+            try {
+                const w = el.naturalWidth || el.width;
+                const h = el.naturalHeight || el.height;
+                if (!w || !h) return null;
+                const c = document.createElement('canvas');
+                c.width = w; c.height = h;
+                c.getContext('2d').drawImage(el, 0, 0);
+                const d = c.getContext('2d').getImageData(0, 0, w, h).data;
+                let x0 = w, y0 = h, x1 = -1, y1 = -1;
+                for (let y = 0; y < h; y++) {
+                    for (let x = 0; x < w; x++) {
+                        if (d[(y * w + x) * 4 + 3] > 20) {
+                            if (x < x0) x0 = x;
+                            if (x > x1) x1 = x;
+                            if (y < y0) y0 = y;
+                            if (y > y1) y1 = y;
+                        }
+                    }
+                }
+                if (x1 < 0) return null;
+                return { l: x0 / w, t: y0 / h, r: (x1 + 1) / w, b: (y1 + 1) / h };
+            } catch (e) {
+                // Canvas teinté ou décodage incomplet : on retombe sur la
+                // boîte de l'image, qui reste correcte, juste plus timide.
+                console.warn('[editor] boîte d’encre du logo non mesurable', e);
+                return null;
+            }
+        }
+
+        /** Pose (ou repose) le filigrane du plateau sur le coin bas-droit du cadre. */
+        function placeWatermark(p) {
+            if (!p.watermark) return;
+            const f = effectiveFrame(p);
+            const bleed = f.width * WATERMARK_BLEED_RATIO;
+            const target = f.width * WATERMARK_FRAME_RATIO;
+            // `width` d'un fabric.Image est la largeur NATURELLE de la
+            // source : le facteur d'échelle s'en déduit directement.
+            const natural = p.watermark.width || 1;
+            const naturalH = p.watermark.height || 1;
+            // Repli texte (logo pas encore décodé) : pas de marge à corriger.
+            const ink = (p.watermark.type === 'image' && logoInk)
+                ? logoInk
+                : { l: 0, t: 0, r: 1, b: 1 };
+            const scale = target / (natural * (ink.r - ink.l));
+            // On vise le coin de l'ENCRE ; l'objet, lui, est ancré sur le
+            // coin de l'IMAGE — d'où le rattrapage de la marge transparente.
+            const padRight = natural * (1 - ink.r) * scale;
+            const padBottom = naturalH * (1 - ink.b) * scale;
+            p.watermark.set({
+                originX: 'right',
+                originY: 'bottom',
+                left: CANVAS_PADDING + f.x + f.width + bleed + padRight,
+                top: CANVAS_PADDING + f.y + f.height + bleed + padBottom,
+                scaleX: scale,
+                scaleY: scale,
+                opacity: state.watermarkOpacity / 100,
+                // Le geste qui déréglait le logo n'existe plus.
+                selectable: false,
+                evented: false,
+                hasControls: false,
+                hasBorders: false
+            });
+            p.watermark.setCoords();
+        }
+
+        /** Construit l'objet filigrane du plateau et le pose. */
+        function buildWatermark(p) {
+            if (p.watermark) p.canvas.remove(p.watermark);
+            if (logoImage) {
+                p.watermark = new fabric.Image(logoImage.getElement(), {});
+            } else {
+                // Repli tant que le PNG n'est pas décodé : même ancrage,
+                // même règle de taille — le texte est remplacé par le
+                // logo dès que loadLogo() aboutit.
+                p.watermark = new fabric.Text('SAMOURAÏS', {
+                    fontSize: 120,
+                    fontFamily: 'Impact, sans-serif',
+                    fontWeight: '800',
+                    fill: '#ffffff',
+                    stroke: '#333333',
+                    strokeWidth: 2
+                });
+            }
+            placeWatermark(p);
+            p.canvas.add(p.watermark);
+            return p.watermark;
+        }
+
+        // ============================================
+        // GRILLE DES TIERS — REPÈRE DE CADRAGE
+        // --------------------------------------------
+        // Quatre filets blancs à 50 % d'opacité sur le cadre, VISIBLES
+        // PENDANT LE CADRAGE UNIQUEMENT (étape 2). Ils vivent sur le
+        // canvas Fabric et pas en surimpression CSS, parce qu'ils
+        // doivent suivre le cadre EFFECTIF — donc la hauteur de cadre,
+        // le format et le plateau — au pixel du gabarit, pas au pixel
+        // de l'écran.
+        //
+        // Ce sont des REPÈRES, jamais du contenu : `excludeFromExport`
+        // les retire de toDataURL/toJSON quoi qu'il arrive, et
+        // renderCanvasToDataURL les masque en plus par ceinture.
+        // ============================================
+        function buildThirdsGrid(p) {
+            p.thirdsLines.forEach(function(l) { p.canvas.remove(l); });
+            p.thirdsLines = [];
+            // `createElements()` reconstruit tout le plateau — au changement
+            // de format, au « Réinitialiser » global. La grille doit
+            // renaître dans l'état de l'ÉTAPE COURANTE, sinon elle
+            // disparaissait dès qu'on changeait de format en plein cadrage.
+            // (`wizStep` est initialisé à l'évaluation du script, bien avant
+            // le premier appel : `init()` est la dernière ligne du fichier.)
+            const visible = (wizStep === 2);
+            for (var i = 0; i < 4; i++) {
+                p.thirdsLines.push(new fabric.Line([0, 0, 0, 0], {
+                    stroke: 'rgba(255,255,255,0.5)',
+                    strokeWidth: 2,
+                    selectable: false,
+                    evented: false,
+                    visible: visible,
+                    excludeFromExport: true
+                }));
+            }
+            p.thirdsLines.forEach(function(l) { p.canvas.add(l); });
+            placeThirdsGrid(p);
+        }
+
+        function placeThirdsGrid(p) {
+            if (!p.thirdsLines || p.thirdsLines.length !== 4) return;
+            const f = effectiveFrame(p);
+            const x = CANVAS_PADDING + f.x;
+            const y = CANVAS_PADDING + f.y;
+            const coords = [
+                [x + f.width / 3, y, x + f.width / 3, y + f.height],
+                [x + (f.width * 2) / 3, y, x + (f.width * 2) / 3, y + f.height],
+                [x, y + f.height / 3, x + f.width, y + f.height / 3],
+                [x, y + (f.height * 2) / 3, x + f.width, y + (f.height * 2) / 3]
+            ];
+            // Un filet d'UN pixel À L'ÉCRAN, quel que soit le zoom de la
+            // vue : le gabarit fait 1080 unités de large pour ~250px
+            // affichés, un `strokeWidth: 1` en unités de gabarit serait
+            // quatre fois trop fin pour se voir.
+            const stroke = 1 / (p.scale || 1);
+            p.thirdsLines.forEach(function(line, i) {
+                const c = coords[i];
+                line.set({ x1: c[0], y1: c[1], x2: c[2], y2: c[3], strokeWidth: stroke });
+                line.setCoords();
+            });
+        }
+
+        /** Montre ou cache la grille sur les deux plateaux. */
+        function showThirdsGrid(visible) {
+            eachPane(function(p) {
+                if (!p.canvas || !p.thirdsLines) return;
+                placeThirdsGrid(p);
+                p.thirdsLines.forEach(function(l) { l.set({ visible: !!visible }); });
+                p.canvas.requestRenderAll();
+            });
+        }
+
+        // ============================================
         // TEMPLATES DEFINITION
         // ============================================
         const TEMPLATES = {
@@ -149,6 +360,14 @@
             povStyle: 'outline',
             // Watermark state — opacité constante, voir WATERMARK_OPACITY
             watermarkOpacity: WATERMARK_OPACITY,
+            // ---- Média choisi dans la bibliothèque scrappée ----
+            // Sert la ligne d'info de l'étape 1, l'anneau de sélection de
+            // la grille, et le PRÉ-REMPLISSAGE du bandeau à l'étape 3 :
+            // `phrase` est la colonne écrite par le Tri rapide de la
+            // galerie (POST /api/viewer/media/<id>/phrase).
+            libraryItem: null,
+            phrase: '',
+            phraseUsed: false,
             // ---- Retouche image (LOT C) ----
             // Tout est appliqué par Fabric côté client : rien ne part au
             // serveur, donc aucun fichier temporaire à nettoyer et aucun
@@ -191,7 +410,7 @@
                 textBox: null, imageObj: null, overlayTextObj: null,
                 frameRect: null, frameBorder: null, watermark: null,
                 templateBg: null, clipRect: null, povObj: null,
-                snapLines: [],
+                snapLines: [], thirdsLines: [],
                 // Cadrage par plateau
                 imageScale: 100,
                 imageOffsetX: 0,
@@ -517,6 +736,10 @@
         // translation du viewport Fabric — les coordonnées des objets ne
         // bougent pas, seule la fenêtre d'affichage change.
         const MOBILE_VIEW_MARGIN = 28;
+        // Même principe au-dessus de 900px : la marge de manipulation reste
+        // ENTIÈRE dans les coordonnées (les poignées de Fabric continuent de
+        // vivre dedans), seule la fenêtre affichée est resserrée.
+        const DESK_VIEW_MARGIN = 90;
         const mobileViewMq = window.matchMedia('(max-width: 899.98px)');
 
         function updateCanvasSize(p) {
@@ -528,16 +751,18 @@
                 // Un seul plateau visible, cadré sur le gabarit.
                 const visW = width + (MOBILE_VIEW_MARGIN * 2);
                 const visH = height + (MOBILE_VIEW_MARGIN * 2);
-                const switcher = document.getElementById('stage-switch');
                 const stage = document.getElementById(p.stageId);
                 const head = stage ? stage.querySelector('.stage-head') : null;
-                // Hauteur mangée par le chrome de l'aperçu : basculeur,
-                // en-tête du plateau, padding vertical du conteneur.
-                const chrome = (switcher ? switcher.offsetHeight + 8 : 0)
-                    + (head && head.offsetHeight ? head.offsetHeight + 6 : 28)
-                    + 16;
-                const maxW = Math.max(120, container.clientWidth - 24);
-                const maxH = Math.max(120, container.clientHeight - chrome);
+                // On mesure la BOÎTE DU PLATEAU, pas l'aire entière : elle
+                // exclut d'elle-même le basculeur, le mode d'emploi et les
+                // marges. Additionner à la main les hauteurs du chrome,
+                // c'était refaire le calcul de la CSS en JS — et se
+                // tromper dès qu'un des blocs bougeait.
+                const boxW = (stage && stage.clientWidth) || container.clientWidth;
+                const boxH = (stage && stage.clientHeight) || container.clientHeight;
+                const headH = (head && head.offsetHeight) ? head.offsetHeight : 20;
+                const maxW = Math.max(120, boxW - 16);
+                const maxH = Math.max(120, boxH - headH - 20);
                 p.scale = Math.min(maxW / visW, maxH / visH, 0.4);
                 p.canvas.setWidth(visW * p.scale);
                 p.canvas.setHeight(visH * p.scale);
@@ -547,31 +772,53 @@
             }
 
             // Deux plateaux côte à côte : chacun reçoit sa part de la
-            // largeur. En pile (colonne, sous 1100px), chacun a tout.
+            // largeur. En pile (colonne, sous 1200px), chacun a tout.
             const stacked = stagesEl
                 && getComputedStyle(stagesEl).flexDirection === 'column';
             const visible = stacked ? 1 : Math.max(1, activePanes().length);
             const baseW = (stagesEl ? stagesEl.clientWidth : container.clientWidth);
-            const maxW = Math.max(160, baseW / visible - 60);
-            const maxH = Math.max(160, container.clientHeight - 140);
+            const baseH = (stagesEl && stagesEl.clientHeight)
+                ? stagesEl.clientHeight : container.clientHeight;
+            const stage = document.getElementById(p.stageId);
+            const head = stage ? stage.querySelector('.stage-head') : null;
+            const headH = (head && head.offsetHeight) ? head.offsetHeight : 20;
+            // En pile (900 → 1200px), les deux plateaux se partagent la
+            // HAUTEUR comme ils se partagent la largeur côte à côte. Sans
+            // ça, chacun prenait toute la hauteur : le premier gabarit
+            // sortait du cadre par le bas et il fallait faire défiler pour
+            // découvrir qu'il y en avait un second.
+            const rows = stacked ? Math.max(1, activePanes().length) : 1;
+            const maxW = Math.max(160, baseW / visible - 40);
+            const maxH = Math.max(160, baseH / rows - headH - 28);
 
-            // Calculate scale based on template + padding
-            const totalWidth = width + (CANVAS_PADDING * 2);
-            const totalHeight = height + (CANVAS_PADDING * 2);
+            // Le plan de travail Fabric porte une marge de manipulation de
+            // CANVAS_PADDING (350px) DE CHAQUE CÔTÉ. Le parcours ayant pris
+            // 510px de chrome (rail + panneau), l'afficher entière ramenait
+            // le gabarit à ~180px de large sur un écran de 1280 : on voyait
+            // surtout du vide. On cadre donc la VUE sur le gabarit plus une
+            // marge réduite, exactement comme la branche mobile ci-dessus —
+            // par TRANSLATION du viewport : les coordonnées des objets ne
+            // bougent pas d'un pixel, seule la fenêtre d'affichage change,
+            // et renderCanvasToDataURL repose de toute façon la transformée
+            // identité avant de découper.
+            const visW = width + (DESK_VIEW_MARGIN * 2);
+            const visH = height + (DESK_VIEW_MARGIN * 2);
 
-            p.scale = Math.min(maxW / totalWidth, maxH / totalHeight, 0.4);
+            p.scale = Math.min(maxW / visW, maxH / visH, 0.4);
 
-            p.canvas.setWidth(totalWidth * p.scale);
-            p.canvas.setHeight(totalHeight * p.scale);
-            // Transform complet et pas setZoom : setZoom (zoomToPoint) garde
-            // une translation résiduelle si on vient du cadrage mobile.
-            p.canvas.setViewportTransform([p.scale, 0, 0, p.scale, 0, 0]);
+            p.canvas.setWidth(visW * p.scale);
+            p.canvas.setHeight(visH * p.scale);
+            const pan = (CANVAS_PADDING - DESK_VIEW_MARGIN) * p.scale;
+            p.canvas.setViewportTransform([p.scale, 0, 0, p.scale, -pan, -pan]);
         }
 
         function updateAllCanvasSizes() {
             eachPane(function(p) {
                 if (!p.canvas) return;
                 updateCanvasSize(p);
+                // L'épaisseur des filets de tiers est exprimée en pixels
+                // d'ÉCRAN : elle se recalcule à chaque changement d'échelle.
+                placeThirdsGrid(p);
                 p.canvas.renderAll();
             });
         }
@@ -698,53 +945,13 @@
             });
             }
 
-            // Watermark (logo or text fallback)
-            const wm = template.watermark;
-            if (logoImage) {
-                // Use logo image
-                p.watermark = new fabric.Image(logoImage.getElement(), {
-                    left: wm.x + offset,
-                    top: wm.y + offset,
-                    originX: 'right',
-                    originY: 'bottom',
-                    scaleX: 0.15,
-                    scaleY: 0.15,
-                    opacity: state.watermarkOpacity / 100,
-                    selectable: true,
-                    hasControls: true,
-                    cornerSize: 16,
-                    hoverCursor: 'move',
-                    moveCursor: 'move'
-                });
-            } else {
-                // Fallback to text if logo not loaded yet
-                p.watermark = new fabric.Text('SAMOURAÏS', {
-                    left: wm.x + offset,
-                    top: wm.y + offset,
-                    fontSize: template.width * 0.04,
-                    fontFamily: 'Impact, sans-serif',
-                    fontWeight: '800',
-                    fill: '#ffffff',
-                    stroke: '#333333',
-                    strokeWidth: 2,
-                    angle: -3,
-                    originX: 'right',
-                    originY: 'bottom',
-                    opacity: state.watermarkOpacity / 100,
-                    shadow: new fabric.Shadow({
-                        color: 'rgba(0,0,0,0.3)',
-                        blur: 4,
-                        offsetX: 2,
-                        offsetY: 2
-                    }),
-                    selectable: true,
-                    hasControls: true,
-                    cornerSize: 16,
-                    hoverCursor: 'move',
-                    moveCursor: 'move'
-                });
-            }
-            p.canvas.add(p.watermark);
+            // Repères de cadrage, sous le filigrane et sous le texte.
+            buildThirdsGrid(p);
+
+            // Filigrane — calculé sur le cadre, jamais réglé (voir
+            // placeWatermark). L'ancien bloc posait deux coordonnées
+            // écrites en dur et rendait l'objet déplaçable.
+            buildWatermark(p);
 
             // Le bloc POV appartient au canvas TikTok : il est recréé après
             // chaque reconstruction des éléments de ce plateau.
@@ -762,6 +969,14 @@
         function loadMedia(file) {
             const isVideo = file.type.startsWith('video/');
             state.mediaType = isVideo ? 'video' : 'image';
+            // `loadLibraryItem` renseigne la fiche JUSTE APRÈS avoir
+            // déclenché ce chargement : on ne l'efface donc que pour un
+            // fichier qui ne vient PAS de la bibliothèque.
+            if (!file.name || file.name.indexOf('library_') !== 0) {
+                state.libraryItem = null;
+                state.phrase = '';
+                state.phraseUsed = false;
+            }
             
             // Update badge
             mediaTypeBadge.style.display = 'inline-block';
@@ -805,7 +1020,7 @@
                 selectImageBtn.style.display = 'block';
                 
                 exportBtn.disabled = false;
-                exportBtn.textContent = '📥 Télécharger le meme';
+                exportBtn.textContent = 'Télécharger le meme';
                 scheduleBtn.disabled = false;
                 if (saveMemeBtn) saveMemeBtn.disabled = false;
             };
@@ -864,7 +1079,7 @@
                 captureVideoFrame(0);
                 
                 exportBtn.disabled = false;
-                exportBtn.textContent = '🎬 Exporter la vidéo';
+                exportBtn.textContent = 'Exporter la vidéo';
                 scheduleBtn.disabled = false;
                 if (saveMemeBtn) saveMemeBtn.disabled = false;
             };
@@ -1351,11 +1566,22 @@
                     });
                 }
 
+                // Le filigrane est ancré au cadre : il descend et remonte
+                // avec lui. Sans cet appel il restait collé à l'ancienne
+                // hauteur, seul cas où sa position redevenait « hasardeuse ».
+                placeWatermark(p);
+                placeThirdsGrid(p);
+
                 p.canvas.renderAll();
             });
         }
 
         function updateUploadZone() {
+            // Point de passage OBLIGÉ de tout changement de média
+            // (chargement image, chargement vidéo, retrait) : c'est ici
+            // que le parcours réévalue son verrou — « Continuer » ne
+            // s'allume que quand il y a quelque chose à cadrer.
+            if (typeof wizSync === 'function') wizSync();
             if (state.imageSrc || state.videoFile) {
                 const sizeKB = Math.round(state.imageSize / 1024);
                 const isVideo = state.mediaType === 'video';
@@ -1424,9 +1650,16 @@
             timelineContainer.style.display = 'none';
             mediaTypeBadge.style.display = 'none';
             
+            state.libraryItem = null;
+            state.phrase = '';
+            state.phraseUsed = false;
+            if (typeof markLibrarySelection === 'function') markLibrarySelection();
+
             updateUploadZone();
+            // Plus de média : les trois dernières étapes n'ont plus d'objet.
+            if (typeof goStep === 'function') goStep(1);
             exportBtn.disabled = true;
-            exportBtn.textContent = '📥 Télécharger le meme';
+            exportBtn.textContent = 'Télécharger le meme';
             scheduleBtn.disabled = true;
             if (saveMemeBtn) saveMemeBtn.disabled = true;
             eachPane(function(p) { p.canvas.renderAll(); });
@@ -1976,6 +2209,12 @@
 
             p.frameBorder.set({ visible: false });
             p.frameRect.set({ visible: false });
+            // Les tiers sont un repère d'écran : `excludeFromExport` les
+            // retire déjà, on les masque en plus — un export ne doit
+            // JAMAIS dépendre d'un seul garde-fou.
+            const thirdsWereVisible = !!(p.thirdsLines && p.thirdsLines.length
+                && p.thirdsLines[0].visible);
+            if (thirdsWereVisible) p.thirdsLines.forEach(function(l) { l.set({ visible: false }); });
             // Le placeholder « Tape ton texte... » est une AIDE d'édition, pas
             // du contenu : sans cette garde il était GRAVÉ dans chaque export
             // dont le bandeau était vide — et la planification double l'écrivait
@@ -2008,6 +2247,7 @@
                 updateCanvasSize(p);
                 p.frameBorder.set({ visible: true });
                 p.frameRect.set({ visible: true });
+                if (thirdsWereVisible) p.thirdsLines.forEach(function(l) { l.set({ visible: true }); });
                 if (placeholderVisible) p.textBox.set({ visible: true });
                 p.canvas.renderAll();
             }
@@ -2064,6 +2304,10 @@
             }
             updateText(state.text);
             updateTextSize(state.textSize);
+            // Le parcours relit l'état qu'il affiche : afficheurs des
+            // steppers et étiquettes des cartes d'export.
+            if (typeof syncStepperReadouts === 'function') syncStepperReadouts();
+            if (typeof syncExportCards === 'function') syncExportCards();
         }
 
         function exportMeme() {
@@ -2244,7 +2488,7 @@
                     saveMemeBtn.disabled = false;
                     saveMemeBtn.textContent = '✅ Sauvegarde !';
                     setTimeout(() => {
-                        saveMemeBtn.textContent = '💾 Sauvegarder dans Viewer';
+                        saveMemeBtn.textContent = 'Sauvegarder dans Médias';
                     }, 2000);
                 }
                 // LOT C — dimensions réellement enregistrées, pas un « OK » nu.
@@ -2257,7 +2501,7 @@
                 note('La sauvegarde a échoué (' + err.message + '). Vérifie le Viewer avant de réessayer, puis télécharge les fichiers pour ne rien perdre.', 'error');
                 if (saveMemeBtn) {
                     saveMemeBtn.disabled = false;
-                    saveMemeBtn.textContent = '💾 Sauvegarder dans Viewer';
+                    saveMemeBtn.textContent = 'Sauvegarder dans Médias';
                 }
             });
         }
@@ -2369,7 +2613,7 @@
                     saveMemeBtn.disabled = false;
                     saveMemeBtn.textContent = '✅ Sauvegarde !';
                     setTimeout(() => {
-                        saveMemeBtn.textContent = '💾 Sauvegarder dans Viewer';
+                        saveMemeBtn.textContent = 'Sauvegarder dans Médias';
                     }, 2000);
                 }
             } catch (err) {
@@ -2392,7 +2636,7 @@
                 note('La sauvegarde vidéo a échoué (' + err.message + '). ' + acquis, 'error');
                 if (saveMemeBtn) {
                     saveMemeBtn.disabled = false;
-                    saveMemeBtn.textContent = '💾 Sauvegarder dans Viewer';
+                    saveMemeBtn.textContent = 'Sauvegarder dans Médias';
                 }
             }
         }
@@ -2595,32 +2839,14 @@
             fabric.Image.fromURL(LOGO_URL, (img) => {
                 if (img) {
                     logoImage = img;
-                    // Refresh watermark on each pane already initialized
+                    logoInk = measureLogoInk(img.getElement());
+                    // Le PNG vient d'arriver : chaque plateau déjà
+                    // construit remplace son repli texte par le logo,
+                    // à la MÊME géométrie (placeWatermark).
                     eachPane(function(p) {
                         if (!p.canvas || !p.watermark) return;
-                        const template = templateOf(p);
-                        const wm = template.watermark;
-                        const offset = CANVAS_PADDING;
-
-                        // Remove old text watermark
-                        p.canvas.remove(p.watermark);
-
-                        // Add logo watermark
-                        p.watermark = new fabric.Image(logoImage.getElement(), {
-                            left: wm.x + offset,
-                            top: wm.y + offset,
-                            originX: 'right',
-                            originY: 'bottom',
-                            scaleX: 0.15,
-                            scaleY: 0.15,
-                            opacity: state.watermarkOpacity / 100,
-                            selectable: true,
-                            hasControls: true,
-                            cornerSize: 16,
-                            hoverCursor: 'move',
-                            moveCursor: 'move'
-                        });
-                        p.canvas.add(p.watermark);
+                        buildWatermark(p);
+                        p.canvas.bringToFront(p.watermark);
                         p.canvas.renderAll();
                     });
                 }
@@ -3024,6 +3250,8 @@
                     // LOT C — les dimensions annoncées du fichier de sortie
                     // suivent le format choisi.
                     updateExportReadout();
+                    if (typeof syncExportCards === 'function') syncExportCards();
+                    if (typeof syncStepperReadouts === 'function') syncStepperReadouts();
 
                     // Le libellé du plateau Instagram suit le format.
                     if (stageDimsIG) {
@@ -3277,7 +3505,14 @@
                 povStyleGroup.addEventListener('click', function(e) {
                     const btn = e.target.closest('.seg__btn');
                     if (!btn) return;
-                    state.povStyle = btn.dataset.povstyle === 'dark' ? 'dark' : 'light';
+                    // Le style 'outline' (contour noir) a été ajouté au
+                    // groupe SANS être ajouté ici : ce ternaire renvoyait
+                    // 'light' pour tout ce qui n'était pas 'dark', donc le
+                    // bouton « Contour noir » posait un fond blanc. Le
+                    // défaut de `state` étant 'outline', le style natif
+                    // était correct au chargement et devenait INATTEIGNABLE
+                    // dès le premier clic dans ce groupe.
+                    state.povStyle = POV_STYLES[btn.dataset.povstyle] ? btn.dataset.povstyle : 'outline';
                     povStyleGroup.querySelectorAll('.seg__btn').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
                     restylePovObject();
@@ -3318,10 +3553,30 @@
                 data.items.forEach(item => {
                     const el = document.createElement('div');
                     el.className = 'drive-file' + (item.media_type === 'video' ? ' drive-file-video' : '');
-                    el.innerHTML = `<img src="${item.file_url || item.media_url || ''}" alt="${item.caption || ''}" loading="lazy">`;
+                    el.innerHTML = `<img src="${item.file_url || item.media_url || ''}" alt="${item.caption || ''}" loading="lazy">`
+                        + '<span class="drive-file__check" aria-hidden="true">\u2713</span>';
                     el.onclick = () => loadLibraryItem(item);
+                    // Champ de recherche : filtre CLIENT sur ce que la
+                    // vignette montre déjà (légende, plateforme, compte).
+                    // /api/viewer/media n'accepte pas de terme de recherche
+                    // et lui en inventer un sortirait de « uniquement
+                    // l'interface ».
+                    el.dataset.mediaId = String(item.id);
+                    el.dataset.search = [item.caption, item.platform, item.profile_username]
+                        .filter(Boolean).join(' ').toLowerCase();
+                    el.setAttribute('role', 'button');
+                    el.setAttribute('tabindex', '0');
+                    el.setAttribute('aria-pressed', 'false');
+                    el.addEventListener('keydown', function (e) {
+                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+                    });
                     grid.appendChild(el);
                 });
+
+                // Une grille rechargée (« Actualiser », page suivante) doit
+                // retrouver la sélection courante et le filtre courant.
+                markLibrarySelection();
+                filterLibraryGrid();
 
                 if (data.items.length === 0 && !append) {
                     grid.innerHTML = '<div style="padding: 24px; text-align: center; color: #666; grid-column: 1/-1;">Aucun media dans la bibliothèque</div>';
@@ -3361,11 +3616,15 @@
                 fileInput.files = dataTransfer.files;
                 fileInput.dispatchEvent(new Event('change'));
 
-                // Switch back to local tab
-                document.querySelectorAll('.import-tab').forEach(t => t.classList.remove('active'));
-                document.querySelector('.import-tab[data-source="local"]').classList.add('active');
-                uploadZone.style.display = 'block';
-                document.getElementById('library-zone').style.display = 'none';
+                // On RESTE dans la bibliothèque : le parcours veut que la
+                // vignette choisie garde son anneau et son ✓ sous les yeux.
+                // L'ancien code rebasculait sur l'onglet « Ordi », ce qui
+                // effaçait toute trace du choix qu'on venait de faire.
+                state.libraryItem = item;
+                state.phrase = (item.phrase || '').trim();
+                state.phraseUsed = false;
+                markLibrarySelection();
+                updateSelectionInfo();
             } catch (e) {
                 console.error('Failed to load library item', e);
                 note('Le média n\u2019a pas pu être chargé. Vérifie le fichier, puis réessaie.', 'error');
@@ -3376,9 +3635,21 @@
         function checkMediaParam() {
             const params = new URLSearchParams(window.location.search);
             const mediaId = params.get('media_id');
-            if (mediaId) {
-                loadLibraryItem({ id: parseInt(mediaId), media_type: 'image' });
-            }
+            if (!mediaId) return;
+            // La fiche complète AVANT le chargement : elle porte la
+            // `phrase` du Tri rapide, la plateforme et les dimensions —
+            // sans elle, un média ouvert depuis la galerie arrivait à
+            // l'étape Texte sans sa phrase, alors que le même média
+            // choisi dans la grille l'apportait. Un 404 ou une panne
+            // réseau ne bloque pas : on charge le média sans sa fiche.
+            fetch('/api/viewer/media/' + encodeURIComponent(mediaId))
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .catch(function () { return null; })
+                .then(function (item) {
+                    loadLibraryItem(item && item.id
+                        ? item
+                        : { id: parseInt(mediaId, 10), media_type: 'image' });
+                });
         }
 
         // ============================================
@@ -3550,105 +3821,440 @@
         function restylePovObject() {
             const p = panes.tt;
             if (!p.povObj) { ensurePovObject(); return; }
-            const style = POV_STYLES[state.povStyle] || POV_STYLES.light;
-            p.povObj.set({ fill: style.fill, dirty: true });
+            const style = POV_STYLES[state.povStyle] || POV_STYLES.outline;
+            // `povStrokeProps` en plus de la couleur : sans lui, quitter
+            // « Contour noir » laissait le contour en place sur un fond
+            // blanc, et y revenir ne le redessinait pas.
+            p.povObj.set(Object.assign(
+                { fill: style.fill, dirty: true },
+                povStrokeProps(style, p.povObj.fontSize)
+            ));
             p.povObj.povBg = style.bg;
             p.canvas.renderAll();
         }
 
-        // ============================================
-        // LOT B — ÉDITEUR AU DOIGT (sous 900px)
-        // --------------------------------------------
-        // Trois interactions, TOUTES inertes au-dessus de 900px :
-        //   1. le basculeur Instagram/TikTok choisit le plateau AFFICHÉ
-        //      (les interrupteurs de fabrication #toggle-ig/tt sont
-        //      intouchés) ;
-        //   2. les boutons +/− refont le geste du slider « Zoom image »
-        //      — le build Fabric vendorisé (5.3.1 standard, sans le
-        //      module gestures/Event.js) ne sait pas pincer, et
-        //      détourner ses évènements touch casserait le glisser ;
-        //   3. les groupes d'outils deviennent des accordéons, un seul
-        //      ouvert à la fois (le repli est purement CSS : sur
-        //      desktop `.is-collapsed` n'a aucun effet).
-        // ============================================
-        function setupMobileUx() {
-            // ---- 1. Basculeur de plateau ----
+        // ============================================================
+        // LE PARCOURS EN 4 ÉTAPES
+        // ------------------------------------------------------------
+        // Média → Cadrage → Texte → Export. Cette section ne fabrique
+        // RIEN : elle ne fait que révéler, dans l'ordre, des contrôles
+        // qui existaient déjà et dont les gestionnaires n'ont pas
+        // changé. Un stepper écrit dans le curseur d'origine puis
+        // déclenche son évènement `input` — c'est toujours le curseur
+        // qui est la source de vérité, jamais le stepper.
+        //
+        // L'accordéon d'outils qu'elle remplace est supprimé : sous
+        // 900px il repliait des groupes ; ici il n'y a plus de groupes,
+        // il y a des ÉTAPES, et c'est la CSS qui n'en montre qu'une
+        // (`.editor-app[data-step]`).
+        // ============================================================
+
+        const WIZ_LABELS = ['Média', 'Cadrage', 'Texte', 'Export'];
+        const WIZ_LAST = 4;
+        let wizStep = 1;
+
+        const editorApp = document.getElementById('editor-app');
+        const wizStepTag = document.getElementById('wiz-step-tag');
+        const wizPrevBtn = document.getElementById('wiz-prev');
+        const wizNextBtn = document.getElementById('wiz-next');
+        const wizBackBtn = document.getElementById('wiz-back');
+        const wizSelInfo = document.getElementById('wiz-selinfo');
+        const wizPrefillNote = document.getElementById('wiz-prefill-note');
+        const librarySearch = document.getElementById('library-search');
+        const librarySearchWrap = document.getElementById('library-search-wrap');
+        const libraryGrid = document.getElementById('library-grid');
+        const zoomReadout = document.getElementById('zoom-readout');
+        const textSizeReadout = document.getElementById('text-size-readout');
+        const lineHeightReadout = document.getElementById('line-height-readout');
+        const exportCards = document.getElementById('export-cards');
+
+        /** Un média est chargé (image OU vidéo) : c'est le seul verrou du parcours. */
+        function hasMedia() { return !!(state.imageSrc || state.videoFile); }
+
+        // ---- Bibliothèque : anneau de sélection, recherche, ligne d'info ----
+
+        function markLibrarySelection() {
+            if (!libraryGrid) return;
+            const id = state.libraryItem ? String(state.libraryItem.id) : null;
+            libraryGrid.querySelectorAll('.drive-file').forEach(function (el) {
+                const on = (id !== null && el.dataset.mediaId === id);
+                el.classList.toggle('is-selected', on);
+                el.setAttribute('aria-pressed', String(on));
+            });
+        }
+
+        function filterLibraryGrid() {
+            if (!libraryGrid || !librarySearch) return;
+            const q = librarySearch.value.trim().toLowerCase();
+            let shown = 0;
+            libraryGrid.querySelectorAll('.drive-file').forEach(function (el) {
+                const hit = !q || (el.dataset.search || '').indexOf(q) !== -1;
+                el.hidden = !hit;
+                if (hit) shown++;
+            });
+            // Un filtre qui ne renvoie rien doit le DIRE : une grille vide
+            // ressemble sinon à un chargement qui n'a jamais abouti.
+            let empty = libraryGrid.querySelector('.library-empty');
+            if (q && shown === 0) {
+                if (!empty) {
+                    empty = document.createElement('p');
+                    empty.className = 'hint library-empty';
+                    libraryGrid.appendChild(empty);
+                }
+                empty.textContent = 'Aucun média ne correspond à « ' + librarySearch.value.trim() + ' ».';
+                empty.hidden = false;
+            } else if (empty) {
+                empty.hidden = true;
+            }
+        }
+
+        /** « Sélection : reddit · @memesfr · 1080×1350 · image ». */
+        function updateSelectionInfo() {
+            if (!wizSelInfo) return;
+            if (!hasMedia() && !state.libraryItem) {
+                wizSelInfo.textContent = 'Touche un média pour le choisir.';
+                return;
+            }
+            const it = state.libraryItem;
+            const bits = [];
+            if (it) {
+                if (it.platform) bits.push(it.platform);
+                if (it.profile_username) bits.push('@' + it.profile_username);
+                if (it.width && it.height) bits.push(it.width + '×' + it.height);
+                bits.push(it.media_type === 'video' ? 'vidéo' : 'image');
+            } else {
+                if (state.imageName) bits.push(state.imageName);
+                bits.push(state.mediaType === 'video' ? 'vidéo' : 'image');
+            }
+            wizSelInfo.textContent = 'Sélection : ' + bits.join(' · ');
+        }
+
+        // ---- Steppers ----
+        // Tous suivent la même règle : lire le curseur, borner, écrire le
+        // curseur, puis `dispatchEvent(new Event('input'))`. Le
+        // gestionnaire d'origine fait le reste — aucune logique de rendu
+        // n'est dupliquée ici.
+
+        function nudgeRange(input, delta, min, max) {
+            if (!input) return;
+            const current = parseFloat(input.value);
+            const next = Math.min(max, Math.max(min, current + delta));
+            if (next === current) return;
+            input.value = String(next);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        /** Interligne à la française : 1,2 — et 2,0 plutôt que 2. */
+        function formatLineHeight(percent) {
+            let t = (percent / 100).toFixed(2);
+            if (t.charAt(t.length - 1) === '0') t = t.slice(0, -1);
+            return t.replace('.', ',');
+        }
+
+        function syncStepperReadouts() {
+            if (zoomReadout && imageScaleSlider) {
+                zoomReadout.textContent = Math.round(parseFloat(imageScaleSlider.value)) + ' %';
+            }
+            if (textSizeReadout && textSizeSlider) {
+                textSizeReadout.textContent = Math.round(parseFloat(textSizeSlider.value)) + ' px';
+            }
+            if (lineHeightReadout && lineHeightSlider) {
+                lineHeightReadout.textContent = formatLineHeight(parseFloat(lineHeightSlider.value));
+            }
+        }
+
+        // ---- Plateau sélectionné ----
+        // Sous 900px : le plateau AFFICHÉ (un seul tient à l'écran).
+        // Au-dessus : les deux sont visibles, celui-ci porte le contour
+        // d'accent. Une seule variable pour les deux tailles, donc aucun
+        // écart possible entre le basculeur et le contour.
+
+        function setSelectedPane(key) {
+            const tt = (key === 'tt');
+            if (stagesEl) stagesEl.classList.toggle('show-tt', tt);
             const switcher = document.getElementById('stage-switch');
-            if (switcher && stagesEl) {
-                switcher.addEventListener('click', function(e) {
-                    const btn = e.target.closest('.stage-switch__btn');
-                    if (!btn) return;
-                    stagesEl.classList.toggle('show-tt', btn.dataset.stage === 'tt');
-                    switcher.querySelectorAll('.stage-switch__btn').forEach(function(b) {
-                        const active = (b === btn);
-                        b.classList.toggle('active', active);
-                        b.setAttribute('aria-pressed', String(active));
-                    });
-                    // Le plateau révélé reprend toute la place disponible.
-                    updateAllCanvasSizes();
+            if (switcher) {
+                switcher.querySelectorAll('.stage-switch__btn').forEach(function (b) {
+                    const active = (b.dataset.stage === key);
+                    b.classList.toggle('active', active);
+                    b.setAttribute('aria-pressed', String(active));
+                });
+            }
+            eachPane(function (p) {
+                const stage = document.getElementById(p.stageId);
+                if (stage) stage.classList.toggle('is-selected', p.key === key);
+            });
+            updateAllCanvasSizes();
+        }
+
+        // ---- Cartes d'export ----
+        // Elles ne portent AUCUN état : le clic relaie sur l'interrupteur
+        // du plateau (#toggle-ig / #toggle-tt), qui reste le seul point de
+        // vérité de `p.enabled`. Impossible de désynchroniser une carte et
+        // son plateau, puisque la carte ne fait que le relire.
+
+        function syncExportCards() {
+            if (!exportCards) return;
+            eachPane(function (p) {
+                const card = exportCards.querySelector('.export-card[data-pane="' + p.key + '"]');
+                if (!card) return;
+                card.classList.toggle('is-on', p.enabled);
+                card.setAttribute('aria-pressed', String(p.enabled));
+                const tag = document.getElementById('export-tag-' + p.key);
+                if (tag) {
+                    tag.textContent = p.enabled ? 'activé' : 'désactivé';
+                    tag.classList.toggle('tag--accent', p.enabled);
+                    tag.classList.toggle('tag--outline', !p.enabled);
+                }
+            });
+            const dimsIG = document.getElementById('export-card-dims-ig');
+            if (dimsIG) {
+                const t = templateOf(panes.ig);
+                const ratio = { 1080: '1:1', 1350: '4:5', 1920: '9:16' }[t.height] || '';
+                dimsIG.textContent = t.width + '×' + t.height + (ratio ? ' · ' + ratio : '');
+            }
+        }
+
+        /** Vignette réelle de chaque plateau, posée en fond des cartes. */
+        function refreshExportShots() {
+            if (!exportCards) return;
+            eachPane(function (p) {
+                const shot = document.getElementById('export-shot-' + p.key);
+                if (!shot || !p.canvas) return;
+                try {
+                    // Même chemin que l'export : ce qu'on voit sur la carte
+                    // EST ce qui sortira du fichier, repères en moins.
+                    shot.style.backgroundImage =
+                        'url("' + renderCanvasToDataURL(p, 'png', 1, 0.2) + '")';
+                } catch (e) {
+                    // Un aperçu manquant ne doit pas empêcher d'exporter.
+                    console.warn('[editor] aperçu de plateau indisponible', e);
+                }
+            });
+        }
+
+        // ---- Navigation ----
+
+        function wizSync() {
+            const media = hasMedia();
+            if (editorApp) editorApp.dataset.step = String(wizStep);
+            if (wizStepTag) wizStepTag.textContent = 'Étape ' + wizStep + '/4';
+
+            document.querySelectorAll('.wiz-rail__item').forEach(function (item) {
+                const n = parseInt(item.dataset.goto, 10);
+                item.classList.toggle('is-current', n === wizStep);
+                item.classList.toggle('is-done', n < wizStep);
+                item.disabled = (n > wizStep && !media);
+                if (n === wizStep) item.setAttribute('aria-current', 'step');
+                else item.removeAttribute('aria-current');
+            });
+            document.querySelectorAll('.wiz-steps__cell').forEach(function (cell) {
+                const n = parseInt(cell.dataset.goto, 10);
+                cell.classList.toggle('is-current', n === wizStep);
+                cell.disabled = (n > wizStep && !media);
+                const label = cell.querySelector('.wiz-steps__label');
+                if (label) {
+                    label.textContent = WIZ_LABELS[n - 1] + (n < wizStep ? ' ✓' : '');
+                }
+                if (n === wizStep) cell.setAttribute('aria-current', 'step');
+                else cell.removeAttribute('aria-current');
+            });
+
+            if (wizNextBtn) {
+                const nextLabel = WIZ_LABELS[wizStep] || '';
+                wizNextBtn.textContent = 'Continuer — ' + nextLabel;
+                // Sans média il n'y a rien à cadrer : le bouton le dit en
+                // restant éteint plutôt qu'en ouvrant une étape vide.
+                wizNextBtn.disabled = !media;
+            }
+            updateSelectionInfo();
+            syncStepperReadouts();
+            syncExportCards();
+        }
+
+        function goStep(n) {
+            const target = Math.min(WIZ_LAST, Math.max(1, n));
+            if (target > 1 && !hasMedia()) {
+                note('Choisis d’abord un média : c’est lui que les trois étapes suivantes cadrent, habillent et exportent.', 'error');
+                return;
+            }
+            wizStep = target;
+
+            // Étape 3 : la phrase écrite au Tri rapide remplit le bandeau,
+            // UNE SEULE FOIS et seulement si le bandeau est vide — on
+            // n'écrase jamais ce que l'utilisateur a tapé.
+            let prefilled = false;
+            if (wizStep === 3 && state.phrase && !state.phraseUsed && !state.text) {
+                state.phraseUsed = true;
+                memeTextInput.value = state.phrase;
+                updateText(state.phrase);
+                prefilled = true;
+            }
+            if (wizPrefillNote) {
+                wizPrefillNote.style.display = (wizStep === 3 && prefilled) ? 'block' : 'none';
+            }
+
+            wizSync();
+            // La grille des tiers est un repère de CADRAGE : elle
+            // n'existe qu'à l'étape 2.
+            showThirdsGrid(wizStep === 2);
+            // Le plateau change de taille d'une étape à l'autre (il
+            // disparaît aux étapes 1 et 4 sous 900px) : on le recalcule
+            // APRÈS que la CSS a repris la main.
+            updateAllCanvasSizes();
+            if (wizStep === 4) refreshExportShots();
+            const scroller = document.querySelector('.wiz-panel__scroll');
+            if (scroller) scroller.scrollTop = 0;
+        }
+
+        function setupWizard() {
+            // ---- Barre d'étapes, rail, Retour / Continuer ----
+            document.querySelectorAll('[data-goto]').forEach(function (el) {
+                el.addEventListener('click', function () {
+                    goStep(parseInt(el.dataset.goto, 10));
+                });
+            });
+            if (wizNextBtn) wizNextBtn.addEventListener('click', function () { goStep(wizStep + 1); });
+            if (wizPrevBtn) wizPrevBtn.addEventListener('click', function () { goStep(wizStep - 1); });
+            if (wizBackBtn) {
+                wizBackBtn.addEventListener('click', function () {
+                    // Depuis l'étape 1, « ← » quitte l'éditeur pour la
+                    // galerie : c'est de là qu'on vient.
+                    if (wizStep > 1) goStep(wizStep - 1);
+                    else window.location.href = '/viewer';
                 });
             }
 
-            // ---- 2. Zoom du média aux boutons ----
-            // Mêmes bornes et même portée que le slider (les deux plateaux) :
-            // un seul point de vérité, le slider reste synchronisé.
-            function nudgeImageScale(delta) {
-                const current = parseInt(imageScaleSlider.value, 10) || 100;
-                const next = Math.min(200, Math.max(50, current + delta));
-                if (next === current) return;
-                imageScaleSlider.value = next;
-                updateImageScale(next);
+            // ---- Basculeur / sélection de plateau ----
+            const switcher = document.getElementById('stage-switch');
+            if (switcher) {
+                switcher.addEventListener('click', function (e) {
+                    const btn = e.target.closest('.stage-switch__btn');
+                    if (btn) setSelectedPane(btn.dataset.stage);
+                });
             }
+            // Sur desktop les deux plateaux sont là : cliquer sur la
+            // légende de l'un le désigne. Le canvas lui-même reste à
+            // Fabric — on n'intercepte QUE l'en-tête.
+            eachPane(function (p) {
+                const stage = document.getElementById(p.stageId);
+                const head = stage ? stage.querySelector('.stage-head') : null;
+                if (!head) return;
+                head.addEventListener('click', function (e) {
+                    // L'interrupteur de fabrication garde son rôle.
+                    if (e.target.closest('.stage-toggle')) return;
+                    setSelectedPane(p.key);
+                });
+            });
+
+            // ---- Zoom du média : stepper 100 → 200 %, pas de 10 ----
+            // Le curseur « Zoom fin » (50 → 200) reste la source de
+            // vérité et reste atteignable dans la retouche avancée :
+            // aucune valeur possible avant ne devient impossible.
             const zoomInBtn = document.getElementById('zoom-in-btn');
             const zoomOutBtn = document.getElementById('zoom-out-btn');
-            if (zoomInBtn) zoomInBtn.addEventListener('click', function() { nudgeImageScale(10); });
-            if (zoomOutBtn) zoomOutBtn.addEventListener('click', function() { nudgeImageScale(-10); });
+            if (zoomInBtn) zoomInBtn.addEventListener('click', function () {
+                nudgeRange(imageScaleSlider, 10, 100, 200);
+            });
+            if (zoomOutBtn) zoomOutBtn.addEventListener('click', function () {
+                nudgeRange(imageScaleSlider, -10, 100, 200);
+            });
 
-            // ---- 3. Accordéons ----
-            const groups = Array.prototype.slice.call(
-                document.querySelectorAll('.sidebar__scroll .group'));
+            // ---- Taille du texte : 24 → 72 px, pas de 2 ----
+            const sizeUp = document.getElementById('text-size-up');
+            const sizeDown = document.getElementById('text-size-down');
+            if (sizeUp) sizeUp.addEventListener('click', function () { nudgeRange(textSizeSlider, 2, 24, 72); });
+            if (sizeDown) sizeDown.addEventListener('click', function () { nudgeRange(textSizeSlider, -2, 24, 72); });
 
-            function setCollapsed(group, collapsed) {
-                group.classList.toggle('is-collapsed', collapsed);
-                const fold = group.querySelector('.group__fold');
-                if (fold) fold.setAttribute('aria-expanded', String(!collapsed));
+            // ---- Interligne : 0,8 → 2,0, pas de 0,1 ----
+            const lineUp = document.getElementById('line-height-up');
+            const lineDown = document.getElementById('line-height-down');
+            if (lineUp) lineUp.addEventListener('click', function () { nudgeRange(lineHeightSlider, 10, 80, 200); });
+            if (lineDown) lineDown.addEventListener('click', function () { nudgeRange(lineHeightSlider, -10, 80, 200); });
+
+            // Les curseurs restent maîtres : tout mouvement, d'où qu'il
+            // vienne, redescend dans les afficheurs.
+            [imageScaleSlider, textSizeSlider, lineHeightSlider].forEach(function (input) {
+                if (input) input.addEventListener('input', syncStepperReadouts);
+            });
+
+            // ---- « Tout réinitialiser » de l'étape Cadrage ----
+            // Zoom, position, hauteur de cadre, rotation, miroirs — la
+            // liste exacte du handoff, et RIEN d'autre : le texte et le
+            // format de sortie ne sont pas du cadrage.
+            const cropResetAll = document.getElementById('crop-reset-all');
+            if (cropResetAll) {
+                cropResetAll.addEventListener('click', function () {
+                    eachPane(function (p) {
+                        p.imageOffsetX = 0;
+                        p.imageOffsetY = 0;
+                        p.imageScale = 100;
+                    });
+                    if (imageScaleSlider) {
+                        imageScaleSlider.value = 100;
+                        updateImageScale(100);
+                    }
+                    if (frameHeightSlider) {
+                        frameHeightSlider.value = 100;
+                        updateFrameHeight(100);
+                    }
+                    state.rotation = 0;
+                    state.flipX = false;
+                    state.flipY = false;
+                    syncImageEditControls();
+                    if (panes.ig.imageObj || panes.tt.imageObj) reapplyImageTransforms();
+                    syncStepperReadouts();
+                    note('Cadrage réinitialisé : zoom, position, hauteur, rotation et miroirs.', 'success');
+                });
             }
 
-            groups.forEach(function(group) {
-                const head = group.querySelector('.group__head');
-                if (!head) return;
-                head.addEventListener('click', function(e) {
-                    // Desktop : les groupes ne se replient jamais.
-                    if (!mobileViewMq.matches) return;
-                    // Les boutons du bandeau (« Annuler »…) gardent leur rôle ;
-                    // seul le chevron ou le reste du bandeau replie.
-                    const btn = e.target.closest('button');
-                    if (btn && !btn.classList.contains('group__fold')) return;
-                    const willOpen = group.classList.contains('is-collapsed');
-                    if (willOpen) {
-                        // Un seul ouvert à la fois : ouvrir replie les autres.
-                        groups.forEach(function(g) { setCollapsed(g, g !== group); });
-                    } else {
-                        setCollapsed(group, true);
+            // ---- Recherche dans la bibliothèque ----
+            if (librarySearch) {
+                librarySearch.addEventListener('input', filterLibraryGrid);
+            }
+
+            // ---- Cartes d'export ----
+            if (exportCards) {
+                exportCards.addEventListener('click', function (e) {
+                    const card = e.target.closest('.export-card');
+                    if (!card) return;
+                    const toggle = document.getElementById('toggle-' + card.dataset.pane);
+                    if (toggle) toggle.click();   // un seul point de vérité
+                    syncExportCards();
+                });
+            }
+            // L'interrupteur peut aussi être actionné depuis la légende du
+            // plateau : les cartes se relisent après coup.
+            eachPane(function (p) {
+                const toggle = document.getElementById('toggle-' + p.key);
+                if (toggle) toggle.addEventListener('click', function () {
+                    // Après le gestionnaire d'origine, qui a déjà basculé
+                    // `p.enabled` (même phase, ordre d'inscription).
+                    syncExportCards();
+                });
+            });
+
+            // ---- La recherche ne concerne que la bibliothèque ----
+            importTabs.forEach(function (tab) {
+                tab.addEventListener('click', function () {
+                    if (librarySearchWrap) {
+                        librarySearchWrap.style.display =
+                            tab.dataset.source === 'library' ? 'block' : 'none';
                     }
                 });
             });
 
-            // État de départ au doigt : tout replié sauf « Média », le
-            // premier geste utile (importer). Au clavier comme au doigt,
-            // chaque chevron reste opérable.
-            if (mobileViewMq.matches) {
-                const mediaGroup = groups.filter(function(g) {
-                    return g.getAttribute('aria-labelledby') === 'grp-media';
-                })[0] || groups[0];
-                groups.forEach(function(g) { setCollapsed(g, g !== mediaGroup); });
-            }
-
-            // ---- Franchissement du seuil (rotation, redimensionnement) ----
-            // Le cadrage du canvas change de formule : on recalcule.
-            const onViewChange = function() { updateAllCanvasSizes(); };
+            // ---- Franchissement du seuil 900px ----
+            const onViewChange = function () { updateAllCanvasSizes(); };
             if (mobileViewMq.addEventListener) mobileViewMq.addEventListener('change', onViewChange);
             else if (mobileViewMq.addListener) mobileViewMq.addListener(onViewChange);
+
+            // ---- État de départ ----
+            setSelectedPane('ig');
+            // L'onglet actif du balisage est « Bibliothèque » : on charge
+            // sa grille sans attendre un clic qui n'aura pas lieu.
+            loadLibraryMedia();
+            goStep(1);
         }
 
         // ============================================
@@ -3658,7 +4264,7 @@
             loadLogo(); // Preload logo for watermark
             initCanvases();
             setupEventListeners();
-            setupMobileUx();
+            setupWizard();
             setupTimelineInteraction();
             // LOT C — les blocs de retouche et de sortie doivent refléter
             // l'état AVANT tout chargement de média.

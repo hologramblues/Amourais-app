@@ -51,99 +51,459 @@ body {
 }
 
 /* Barre de défilement discrète, même grammaire que le reste de l'app. */
-.sidebar__scroll,
+.wiz-panel__scroll,
 .drive-files {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-color) transparent;
 }
-.sidebar__scroll::-webkit-scrollbar,
+.wiz-panel__scroll::-webkit-scrollbar,
 .drive-files::-webkit-scrollbar {
     width: var(--scrollbar-track);
 }
-.sidebar__scroll::-webkit-scrollbar-thumb,
+.wiz-panel__scroll::-webkit-scrollbar-thumb,
 .drive-files::-webkit-scrollbar-thumb {
     background: var(--scrollbar-color);
     border: var(--sp-2) solid transparent;
     background-clip: content-box;
     border-radius: var(--radius-pill);
 }
-.sidebar__scroll::-webkit-scrollbar-thumb:hover,
+.wiz-panel__scroll::-webkit-scrollbar-thumb:hover,
 .drive-files::-webkit-scrollbar-thumb:hover {
     background: var(--scrollbar-color-hover);
     background-clip: content-box;
 }
 
 /* ============================================================
-   1. CADRE — sidebar d'outils + aire de prévisualisation
+   1. CADRE — LE PARCOURS EN 4 ÉTAPES
+   ------------------------------------------------------------
+   Un seul balisage, deux mises en page.
+
+   Sous 900px  : colonne — en-tête 56px, aperçu, panneau de
+                 l'étape, barre d'étapes, actions.
+   Dès 900px   : grille — rail d'étapes 190px | panneau 320px |
+                 plateau, les deux canvas côte à côte.
+
+   `.editor-app[data-step="n"]` est l'UNIQUE commutateur : la CSS
+   révèle le panneau n et marque la cellule n. Les quatre panneaux
+   restent DANS LE DOM en permanence (masqués, jamais retirés) —
+   c'est ce qui garantit qu'aucun `getElementById` d'editor.js ne
+   peut tomber sur un fantôme au milieu du parcours.
    ============================================================ */
 
-.app {
+.editor-app {
     display: flex;
+    flex-direction: column;
     height: calc(100vh - var(--header-h));
+    height: calc(100dvh - var(--header-h));
     min-height: 0;
+    overflow: hidden;
 }
 
-.sidebar {
-    flex: 0 0 var(--inspector-w);
-    width: var(--inspector-w);
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    background: var(--bg-1);
-    border-right: var(--border-w) solid var(--border-1);
-}
-
-/* La zone d'outils défile ; les actions ne défilent jamais. */
-.sidebar__scroll {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: var(--sp-5);
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-5);
-}
-
-.side-head {
+/* ---- En-tête du parcours (mobile) ---- */
+.wiz-head {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--sp-4);
-    min-height: var(--btn-h);
+    gap: var(--sp-5);
+    height: 56px;
+    padding: 0 var(--sp-6) 0 var(--sp-2);
+    background: var(--bg-1);
+    border-bottom: var(--divider-w) solid var(--border-2);
 }
 
-.side-title {
+.wiz-head__back {
+    flex: 0 0 auto;
+    width: var(--tap-min);
+    height: var(--tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 0;
+    border-radius: var(--radius-control);
+    color: var(--fg-1);
     font-size: var(--text-large);
-    font-weight: var(--weight-semibold);
-    letter-spacing: var(--ls-tight);
+    line-height: 1;
+    cursor: pointer;
+}
+.wiz-head__back:active { background: var(--bg-3); }
+
+.wiz-head__title {
+    font-family: var(--font-heading);
+    font-size: 16px;
+    font-weight: var(--weight-bold);
     line-height: var(--lh-tight);
     color: var(--fg-1);
 }
 
-/* ---- Groupes d'outils : un filet, jamais une ombre ---- */
-.group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-4);
-    padding-top: var(--sp-4);
-    border-top: var(--border-w) solid var(--border-1);
+/* Étiquette « Étape n/4 ». Neutre : elle informe, elle n'alerte pas. */
+.tag {
+    display: inline-flex;
+    align-items: center;
+    height: var(--chip-h);
+    padding: 0 var(--sp-3);
+    background: var(--bg-3);
+    border: var(--border-w) solid var(--border-1);
+    border-radius: var(--radius-control);
+    font-size: var(--text-micro);
+    font-weight: var(--weight-semibold);
+    line-height: 1;
+    color: var(--fg-2);
+    white-space: nowrap;
 }
 
-.group__head {
+.tag--accent {
+    background: var(--accent-solid);
+    border-color: var(--accent-solid);
+    color: var(--fg-on-solid);
+}
+
+.tag--outline {
+    background: transparent;
+    border-color: var(--border-2);
+    color: var(--fg-3);
+}
+
+.wiz-head__tag { margin-left: auto; }
+
+/* ---- Rail d'étapes (desktop uniquement) ---- */
+.wiz-rail { display: none; }
+
+.wiz-rail__list { list-style: none; }
+
+.wiz-rail__item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-5);
+    min-height: var(--tap-min);
+    padding: var(--sp-5);
+    background: none;
+    border: 0;
+    border-radius: var(--radius-control);
+    color: var(--fg-1);
+    text-align: left;
+    cursor: pointer;
+    opacity: 0.6;
+}
+
+.wiz-rail__num {
+    font-family: var(--font-heading);
+    font-size: var(--text-small);
+    font-weight: var(--weight-bold);
+    line-height: 1;
+}
+
+.wiz-rail__label {
+    font-size: var(--text-small);
+    line-height: var(--lh-tight);
+}
+
+/* Le ✓ n'apparaît que sur une étape FAITE : il dit « c'est derrière
+   toi », pas « c'est validé ». */
+.wiz-rail__check {
+    margin-left: auto;
+    color: var(--accent);
+    font-weight: var(--weight-bold);
+    visibility: hidden;
+}
+.wiz-rail__item.is-done { opacity: 0.6; }
+.wiz-rail__item.is-done .wiz-rail__check { visibility: visible; }
+
+/* Étape courante : aplat + barre intérieure gauche 3px. Deux signaux,
+   jamais la couleur seule. */
+.wiz-rail__item.is-current {
+    opacity: 1;
+    background: var(--color-accent-100);
+    box-shadow: inset 3px 0 0 var(--color-accent);
+}
+.wiz-rail__item.is-current .wiz-rail__num { color: var(--accent); }
+.wiz-rail__item.is-current .wiz-rail__label { font-weight: var(--weight-semibold); }
+
+.wiz-rail__item:disabled { cursor: not-allowed; opacity: 0.35; }
+
+/* ---- Panneau de l'étape ---- */
+.wiz-panel {
+    flex: 0 0 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-1);
+    border-top: var(--divider-w) solid var(--border-2);
+}
+
+.wiz-panel__scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--sp-5) var(--sp-6);
+}
+
+/* UNE étape visible à la fois. `display: none` et pas `visibility` :
+   un panneau replié ne doit pas garder de hauteur ni happer le focus. */
+.wiz-step { display: none; flex-direction: column; gap: var(--sp-5); }
+.editor-app[data-step="1"] .wiz-step[data-step="1"],
+.editor-app[data-step="2"] .wiz-step[data-step="2"],
+.editor-app[data-step="3"] .wiz-step[data-step="3"],
+.editor-app[data-step="4"] .wiz-step[data-step="4"] { display: flex; }
+
+.wiz-step__head {
     display: flex;
     align-items: center;
     gap: var(--sp-4);
     min-height: var(--chip-h);
 }
 
-.group__title {
-    font-size: var(--text-micro);
+.wiz-step__title {
+    font-family: var(--font-heading);
+    font-size: var(--text-large);
+    font-weight: var(--weight-bold);
+    letter-spacing: var(--ls-tight);
+    line-height: var(--lh-tight);
+    color: var(--fg-1);
+}
+
+.wiz-step__reset { margin-left: auto; }
+
+/* Blocs révélés par editor.js (`style.display = 'flex'`) : ils
+   doivent s'empiler quand il les rallume. */
+.image-tools,
+.output-tools,
+.pov-tools {
+    flex-direction: column;
+    gap: var(--sp-5);
+}
+.pov-tools { display: flex; }
+
+/* Retouche avancée : <details> natif, aucun JS. */
+.wiz-more {
+    border-top: var(--border-w) solid var(--border-1);
+    padding-top: var(--sp-4);
+}
+
+.wiz-more__summary {
+    display: flex;
+    align-items: center;
+    min-height: var(--tap-min);
+    font-size: var(--text-mini);
     font-weight: var(--weight-semibold);
-    text-transform: uppercase;
-    letter-spacing: var(--ls-caps);
+    color: var(--fg-2);
+    cursor: pointer;
+    list-style: none;
+}
+.wiz-more__summary::-webkit-details-marker { display: none; }
+.wiz-more__summary::before {
+    content: "";
+    flex: 0 0 auto;
+    width: var(--sp-3);
+    height: var(--sp-3);
+    margin-right: var(--sp-4);
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform var(--t-quick) var(--ease);
+}
+.wiz-more[open] > .wiz-more__summary::before { transform: rotate(45deg); }
+
+.wiz-more__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-5);
+    padding-top: var(--sp-4);
+}
+
+/* ---- Stepper − / valeur / + ---- */
+.stepper {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+}
+
+.stepper__btn {
+    flex: 0 0 auto;
+    width: var(--tap-min);
+    height: var(--tap-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-1);
+    border: var(--border-w) solid var(--border-2);
+    border-radius: var(--radius-control);
+    color: var(--fg-1);
+    font-size: var(--text-large);
+    line-height: 1;
+    cursor: pointer;
+}
+.stepper__btn:hover:not(:disabled) { background: var(--bg-3); }
+.stepper__btn:active:not(:disabled) { background: var(--bg-2); }
+.stepper__btn:disabled { color: var(--fg-4); cursor: not-allowed; }
+
+.stepper__value {
+    flex: 1 1 auto;
+    text-align: center;
+    font-family: var(--font-heading);
+    font-size: var(--text-regular);
+    font-weight: var(--weight-bold);
+    font-variant-numeric: tabular-nums;
+    color: var(--fg-1);
+}
+
+/* Les curseurs d'origine restent la source de vérité de la taille et
+   de l'interligne : ils sont ici, hors du flux visuel mais DANS le
+   DOM, focalisables au clavier, et lus/écrits par les steppers.
+   `clip` plutôt que `display:none` : un input masqué par display ne
+   reçoit ni focus ni évènement `input`. */
+.wiz-hidden-range {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/* Mention de pré-remplissage depuis le Tri rapide. */
+.wiz-prefill {
+    font-size: var(--text-small);
+    line-height: var(--lh-tight);
+    color: var(--accent);
+}
+
+.wiz-selinfo { min-height: calc(var(--text-micro) * 1.4); }
+
+.wiz-steppers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-5);
+}
+
+/* ---- Cartes d'export ---- */
+/* `align-items: start` : les deux cartes n'ont pas le même rapport
+   (4:5 et 9:16). Étirées, la plus courte traînait une bande vide sous
+   ses libellés. */
+.export-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: var(--sp-5);
+}
+
+.export-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+    padding: var(--sp-5);
+    background: var(--bg-1);
+    border: var(--border-w) solid var(--border-2);
+    border-radius: var(--radius-block);
+    text-align: left;
+    cursor: pointer;
+}
+.export-card:hover { background: var(--bg-3); }
+
+/* Éteint : la carte se retire du regard SANS disparaître — l'aplat
+   du tag passe en contour, l'aperçu se décolore à moitié. Deux
+   signaux en plus du libellé, jamais la couleur seule. */
+.export-card:not(.is-on) { opacity: 0.55; }
+
+/* Hauteur FIXE et `contain` : les deux plateaux n'ont pas le même
+   rapport (4:5 et 9:16). À largeur égale, laisser chacun sa hauteur
+   naturelle donnait une carte TikTok deux fois plus haute que sa
+   voisine et une rangée bancale. Une boîte commune, l'aperçu s'y
+   inscrit — c'est le RAPPORT qui distingue les deux, pas la place
+   qu'ils prennent. */
+.export-card__shot {
+    display: block;
+    width: 100%;
+    height: 148px;
+    background: var(--bg-2) center/contain no-repeat;
+    border: var(--border-w) solid var(--border-1);
+}
+
+.export-card__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-4);
+}
+
+.export-card__name {
+    font-size: var(--text-mini);
+    font-weight: var(--weight-semibold);
+    color: var(--fg-1);
+}
+
+.export-card__dims {
+    font-size: var(--text-micro);
     color: var(--fg-3);
 }
+
+/* ---- Barre d'étapes (mobile) ---- */
+.wiz-steps { display: none; }
+
+.wiz-steps__cell {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-1);
+    min-height: var(--tap-min);
+    padding: var(--sp-5) var(--sp-4) var(--sp-5);
+    background: none;
+    border: 0;
+    border-right: var(--border-w) solid var(--border-1);
+    color: var(--fg-1);
+    text-align: left;
+    cursor: pointer;
+    opacity: 0.55;
+}
+.wiz-steps__cell:last-child { border-right: 0; }
+
+.wiz-steps__num {
+    font-family: var(--font-heading);
+    font-size: var(--text-mini);
+    font-weight: var(--weight-bold);
+    line-height: 1;
+}
+
+.wiz-steps__label {
+    font-size: var(--text-micro);
+    line-height: var(--lh-tight);
+}
+
+.wiz-steps__cell.is-current {
+    opacity: 1;
+    box-shadow: inset 0 -4px 0 var(--color-accent);
+}
+.wiz-steps__cell.is-current .wiz-steps__num { color: var(--accent); }
+.wiz-steps__cell.is-current .wiz-steps__label { font-weight: var(--weight-semibold); }
+
+.wiz-steps__cell:disabled { cursor: not-allowed; opacity: 0.3; }
+
+/* ---- Actions ---- */
+.wiz-actions {
+    flex: 0 0 auto;
+    padding: var(--sp-5) var(--sp-6) var(--sp-6);
+    background: var(--bg-1);
+    border-top: var(--divider-w) solid var(--border-2);
+}
+
+.wiz-actions__nav { display: flex; gap: var(--sp-5); }
+.wiz-actions__export { display: none; flex-direction: column; gap: var(--sp-4); }
+
+/* Étape 4 : la rangée « Retour / Continuer » cède la place au
+   téléchargement, à la sauvegarde et à la planification. */
+.editor-app[data-step="4"] .wiz-actions__nav { display: none; }
+.editor-app[data-step="4"] .wiz-actions__export { display: flex; }
+
+.wiz-actions .btn { min-height: 46px; }
+.wiz-prev { flex: 1 1 0; }
+.wiz-next { flex: 2 1 0; }
+
+/* Étape 1 : rien derrière, « Retour » quitte l'éditeur — le bouton
+   ← de l'en-tête suffit, la rangée ne garde que « Continuer ». */
+.editor-app[data-step="1"] .wiz-prev { display: none; }
 
 /* Texte d'appoint : contrainte chiffrée, avertissement, astuce. */
 .hint {
@@ -286,10 +646,21 @@ body {
     }
 }
 
+/* Même famille que `.seg__btn` : le handoff décrit Bibliothèque/Ordi/Drive
+   comme un SEGMENTED. Aplat plein, donc, sinon deux segments voisins du même
+   écran ne se ressembleraient pas. */
 .import-tab.active {
-    background: var(--accent-soft);
-    border-color: var(--accent-border);
-    color: var(--accent);
+    background: var(--accent-solid);
+    border-color: var(--accent-solid);
+    color: var(--fg-on-accent);
+}
+
+@media (any-hover: hover) and (any-pointer: fine) {
+    .import-tab.active:hover {
+        background: var(--accent-solid-hover);
+        border-color: var(--accent-solid-hover);
+        color: var(--fg-on-accent);
+    }
 }
 
 /* ---- Zone de dépôt ----
@@ -650,11 +1021,31 @@ body {
 
 .seg__btn:active { background: var(--bg-3); }
 
+/* ÉTAT ACTIF DES SEGMENTED ET DES BASCULES — aplat accent PLEIN.
+   Les maquettes du handoff posent un aplat accent plein à texte inversé sur
+   chaque segment sélectionné, et la consigne le dit mot pour mot pour les
+   miroirs : « toggles, actif = fond accent ». La teinte accent-100 précédente
+   créait en plus une incohérence VISIBLE dans un même écran : le basculeur de
+   plateau (.stage-switch, --accent-solid) était un aplat rouge plein, juste
+   au-dessus de segments de format en rose pâle.
+   On vise donc --accent-solid, la rampe d'APLAT (texte --fg-on-accent dessus,
+   contraste tenu dans les deux thèmes), et non --accent, qui est la rampe de
+   TEXTE. Portée volontairement limitée à ce fichier : les items de navigation
+   gardent leur teinte, ils ne sont pas des segments. */
 .seg__btn.active,
 .seg__btn[aria-pressed="true"] {
-    background: var(--accent-soft);
-    border-color: var(--accent-border);
-    color: var(--accent);
+    background: var(--accent-solid);
+    border-color: var(--accent-solid);
+    color: var(--fg-on-accent);
+}
+
+@media (any-hover: hover) and (any-pointer: fine) {
+    .seg__btn.active:hover,
+    .seg__btn[aria-pressed="true"]:hover {
+        background: var(--accent-solid-hover);
+        border-color: var(--accent-solid-hover);
+        color: var(--fg-on-accent);
+    }
 }
 
 .seg__btn:disabled {
@@ -832,17 +1223,6 @@ body {
     border-color: var(--border-1);
     color: var(--fg-4);
     cursor: not-allowed;
-}
-
-/* ---- Pied d'actions : toujours visible, ne défile pas ---- */
-.sidebar__actions {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-4);
-    padding: var(--sp-5);
-    background: var(--bg-1);
-    border-top: var(--border-w) solid var(--border-1);
 }
 
 .actions-row {
@@ -1035,30 +1415,38 @@ body {
 }
 
 /* ============================================================
-   7. AIRE DE PRÉVISUALISATION
+   7. LE PLATEAU
    ------------------------------------------------------------
-   Le canvas Fabric peint son propre fond sombre (#2a2a2a, posé
-   par editor.js) et ses poignées en rouge cerclé de blanc. Le
-   filet + l'ombre ci-dessous servent à le détacher de l'aire,
-   dans les DEUX thèmes : en clair l'aire est plus claire que le
-   canvas, en sombre elle est plus foncée.
+   Le canvas Fabric peint son propre fond (posé par editor.js).
+   Le filet ci-dessous le détache de l'aire dans les DEUX thèmes.
+
+   Les étapes 1 et 4 ne montrent RIEN à cadrer : sous 900px le
+   plateau s'efface et rend sa place au panneau (grille de la
+   bibliothèque, cartes d'export). Sur desktop il reste affiché à
+   toutes les étapes — c'est le point de la mise en page à trois
+   colonnes : on voit ce qu'on fabrique pendant qu'on le règle.
    ============================================================ */
 
 .preview-area {
     flex: 1 1 auto;
+    min-height: 0;
     min-width: 0;
     position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: var(--sp-7);
+    gap: var(--sp-4);
+    padding: var(--sp-5);
     background: var(--bg-2);
+    overflow: hidden;
 }
 
-/* Pas d'ombre portée : le canvas n'est pas un élément flottant, il est
-   posé dans l'aire. La séparation vient du filet 1px + de l'escalier de
-   surfaces (--bg-2 pour l'aire, le canvas peignant son propre fond). */
+/* Au doigt chaque pixel de l'aperçu compte : marges resserrées. */
+@media (max-width: 899.98px) {
+    .preview-area { gap: var(--sp-3); padding: var(--sp-4) var(--sp-5); }
+}
+
 .canvas-container {
     border: var(--border-w) solid var(--border-2);
     border-radius: var(--radius-control);
@@ -1069,16 +1457,14 @@ body {
    pour que les poignées de manipulation restent cliquables. */
 .preview-area .canvas-container { overflow: visible !important; }
 
-.preview-area canvas { display: block; }
+.preview-area canvas { display: block; max-width: 100%; }
 
 .help-text {
-    position: absolute;
-    left: 50%;
-    bottom: var(--sp-5);
-    transform: translateX(-50%);
-    max-width: calc(100% - var(--sp-8));
+    flex: 0 0 auto;
+    max-width: 100%;
     text-align: center;
     font-size: var(--text-micro);
+    line-height: var(--lh-tight);
     color: var(--fg-3);
 }
 
@@ -1234,53 +1620,9 @@ body {
     .remove-file { width: var(--tap-min); height: var(--tap-min); }
 }
 
-@media (max-width: 1023px) {
-    .app {
-        flex-direction: column;
-        height: auto;
-        min-height: calc(100vh - var(--header-h));
-    }
-
-    .sidebar {
-        flex: 0 0 auto;
-        width: 100%;
-        max-height: none;
-        border-right: 0;
-        border-bottom: var(--border-w) solid var(--border-1);
-        /* La sidebar occupe toute la largeur : elle défile avec la page,
-           et le pied d'actions colle au bas de la fenêtre. */
-        order: 2;
-    }
-
-    .sidebar__scroll {
-        overflow: visible;
-        padding: var(--sp-5) var(--sp-5) var(--sp-6);
-    }
-
-    .sidebar__actions {
-        position: sticky;
-        bottom: 0;
-        z-index: var(--z-sticky);
-        box-shadow: var(--shadow-low);
-    }
-
-    .preview-area {
-        order: 1;
-        padding: var(--sp-5);
-        min-height: 45vh;
-    }
-
-    .preview-area canvas { max-width: 100%; }
-
-    .help-text { position: static; transform: none; margin-top: var(--sp-5); }
-
-    .format-selector,
-    .import-tabs { gap: var(--sp-3); }
-}
-
 /* Rien ne doit déborder horizontalement, quelle que soit la largeur. */
-.app,
-.sidebar,
+.editor-app,
+.wiz-panel,
 .preview-area,
 .timeline-container,
 .drive-zone {
@@ -1316,26 +1658,34 @@ body {
     src: url('/static/vendor/fonts/Montserrat-SemiBold.woff2') format('woff2');
 }
 
-.preview-area {
-    justify-content: flex-start;
-    overflow-y: auto;
-}
-
 .stages {
+    flex: 1 1 auto;
+    min-height: 0;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
-    gap: var(--sp-6);
+    gap: var(--sp-7);
     width: 100%;
-    margin: auto 0;   /* centre verticalement quand il y a de la place */
 }
 
+/* La légende passe SOUS le canvas (ordre du DOM) : c'est là que la
+   maquette la place, et c'est là qu'elle ne vole pas de hauteur au
+   cadrage tant qu'on ne la lit pas. */
 .canvas-stage {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--sp-3);
+    gap: var(--sp-4);
     min-width: 0;
+    padding: var(--sp-4);
+    border: var(--divider-w) solid transparent;
+}
+
+/* Plateau sélectionné : c'est celui que le basculeur montre sous
+   900px et celui que la légende désigne au-dessus. Un CONTOUR, pas
+   un aplat : le canvas dessous ne doit pas changer de couleur. */
+@media (min-width: 900px) {
+    .canvas-stage.is-selected { border-color: var(--color-accent); }
 }
 
 .stage-head {
@@ -1371,10 +1721,14 @@ body {
 .canvas-stage.is-off .canvas-container { display: none; }
 .canvas-stage.is-off .stage-title { color: var(--fg-3); }
 
-@media (max-width: 1100px) {
+/* Le parcours prend 510px de chrome (rail 190 + panneau 320) : les
+   deux plateaux ne tiennent plus côte à côte aussi tôt qu'avant.
+   `updateCanvasSize()` lit cette direction pour dimensionner. */
+@media (max-width: 1200px) {
     .stages {
         flex-direction: column;
         align-items: center;
+        overflow-y: auto;
     }
 }
 
@@ -1432,153 +1786,278 @@ body {
 }
 
 /* ============================================================
-   10. LOT B — ÉDITEUR UTILISABLE AU DOIGT (sous 900px)
+   10. LES DEUX MISES EN PAGE DU PARCOURS
    ------------------------------------------------------------
-   Plainte d'origine : « quand on est sur les réglages le
-   template n'est plus visible ». Le principe : l'APERÇU RESTE
-   VISIBLE pendant qu'on règle.
-     — l'aperçu devient collant sous la barre de nav (~45% de la
-       hauteur du viewport) et les réglages défilent DESSOUS ;
-     — un basculeur compact choisit LE plateau affiché (un seul
-       à la fois sur mobile) ;
-     — les groupes d'outils deviennent des accordéons (un seul
-       ouvert), chevrons ≥ 44px ;
-     — le zoom du média se fait aux boutons +/− (le build Fabric
-       vendorisé ne sait pas pincer), le glisser reste au doigt
-       sur le canvas.
-   AU-DESSUS de 900px : AUCUNE de ces règles ne s'applique —
-   les trois blocs ci-dessous sont cachés et les accordéons
-   sont ignorés.
+   Base (sous 900px) : la colonne au doigt.
+     en-tête 56px · aperçu · panneau · barre d'étapes · actions.
+     Un seul plateau à l'écran, choisi par le basculeur — deux
+     canvas côte à côte y seraient illisibles.
+   Dès 900px : la grille à trois colonnes.
+     rail 190px | panneau 320px | plateau (les DEUX canvas).
    ============================================================ */
 
-/* Desktop : les contrôles mobiles n'existent pas à l'écran. */
-.stage-switch,
-.preview-zoom,
-.group__fold { display: none; }
+/* ---------- SOUS 900px ---------- */
 
-@media (max-width: 899.98px) {
+/* L'ORDRE À L'ÉCRAN n'est pas l'ordre du DOM. Le DOM range les blocs
+   par importance — rail, panneau, plateau — parce que c'est celui-là
+   que suivent le clavier et le lecteur d'écran sur les DEUX tailles.
+   Au doigt, la maquette veut l'aperçu JUSTE SOUS l'en-tête : on ne
+   déplace donc que la peinture, avec `order`. */
+.wiz-head     { order: 0; }
+.preview-area { order: 1; }
+.wiz-panel    { order: 2; }
+.wiz-steps    { order: 3; }
+.wiz-actions  { order: 4; }
+.wiz-rail     { order: 5; }
 
-    /* ---- 1. L'aperçu colle sous la barre de nav ---- */
-    .preview-area {
-        position: sticky;
-        top: var(--header-h);
-        /* Sous la nav (z 100), au-dessus du contenu qui défile. */
-        z-index: calc(var(--z-sticky) - 1);
-        height: 45vh;
-        height: 45dvh;
-        min-height: 0;
-        overflow: hidden;
-        padding: var(--sp-4) var(--sp-5);
-        border-bottom: var(--border-w) solid var(--border-1);
-        justify-content: flex-start;
-    }
+.wiz-steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    flex: 0 0 auto;
+    background: var(--bg-1);
+    border-top: var(--divider-w) solid var(--border-2);
+}
 
-    /* Le mode d'emploi vole de la hauteur au canvas : il saute. */
-    .preview-area .help-text { display: none; }
+/* Le panneau ne mange jamais tout l'écran : au-delà, on ne voit
+   plus ce qu'on règle — c'est la plainte qui a fait naître le
+   parcours. `flex: 0 1 auto` : un panneau court (étape Texte) rend
+   sa place à l'aperçu au lieu de réserver 300px de vide.
+   Aux étapes SANS aperçu il prend toute la place disponible. */
+.wiz-panel { flex: 0 1 auto; max-height: 300px; }
+@media (max-height: 700px) {
+    .wiz-panel { max-height: 46vh; max-height: 46dvh; }
+}
 
-    .stages {
-        flex: 1 1 auto;
-        min-height: 0;
-        margin: 0;
-        gap: 0;
-    }
+.editor-app[data-step="1"] .preview-area,
+.editor-app[data-step="4"] .preview-area { display: none; }
 
-    /* ---- 2. UN plateau à la fois, choisi par le basculeur ---- */
-    .canvas-stage { display: none; width: 100%; flex: 1 1 auto; min-height: 0; }
-    .stages:not(.show-tt) .canvas-stage[data-pane="ig"],
-    .stages.show-tt .canvas-stage[data-pane="tt"] { display: flex; }
+/* PLANCHER DE L'APERÇU AUX ÉTAPES QUI SE REGARDENT (2 et 3).
+   Le panneau plafonnait à 300px et prenait ces 300px : sur un
+   375×812 il ne restait que 191px d'aperçu, donc un gabarit 4:5 de
+   118×147 px — la maquette en montre un de 220px de large, et on
+   demande à ce cadre-là de recevoir le CADRAGE AU DOIGT. Un canvas
+   de 118px pour positionner une image est une cible, pas un aperçu.
 
-    .stage-switch {
+   Le plancher ne RETIRE rien : le panneau de l'étape 2 déborde déjà
+   (534px de contenu pour 300px de boîte), il défile donc de toute
+   façon ; il défile juste un peu plus, et le sujet double de taille.
+   `min()` borne le plancher à la hauteur RÉELLE de l'écran pour ne
+   jamais écraser le panneau sur un appareil court (le 46dvh voisin
+   règle déjà le même problème par l'autre bout).
+   `updateCanvasSize()` mesure la boîte du plateau : le JS suit. */
+.editor-app[data-step="2"] .preview-area,
+.editor-app[data-step="3"] .preview-area {
+    flex: 1 1 auto;
+    min-height: 360px;
+    min-height: min(360px, 46dvh);
+}
+
+/* Écran court : le plancher redescend, sinon c'est le PANNEAU qui
+   devient inutilisable. Même arbitrage que le `max-height: 46dvh`
+   du panneau juste au-dessus, pris par l'autre bout. */
+@media (max-height: 700px) {
+    .editor-app[data-step="2"] .preview-area,
+    .editor-app[data-step="3"] .preview-area { min-height: 40dvh; }
+}
+
+.editor-app[data-step="1"] .wiz-panel,
+.editor-app[data-step="4"] .wiz-panel {
+    flex: 1 1 auto;
+    max-height: none;
+    border-top: 0;
+}
+
+/* Le basculeur de plateau vit AU-DESSUS du canvas, comme la
+   maquette : c'est le premier geste de l'étape Cadrage. */
+.stage-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-4);
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 320px;
+}
+
+.stage-switch__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--tap-min);
+    padding: 0 var(--sp-3);
+    background: var(--bg-1);
+    border: var(--border-w) solid var(--border-2);
+    border-radius: var(--radius-control);
+    color: var(--fg-2);
+    font-size: var(--text-mini);
+    font-weight: var(--weight-medium);
+    cursor: pointer;
+}
+.stage-switch__btn.active {
+    background: var(--accent-solid);
+    border-color: var(--accent-solid);
+    color: var(--fg-on-solid);
+}
+
+/* Un seul plateau visible au doigt. `align-items: stretch` sur la
+   rangée : sans lui, la hauteur du plateau vaut celle de son CONTENU
+   — donc celle du canvas — et `updateCanvasSize()` se mesurait
+   lui-même, un canvas trop grand restant trop grand indéfiniment. */
+.stages { align-items: stretch; }
+.canvas-stage {
+    display: none;
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    justify-content: center;
+    padding: 0;
+}
+.stages:not(.show-tt) .canvas-stage[data-pane="ig"],
+.stages.show-tt .canvas-stage[data-pane="tt"] { display: flex; }
+
+/* La légende du plateau ne sert à rien au doigt : le basculeur
+   au-dessus dit déjà quel plateau on regarde, et l'interrupteur de
+   fabrication a sa carte à l'étape 4. Elle coûtait 34px de hauteur
+   au seul objet qu'on est venu voir. */
+.stage-head { display: none; }
+
+/* Le mode d'emploi ne sert qu'au cadrage : ailleurs il vole de la
+   hauteur au canvas. */
+.editor-app:not([data-step="2"]) .help-text { display: none; }
+
+/* ---------- DÈS 900px ---------- */
+@media (min-width: 900px) {
+
+    .editor-app {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--sp-2);
-        width: 100%;
-        flex: 0 0 auto;
-        margin-bottom: var(--sp-4);
+        grid-template-columns: 190px 320px minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) auto;
     }
 
-    .stage-switch__btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        height: var(--tap-min);
-        padding: 0 var(--sp-3);
-        background: var(--bg-1);
-        border: var(--border-w) solid var(--border-1);
-        border-radius: var(--radius-control);
-        color: var(--fg-2);
-        font-family: inherit;
-        font-size: var(--text-mini);
-        font-weight: var(--weight-medium);
-        cursor: pointer;
-    }
-    .stage-switch__btn.active {
-        background: var(--accent-soft);
-        border-color: var(--accent-border);
-        color: var(--accent);
-    }
+    /* L'en-tête du parcours et la barre d'étapes sont des objets
+       tactiles : le rail les remplace tous les deux. */
+    .wiz-head,
+    .wiz-steps { display: none; }
 
-    /* ---- 3. Zoom du média : +/− posés sur l'aperçu ---- */
-    .preview-zoom {
+    .wiz-rail {
+        grid-column: 1;
+        grid-row: 1 / -1;
         display: flex;
-        gap: var(--sp-3);
-        position: absolute;
-        right: var(--sp-5);
-        bottom: var(--sp-5);
-        z-index: var(--z-content);
-    }
-    .preview-zoom__btn {
-        width: var(--tap-min);
-        height: var(--tap-min);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
+        flex-direction: column;
+        min-height: 0;
+        padding: var(--sp-6) var(--sp-5);
         background: var(--bg-1);
-        border: var(--border-w) solid var(--border-2);
-        border-radius: var(--radius-control);
-        color: var(--fg-1);
-        font-family: inherit;
-        font-size: var(--text-large);
-        line-height: 1;
-        cursor: pointer;
-        box-shadow: var(--shadow-low);
-    }
-    .preview-zoom__btn:active { background: var(--bg-3); }
-
-    /* ---- 4. Accordéons : un seul groupe ouvert à la fois ---- */
-    .group__head { cursor: pointer; min-height: var(--tap-min); }
-
-    .group__fold {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-        margin-left: auto;
-        width: var(--tap-min);
-        height: var(--tap-min);
-        background: none;
-        border: 0;
-        border-radius: var(--radius-control);
-        color: var(--fg-3);
-        cursor: pointer;
+        border-right: var(--divider-w) solid var(--border-2);
+        overflow-y: auto;
     }
 
-    /* Chevron dessiné, pas un glyphe : aucune nouvelle taille de
-       police introduite. Pointe vers le bas = ouvert. */
-    .group__fold-chevron {
-        width: var(--sp-4);
-        height: var(--sp-4);
-        border-right: 2px solid currentColor;
-        border-bottom: 2px solid currentColor;
-        transform: rotate(45deg) translate(-1px, -1px);
-        transition: transform var(--t-quick) var(--ease);
-    }
-    .group__fold[aria-expanded="false"] .group__fold-chevron {
-        transform: rotate(-45deg) translate(-2px, 2px);
+    .wiz-rail__reset { margin-top: auto; }
+
+    .wiz-panel {
+        grid-column: 2;
+        grid-row: 1;
+        max-height: none;
+        border-top: 0;
+        border-right: var(--divider-w) solid var(--border-2);
     }
 
-    /* Replié : seul l'en-tête reste. `!important` assumé — editor.js
-       pose des display inline (block/none) sur plusieurs enfants,
-       c'est la seule façon de les battre sans toucher à sa logique. */
-    .group.is-collapsed > :not(.group__head) { display: none !important; }
+    .wiz-panel__scroll { padding: var(--sp-6) var(--sp-6) var(--sp-7); }
+
+    .wiz-actions {
+        grid-column: 2;
+        grid-row: 2;
+        border-right: var(--divider-w) solid var(--border-2);
+    }
+
+    /* Le plateau est visible à TOUTES les étapes : c'est l'intérêt
+       de la mise en page large. */
+    .preview-area {
+        grid-column: 3;
+        grid-row: 1 / -1;
+    }
+    .editor-app[data-step="1"] .preview-area,
+    .editor-app[data-step="4"] .preview-area { display: flex; }
+
+    .editor-app[data-step="1"] .wiz-panel,
+    .editor-app[data-step="4"] .wiz-panel { flex: 0 0 auto; }
+
+    /* Deux plateaux côte à côte : le basculeur n'a plus d'objet. */
+    .stage-switch { display: none; }
+    .stages { align-items: center; }
+    .canvas-stage {
+        display: flex;
+        width: auto;
+        flex: 0 1 auto;
+        justify-content: flex-start;
+        padding: var(--sp-4);
+    }
+    .stage-head { display: flex; }
+
+    /* La rangée « Retour / Continuer » tient sur une ligne dans 320px. */
+    .wiz-actions .btn { min-height: var(--tap-min); }
+}
+
+/* ---------- Écran large : le panneau respire ---------- */
+@media (min-width: 1280px) {
+    .editor-app { grid-template-columns: 190px 340px minmax(0, 1fr); }
+}
+
+/* ============================================================
+   11. ÉTAPE 1 — LA GRILLE DE LA BIBLIOTHÈQUE
+   ------------------------------------------------------------
+   `.drive-files` sert Drive ET la bibliothèque ; la bibliothèque
+   est désormais la grille PRINCIPALE de l'étape 1, elle ne peut
+   plus vivre dans les ~120px de haut que Drive lui laissait.
+   C'est le panneau qui défile, pas la grille : deux ascenseurs
+   imbriqués au doigt, c'est un ascenseur de trop.
+   ============================================================ */
+
+.library-zone {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.library-grid {
+    max-height: none;
+    overflow: visible;
+    padding: var(--sp-4) 0 0;
+}
+
+/* Sélection : anneau INTÉRIEUR (il ne pousse aucun voisin, la
+   grille ne bouge pas d'un pixel au clic) + carré ✓ 22px. Deux
+   signaux, jamais la couleur seule. */
+.drive-file__check {
+    position: absolute;
+    top: var(--sp-3);
+    right: var(--sp-3);
+    width: 22px;
+    height: 22px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-solid);
+    color: var(--fg-on-solid);
+    font-family: var(--font-heading);
+    font-size: var(--text-small);
+    font-weight: var(--weight-bold);
+    line-height: 1;
+}
+
+.drive-file.is-selected {
+    box-shadow: inset 0 0 0 3px var(--color-accent);
+}
+.drive-file.is-selected .drive-file__check { display: flex; }
+
+/* Un filtre sans résultat s'explique, il ne laisse pas une case vide. */
+.library-empty { grid-column: 1 / -1; padding: var(--sp-6) 0; }
+
+.wiz-search .text-input { width: 100%; }
+
+/* La zone de dépôt reste utile : elle accepte le glisser-déposer. */
+.upload-zone { min-height: 0; }
+
+@media (min-width: 900px) {
+    /* Le panneau fait 320px : quatre colonnes y tiennent, comme la
+       maquette desktop. */
+    .library-grid { grid-template-columns: repeat(4, 1fr); }
 }

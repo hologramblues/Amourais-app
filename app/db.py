@@ -79,6 +79,16 @@ class MediaItem(Base):
     # exposé par /api/viewer/fingerprints/compute).
     md5 = Column(Text)
     phash = Column(Text)
+    # ---- Phrase du futur meme (refonte UI « PAS-A-PAS ») -------------------
+    # Ecrite au Tri rapide de la galerie (une phrase par media, au doigt),
+    # relue par l'etape « Texte » de l'editeur pour pre-remplir le bandeau.
+    # NULLABLE, et ce n'est pas un detail : les medias deja en base n'en ont
+    # aucune, l'application doit fonctionner colonne vide, et une phrase
+    # effacee redevient NULL plutot que chaine vide (un seul etat « pas de
+    # phrase », donc un seul test cote client).
+    # Aucun index : la phrase ne sert ni de filtre ni de tri, elle se lit
+    # toujours par l'id du media.
+    phrase = Column(Text)
     file_size = Column(Integer)
     width = Column(Integer)
     height = Column(Integer)
@@ -478,6 +488,12 @@ def _migrate_add_columns():
         # dans cet état. Le remplissage est différé, jamais bloquant.
         ("media_items", "md5",              "TEXT"),
         ("media_items", "phash",            "TEXT"),
+        # MediaItem — phrase du futur meme (refonte UI « PAS-A-PAS »). NULLABLE
+        # pour la meme raison que les empreintes : la base reelle n'en a
+        # aucune, et l'ecran doit fonctionner ainsi. ADD COLUMN sans DEFAULT
+        # ni NOT NULL : SQLite se contente de reecrire l'en-tete de la table,
+        # aucune ligne n'est touchee.
+        ("media_items", "phrase",           "TEXT"),
         # NOTE — `session_health` (lot « santé de session ») ne figure PAS ici,
         # et c'est volontaire : cette liste ne s'adresse qu'aux tables DÉJÀ
         # PRÉSENTES dans une base ancienne, auxquelles il manque des colonnes.

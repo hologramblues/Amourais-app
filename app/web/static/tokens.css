@@ -1,16 +1,73 @@
 /* ============================================================
-   SAMOURAIS SCRAPPER — DESIGN TOKENS
+   SAMOURAIS SCRAPPER — DESIGN TOKENS « MODERNIST »
    Source unique de vérité. Aucune valeur brute ailleurs.
    ------------------------------------------------------------
-   Contenu : UNIQUEMENT des déclarations de custom properties.
+   Contenu : les @font-face de la police vendorisée, puis
+   UNIQUEMENT des déclarations de custom properties.
    Ce fichier ne style aucun élément — il peut donc être chargé
    par n'importe quelle page sans risque de régression.
+   (ÉCART assumé : les @font-face ci-dessous ne stylent rien non
+   plus, ils déclarent une ressource. Les poser ici est ce qui
+   garantit qu'Archivo est disponible sur les 8 pages, puisque
+   toutes chargent tokens.css et rien d'autre en commun.)
    ------------------------------------------------------------
    Ordre de chargement : tokens.css AVANT tout autre CSS.
    ------------------------------------------------------------
-   Base : REFERENCES.md §2.2. Les écarts assumés sont signalés
-   par un commentaire « ÉCART ».
+   Base : handoff « Refonte UI PAS-À-PAS », système Modernist
+   (assets/modernist.css). Les écarts assumés sont signalés par
+   un commentaire « ÉCART ». Les corrections de contraste sont
+   signalées par « CORRECTION AA » et portent leur mesure.
    ============================================================ */
+
+
+/* ============================================================
+   0. TYPOGRAPHIE VENDORISÉE — ARCHIVO (SIL OFL 1.1)
+   ------------------------------------------------------------
+   Le handoff dit « Archivo partout (Google Fonts) ». Ce dépôt a
+   déjà rapatrié Fabric.js et Montserrat en local : une panne de
+   CDN a tué l'éditeur une fois, elle ne le tuera pas deux fois.
+   Archivo est donc servie depuis /static/vendor/fonts/, avec sa
+   licence OFL-Archivo.txt à côté (l'OFL exige que son texte
+   accompagne la police distribuée).
+
+   UN SEUL FICHIER PAR SOUS-ENSEMBLE, ET C'EST NORMAL : Archivo
+   est une police VARIABLE. Google Fonts sert le même .woff2
+   pour 400, 600 et 800 — l'axe `wght` est dans le fichier. On
+   déclare donc une PLAGE `font-weight: 400 800` au lieu de trois
+   @font-face identiques : 2 requêtes au lieu de 6, et les poids
+   intermédiaires (500, 700) restent disponibles gratuitement.
+
+   Les `unicode-range` sont ceux de Google Fonts. « latin » couvre
+   U+0000-00FF, donc tous les accents français ; « latin-ext » ne
+   sera téléchargé que si un caractère le réclame vraiment.
+   ============================================================ */
+
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 400 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("/static/vendor/fonts/Archivo-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+                 U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F,
+                 U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+                 U+FFFD;
+}
+
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 400 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("/static/vendor/fonts/Archivo-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+                 U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+                 U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+                 U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 
 :root {
   color-scheme: light;
@@ -20,13 +77,16 @@
      5 tailles UI + 3 titres. Aucune autre taille n'est permise.
      ========================================================== */
 
-  /* ÉCART : la pile UI garde "DM Sans" en 2e position. Les 4 écrans
-     historiques (viewer/editor/calendar/analytics) demandent encore
-     DM Sans ; la pile converge vers Inter sans rupture pendant leur
-     reprise. À la fin de la refonte, ne restera que Inter + système. */
-  --font-ui: "Inter", "Inter Variable", "DM Sans", -apple-system,
-             BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Archivo est en tête ET en local : plus aucune page ne dépend
+     d'un CDN pour composer. La pile de repli reste système. */
+  --font-ui: "Archivo", system-ui, -apple-system, BlinkMacSystemFont,
+             "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Alias Modernist — le handoff nomme les rôles ainsi. */
+  --font-heading:        var(--font-ui);
+  --font-body:           var(--font-ui);
+  --font-heading-weight: 800;
 
   --text-micro:   0.6875rem; /* 11px — badges, légendes de graphe */
   --text-mini:    0.75rem;   /* 12px — métadonnées sous vignette */
@@ -38,21 +98,27 @@
   --title-2: 1.5rem;   /* 24px — titre d'écran */
   --title-1: 2rem;     /* 32px — valeur KPI hero */
 
-  --weight-light:    300;
-  --weight-normal:   450;  /* corps — compense le petit corps */
-  --weight-medium:   500;  /* labels, boutons, en-têtes de colonne */
-  --weight-semibold: 600;  /* titres */
-  --weight-bold:     700;  /* valeurs KPI */
+  --weight-light:    400; /* ÉCART : Archivo n'est vendorisée qu'à partir
+                             de 400. Un 300 demandé serait synthétisé (ou
+                             ignoré) ; on le fait pointer sur le poids réel
+                             le plus proche plutôt que de laisser le
+                             navigateur inventer une graisse. */
+  --weight-normal:   400;
+  --weight-medium:   600; /* Modernist n'a pas de 500 : labels et boutons
+                             prennent le 600, qui est la graisse de corps
+                             appuyée du système. */
+  --weight-semibold: 600;
+  --weight-bold:     800; /* graisse de titre Modernist */
 
-  --lh-tight: 1.2;   /* titres */
+  --lh-tight: 1.12;  /* titres — valeur Modernist */
   --lh-ui:    1.4;   /* lignes de liste, boutons */
-  --lh-text:  1.55;  /* paragraphes */
+  --lh-text:  1.55;  /* paragraphes — valeur Modernist */
 
-  --ls-tight:  -0.014em; /* >= 20px */
-  --ls-normal: -0.011em; /* 13–15px */
+  --ls-tight:  -0.015em; /* >= 20px — valeur Modernist */
+  --ls-normal: -0.008em; /* 13–15px : Archivo est plus étroite qu'Inter,
+                            un serrage aussi fort la rendrait compacte. */
   --ls-wide:    0.002em; /* 11–12px capitales */
-  --ls-caps:    0.05em;  /* ÉCART : capitales 11px, l'interlettrage
-                            positif est indispensable à leur lisibilité. */
+  --ls-caps:    0.08em;  /* capitales Modernist (h6, kickers) */
 
   --numeric: tabular-nums;
 
@@ -71,13 +137,29 @@
   --sp-8:  32px;
   --sp-9:  48px;
 
+  /* Alias Modernist — l'échelle 4/8/12/16/24/32 du handoff. Ce sont
+     EXACTEMENT les pas --sp-2/4/5/6/7/8 : deux noms, une grille. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
   /* ==========================================================
-     3. RAYONS — 4 valeurs, jamais mélangées dans un même niveau
+     3. RAYONS — ZÉRO PARTOUT
+     « Radius 0 partout (aucun arrondi) » : règle explicite du
+     système Modernist. Les 4 noms historiques survivent parce
+     que 60 déclarations les référencent ; ils valent tous 0.
      ========================================================== */
-  --radius-control:   4px;
-  --radius-block:     8px;
-  --radius-container: 12px;
-  --radius-pill:      9999px;
+  --radius-control:   0px;
+  --radius-block:     0px;
+  --radius-container: 0px;
+  --radius-pill:      0px; /* y compris les « pilules » : plus aucune. */
+
+  --radius-sm: 0px; /* alias Modernist */
+  --radius-md: 0px;
+  --radius-lg: 0px;
 
   /* ==========================================================
      4. GÉOMÉTRIE
@@ -94,14 +176,24 @@
   --icon-md:     16px;
   --tap-min:     44px;  /* cible tactile minimale */
   --border-w:    1px;
+  /* Le SÉPARATEUR Modernist n'est pas un filet : c'est une règle de
+     2px, et elle ne s'affine pas sur écran dense (voir §11). Les deux
+     épaisseurs coexistent — --border-w pour les bordures de contrôle,
+     --divider-w pour les règles de structure. */
+  --divider-w:   2px;
   --grid-gap:    4px;
   --thumb-sm:    120px;
   --thumb-md:    168px; /* défaut Viewer */
   --thumb-lg:    240px;
-  --header-h:    56px;  /* ÉCART : 64px -> 56px. La barre de nav ne doit
-                           pas réclamer plus de place que le contenu ;
-                           56 = 32 (bouton) + 2 x 12 de respiration. */
+  --header-h:    56px;
   --content-max: 1200px;
+
+  /* RÈGLE DE SYSTÈME, PAS UN GOÛT : les libellés de boutons sont
+     ALIGNÉS À GAUCHE, jamais centrés (handoff §Design Tokens). Le
+     jeton existe pour que la règle soit appliquée mécaniquement
+     (`justify-content: var(--btn-label-align)` / `text-align`)
+     plutôt que retenue de mémoire écran par écran. */
+  --btn-label-align: left;
 
   /* ==========================================================
      5. MOUVEMENT — 2 vitesses, rien au-dessus de 400ms
@@ -117,10 +209,16 @@
   /* ==========================================================
      6. ÉLÉVATION — popover / dialog / dropdown UNIQUEMENT.
      La hiérarchie normale vient de l'escalier de surfaces.
+     Valeurs Modernist : ombres encrées, jamais noires pures.
      ========================================================== */
-  --shadow-low:    0 2px 4px rgba(0,0,0,.10);
-  --shadow-medium: 0 4px 24px rgba(0,0,0,.18);
-  --shadow-high:   0 8px 40px rgba(0,0,0,.32);
+  --shadow-sm: 0 1px 2px rgba(45, 43, 43, .14);
+  --shadow-md: 0 3px 10px rgba(45, 43, 43, .16);
+  --shadow-lg: 0 12px 32px rgba(45, 43, 43, .22);
+
+  /* Noms historiques — alias stricts des trois ci-dessus. */
+  --shadow-low:    var(--shadow-sm);
+  --shadow-medium: var(--shadow-md);
+  --shadow-high:   var(--shadow-lg);
 
   /* ==========================================================
      7. EMPILEMENT
@@ -139,90 +237,124 @@
      Toute couleur du produit est définie ici, par RÔLE.
      ========================================================== */
 
-  /* Surfaces — escalier de 4 niveaux + fond de champ
-     DIRECTION « PAPIER » : neutres CHAUDS, sans dominante bleue.
-     Le contenu du produit est l'image ; un gris bleuté teinte la
-     perception des couleurs des médias posés dessus, un neutre chaud
-     les laisse tranquilles. Écart maximal de 2 points entre les
-     canaux R et B, contre 3 à 5 dans la rampe bleutée précédente. */
-  --bg-canvas: #fbfbfa; /* fond de page, sidebar */
-  --bg-1:      #ffffff; /* conteneur principal, cartes */
-  --bg-2:      #f4f4f2; /* zone en creux, en-tête de tableau */
-  --bg-3:      #eaeae7; /* survol de rangée, piste de slider */
-  --bg-inset:  #fcfcfb; /* fond de champ de saisie */
+  /* -- Surfaces --------------------------------------------------
+     Escalier de 4 niveaux + fond de champ, en neutres CHAUDS.
+     RENVERSEMENT ASSUMÉ par rapport à la version précédente : le
+     fond de page était le plus clair et les cartes blanches par
+     dessus. Modernist fait l'inverse — la page est `--color-bg`
+     (#f3f2f2) et la SURFACE posée dessus est plus SOMBRE
+     (`--color-surface`, #eae9e9). C'est ce qui rend une carte
+     visible sans ombre ni arrondi, donc c'est ce qui fait tenir
+     un système à radius 0. L'escalier descend maintenant en
+     clarté au lieu de monter ; les rôles ne bougent pas. */
+  --bg-canvas: #f3f2f2; /* fond de page, sidebar — --color-bg */
+  --bg-1:      #eae9e9; /* conteneur principal, cartes — --color-surface */
+  --bg-2:      #e0dedd; /* zone en creux, en-tête de tableau */
+  --bg-3:      #d7d3d3; /* survol de rangée, piste de slider */
+  --bg-inset:  #f8f4f4; /* fond de champ : un PUITS CLAIR dans une
+                           surface sombre — le seul moyen de rester
+                           lisible aussi bien sur la page que dans
+                           une carte, puisque les deux sont sombres. */
 
-  /* Bordures — 3 niveaux */
-  --border-1: #e5e5e1; /* filet par défaut */
-  --border-2: #d6d6d1; /* séparateur appuyé, bordure de contrôle */
-  --border-3: #b9b9b3; /* bordure au survol */
+  /* -- Bordures --------------------------------------------------
+     Modernist n'a qu'un `--color-divider` (le texte à 40 %). On en
+     garde trois niveaux parce que 200 déclarations les distinguent,
+     et on cale le niveau 2 sur le divider.
+     CORRECTION AA : le divider Modernist exact,
+     color-mix(#201e1d 40%, transparent), se compose en ~#9e9d9d sur
+     la page et ne donne que 2.45:1 — sous le seuil 3:1 de la règle
+     1.4.11 (contraste des composants non textuels), et il faut tenir
+     ce seuil sur les QUATRE fonds, pas seulement sur la page :
+     l'escalier de surfaces s'assombrit, donc c'est --bg-3 (le survol
+     de rangée) qui commande. Assombri jusqu'à #757372, mesuré
+     4.22:1 sur --bg-canvas et 3.18:1 sur --bg-3. Opaque, aussi :
+     une règle translucide posée sur un média prend sa couleur, et
+     cet écran est fait de médias. */
+  --border-1: #c9c6c5; /* filet par défaut — décoratif, exempté */
+  --border-2: #757372; /* SÉPARATEUR Modernist — 4.22:1 / 3.18:1 mini */
+  --border-3: #57544f; /* bordure au survol — 6.74:1 sur --bg-canvas */
 
-  /* Texte — 4 niveaux */
-  --fg-1: #191918; /* primaire — 17.2:1 sur --bg-canvas */
-  --fg-2: #45443f; /* secondaire — 9.0:1 */
-  /* Le tertiaire porte les en-têtes de colonne, les métadonnées sous
-     vignette et le texte des états vides : il vit donc sur --bg-2 et
-     --bg-3 autant que sur le fond de page. Il est tenu volontairement
-     plus foncé que ne le suggère la direction (#8b8b87, qui ne donne
-     que 3.3:1) pour rester au-dessus du seuil AA de 4.5:1 partout.
-     Valeurs mesurées : 5.49 sur --bg-canvas, 5.16 sur --bg-2, 4.71 sur
-     --bg-3. Un premier essai à #6e6e6a passait sur les deux premiers
-     fonds mais tombait à 4.25 sur --bg-3, le fond de survol de rangée —
-     précisément là où ces métadonnées sont lues. */
-  --fg-3: #676763; /* tertiaire — labels, métadonnées */
-  --fg-4: #9c9c97; /* quaternaire — placeholder, désactivé (exempté AA) */
-  --fg-on-accent: #ffffff;
-  --fg-on-solid:  #ffffff; /* texte sur aplat sémantique plein */
+  /* -- Texte — 4 niveaux ----------------------------------------
+     Mesures faites sur le fond le PLUS DÉFAVORABLE de chaque rôle,
+     c'est-à-dire --bg-3 (#d7d3d3), le survol de rangée : c'est là
+     que ces textes sont lus, pas sur le fond de page. */
+  --fg-1: #201e1d; /* --color-text Modernist — 11.2:1 sur --bg-3 */
+  --fg-2: #444141; /* --color-neutral-800 — 6.8:1 sur --bg-3 */
+  /* CORRECTION AA : --color-neutral-700 (#605d5d) tombe à 4.39:1 sur
+     --bg-3. Assombri à #5c5a56 (4.63:1 sur --bg-3, 6.1:1 sur la page)
+     — le tertiaire porte les en-têtes de colonne et les métadonnées
+     sous vignette, il n'a pas le droit d'échouer au survol. */
+  --fg-3: #5c5a56; /* tertiaire — labels, métadonnées */
+  --fg-4: #9b9797; /* quaternaire — placeholder, désactivé (exempté AA) */
+  --fg-on-accent: #ffffff; /* sur --accent-solid : 4.74:1 */
+  --fg-on-solid:  #ffffff; /* sur aplat sémantique plein : >= 6.8:1 */
 
-  /* Accent — ENCRE, quasi noir
-     ------------------------------------------------------------
-     DIRECTION « PAPIER ». L'accent n'est plus une couleur mais une
-     VALEUR. Trois raisons, dans l'ordre d'importance :
-       1. Aucune couleur d'interface ne dispute l'attention aux médias.
-          C'est le parti pris des bibliothèques d'images et des outils
-          d'écriture, et c'est le contenu qui doit porter la couleur.
-       2. Le contraste devient énorme et gratuit : 16.8:1 partout, là
-          où le bleu se battait pour atteindre 4.5:1 et imposait deux
-          rampes décalées.
-       3. La couleur redevient exclusivement SÉMANTIQUE : vert, orange
-          et rouge ne sont plus noyés au milieu d'un bleu décoratif.
-     Les deux rampes sont conservées par sécurité — des composants les
-     référencent séparément — mais elles convergent désormais : l'encre
-     tient les deux contraintes à la fois, ce qu'aucune teinte colorée
-     ne pouvait faire.
-     ------------------------------------------------------------ */
-  --accent:        #1c1c1a; /* sur --accent-soft : 15.1:1 */
-  --accent-hover:  #33322e;
-  --accent-active: #000000;
-  --accent-soft:   #efeeeb; /* fond de jeton actif / sélection */
-  --accent-border: #d4d3cd;
+  /* -- Accent — LE ROUGE MODERNIST, EN TROIS RÔLES ---------------
+     #ec3013 est la couleur de marque. Elle ne peut PAS servir aux
+     trois usages : mesurée, elle donne 3.76:1 sur la page (donc pas
+     de texte) et 4.20:1 sous du blanc (donc pas d'aplat porteur de
+     libellé). Le handoff le dit lui-même en désignant le 700
+     (#ae1800) comme « le texte accent ». D'où trois jetons, et une
+     règle simple pour les autres écrans :
 
-  --accent-solid:        #1c1c1a; /* blanc dessus : 16.8:1 */
-  --accent-solid-hover:  #33322e; /* blanc dessus : 12.1:1 */
-  --accent-solid-active: #000000; /* blanc dessus : 21.0:1 */
+       --color-accent  #ec3013  GRAPHIQUE SEUL — soulignement d'étape,
+                                remplissage d'étoile, anneau de
+                                sélection. 3.76:1 sur la page, au-delà
+                                du seuil 3:1 des composants non
+                                textuels. JAMAIS sous du texte.
+       --accent-solid  #dd2b0f  APLAT PORTEUR DE LIBELLÉ — bouton
+                                primaire, plaque de marque. Blanc
+                                dessus : 4.74:1. (Modernist descend
+                                déjà cette rampe au survol, on part
+                                simplement un cran plus bas.)
+       --accent        #ae1800  TEXTE ET ICÔNE accent, bordure active.
+                                6.4:1 sur la page, 6.6:1 sur
+                                --accent-soft.
 
-  /* Sémantique — jamais décorative
-     ÉCART : --success et --warning sont assombris d'un cran par
-     rapport à REFERENCES.md. Ces deux tons servent de COULEUR DE TEXTE
-     sur leur propre fond -soft (.badge--success, .badge--warning) ;
-     les valeurs prescrites y tombaient à 4.46:1 et 4.18:1. */
-  --success:      #177537; /* sur --success-soft : 5.09:1 */
+     CORRECTION AA documentée : le rouge de marque n'est jamais
+     utilisé sous du texte ; là où l'ancienne palette posait
+     l'accent (de l'encre quasi noire) partout, celui-ci se scinde. */
+  --accent:        #ae1800; /* 6.4:1 sur --bg-canvas */
+  --accent-hover:  #7c1405;
+  --accent-active: #4d170e;
+  --accent-soft:   #fff2ef; /* --color-accent-100 : fond de jeton actif */
+  /* COMPAGNON de --accent-soft, pas « l'accent en bordure ». Il cerne des
+     surfaces déjà teintées (jeton de filtre, bandeau d'alerte, bouton de
+     format actif) : au plein #ec3013 il transformait un bandeau « info »
+     en alerte rouge — vérifié à l'écran. C'est une TEINTE, donc décorative
+     et exemptée du seuil 3:1 ; le contour qui doit se voir, lui, prend
+     --color-accent. */
+  --accent-border: #ffc4b8; /* --color-accent-300 */
+
+  --accent-solid:        #dd2b0f; /* blanc dessus : 4.74:1 */
+  --accent-solid-hover:  #c62409; /* blanc dessus : 5.74:1 */
+  --accent-solid-active: #ae1800; /* blanc dessus : 7.16:1 */
+
+  /* -- Sémantique — jamais décorative ----------------------------
+     CORRECTION AA : les quatre tons servent AUSSI de couleur de
+     texte, y compris sur --bg-3 qui vient de s'assombrir. Chacun a
+     été descendu jusqu'à repasser 4.5:1 sur ce fond-là, et vérifié
+     sur son propre fond -soft.
+     LIMITE CONNUE, à trancher par le design : l'accent Modernist
+     étant un rouge, --danger (#a82327) et --accent (#ae1800) sont
+     désormais voisins. Ils ne se distinguent plus par la teinte
+     seule — les libellés et les icônes portent la différence. */
+  --success:      #14682f; /* 4.6:1 sur --bg-3 · 6.1:1 sur -soft */
   --success-soft: #e3f5e9;
-  --warning:      #94570d; /* sur --warning-soft : 5.19:1 */
+  --warning:      #7f4a0b; /* 4.9:1 sur --bg-3 · 6.5:1 sur -soft */
   --warning-soft: #fdf1de;
-  --danger:       #c22b30;
-  --danger-hover: #a82327;
+  --danger:       #a82327; /* 4.8:1 sur --bg-3 · 6.2:1 sur -soft */
+  --danger-hover: #8f1c20;
   --danger-soft:  #fdeaea;
-  /* L'information garde une couleur PROPRE. Elle pointait sur l'accent
-     à l'époque où celui-ci était bleu ; maintenant que l'accent est de
-     l'encre, un badge « info » serait devenu noir, indistinguable d'un
-     badge neutre. Le bleu de l'ancienne rampe est repris tel quel : il
-     ne sert plus qu'ici, donc il redevient porteur de sens. */
-  --info:         #2861cb;
+  --info:         #1f52b0; /* 4.9:1 sur --bg-3 · 6.3:1 sur -soft */
   --info-soft:    #e8f0fe;
   --neutral:      var(--fg-3);
   --neutral-soft: var(--bg-3);
 
-  /* Séries de graphe — accent + 4 teintes, dans cet ordre */
+  /* -- Séries de graphe -----------------------------------------
+     HORS SYSTÈME MODERNIST, ET C'EST VOLONTAIRE : une palette
+     catégorielle doit séparer des séries, pas décorer. Elle reste
+     donc telle quelle — le handoff ne traite pas l'analytics. */
   --chart-1: #2f6fe0;
   --chart-2: #1a7f3c;
   --chart-3: #a86412;
@@ -230,41 +362,92 @@
   --chart-5: #0e7f8c;
   --chart-grid: var(--border-1);
 
-  /* Sélection de texte */
+  /* -- Sélection de texte ---------------------------------------
+     Alias : suit l'accent, donc les deux thèmes, sans redéfinition. */
   --selection-bg: var(--accent-soft);
   --selection-fg: var(--fg-1);
 
-  /* Squelette de chargement */
-  --skeleton-base:  #eaeae7;
-  --skeleton-sheen: #f6f6f4;
+  /* -- Squelette de chargement ---------------------------------- */
+  --skeleton-base:  #e0dedd;
+  --skeleton-sheen: #f3f2f2;
 
-  /* Focus */
-  --focus-color:  var(--accent);
-  --focus-ring:   2px solid var(--accent);
+  /* -- Focus ----------------------------------------------------
+     `:focus-visible` en 2px accent, jamais l'anneau bleu du
+     navigateur (règle explicite du handoff). */
+  --focus-color:  var(--color-accent);
+  --focus-ring:   2px solid var(--color-accent);
   --focus-offset: 2px;
 
-  /* Scrollbar */
+  /* -- Scrollbar ------------------------------------------------ */
   --scrollbar-track: 12px;
   --scrollbar-thumb: 6px;
-  --scrollbar-color: rgba(0,0,0,.16);
-  --scrollbar-color-hover: rgba(0,0,0,.28);
+  --scrollbar-color: rgba(32, 30, 29, .22);
+  --scrollbar-color-hover: rgba(32, 30, 29, .38);
 
   /* ==========================================================
-     9. PONT DE NAVIGATION
-     La barre de nav est incluse par des pages qui NE chargent PAS
-     tokens.css (viewer/editor/calendar/analytics, repris plus tard).
-     Ces jetons portent un préfixe --nav- qui n'existe nulle part
-     ailleurs : partials/nav.html s'en sert avec un fallback, donc
-     la barre suit le thème ici et garde l'ancien rendu là-bas.
-     Aucun risque de collision avec les :root des CSS d'écran.
+     9. ALIAS MODERNIST
+     Les maquettes et le prototype nomment les couleurs ainsi.
+     Ce sont des NOMS SUPPLÉMENTAIRES sur les rôles ci-dessus :
+     rien n'est défini deux fois, rien ne peut diverger.
+     ========================================================== */
+  --color-bg:      var(--bg-canvas);
+  --color-surface: var(--bg-1);
+  --color-text:    var(--fg-1);
+  --color-accent:  #ec3013;   /* marque — GRAPHIQUE SEUL, cf. §8 */
+  --color-accent-2: #e15b47;
+  --color-divider: var(--border-2);
+
+  /* -- Rampes tonales -------------------------------------------
+     ATTENTION, RÈGLE DE LECTURE : un pas de rampe désigne un RÔLE,
+     pas une clarté absolue. 100 = le plus proche du fond courant,
+     900 = le plus proche du texte courant. En thème sombre la rampe
+     est donc INVERSÉE en clarté (voir §10), et `--color-neutral-200`
+     reste « un fond légèrement en creux » dans les deux thèmes.
+     C'est ce qui permet d'écrire un composant une seule fois.
+     Valeurs claires : celles de assets/modernist.css, à l'identique. */
+  --color-neutral-100: #f8f4f4;
+  --color-neutral-200: #eae7e7;
+  --color-neutral-300: #d7d3d3;
+  --color-neutral-400: #bab6b6;
+  --color-neutral-500: #9b9797;
+  --color-neutral-600: #7d7979;
+  --color-neutral-700: #605d5d;
+  --color-neutral-800: #444141;
+  --color-neutral-900: #2d2b2b;
+
+  --color-accent-100: #fff2ef;
+  --color-accent-200: #ffe0d9;
+  --color-accent-300: #ffc4b8;
+  --color-accent-400: #ff9783;
+  --color-accent-500: #ff563c;
+  --color-accent-600: #dd2b0f;
+  --color-accent-700: #ae1800; /* « le texte accent » du handoff */
+  --color-accent-800: #7c1405;
+  --color-accent-900: #4d170e;
+
+  --color-accent-2-100: #fff2ef;
+  --color-accent-2-200: #ffe0da;
+  --color-accent-2-300: #ffc4b9;
+  --color-accent-2-400: #ff9784;
+  --color-accent-2-500: #ef6853;
+  --color-accent-2-600: #c94b39;
+  --color-accent-2-700: #9e3526;
+  --color-accent-2-800: #71261b;
+  --color-accent-2-900: #471d16;
+
+  /* ==========================================================
+     10. PONT DE NAVIGATION
+     partials/nav.html s'en sert avec un fallback. Préfixe --nav-
+     qui n'existe nulle part ailleurs : aucune collision possible
+     avec les :root des CSS d'écran.
      ========================================================== */
   --nav-h:            var(--header-h);
   --nav-bg:           var(--bg-1);
-  --nav-border:       var(--border-1);
+  --nav-border:       var(--border-2);
   --nav-fg:           var(--fg-3);
   --nav-fg-strong:    var(--fg-1);
   --nav-fg-hover:     var(--fg-2);
-  /* Aplat de la marque, sous un glyphe blanc : rampe SOLID. */
+  /* Aplat de la marque, sous un glyphe blanc : rampe SOLID (4.74:1). */
   --nav-accent:       var(--accent-solid);
   --nav-accent-hover: var(--accent-solid-hover);
   --nav-hover-bg:     var(--bg-2);
@@ -272,11 +455,11 @@
   --nav-active-fg:    var(--accent);
   --nav-font:         var(--font-ui);
   --nav-radius:       var(--radius-control);
-  --nav-focus:        var(--accent);
+  --nav-focus:        var(--color-accent);
   --nav-idle:         var(--fg-4); /* pastille d'état système au repos */
 
   /* ==========================================================
-     10. COMPATIBILITÉ — anciens jetons --s-*
+     11. COMPATIBILITÉ — anciens jetons --s-*
      Encore référencés en style inline dans settings.html (hors
      périmètre de ce lot). Ce ne sont que des alias : ils pointent
      vers les rôles ci-dessus et suivent donc les deux thèmes.
@@ -316,7 +499,18 @@
 }
 
 /* ============================================================
-   THÈME SOMBRE
+   THÈME SOMBRE — DÉRIVÉ, PAS REPRIS
+   ------------------------------------------------------------
+   Le handoff ne traite QUE le clair. La barre de nav porte
+   pourtant une bascule de thème que des écrans utilisent : le
+   pendant sombre est donc DÉRIVÉ ici, selon quatre règles.
+     1. Même accent, même géométrie (radius 0, séparateurs 2px).
+     2. Fonds inversés en neutres CHAUDS (aucune dominante bleue :
+        elle teinterait la perception des médias posés dessus).
+     3. Les rampes tonales gardent leur RÔLE et inversent leur
+        clarté — 100 reste « le plus proche du fond ».
+     4. AA 4.5:1 pour tout texte, mesuré sur --bg-3 (le survol de
+        rangée), qui est le fond le plus défavorable.
    Deux blocs strictement identiques :
      A. suivi du système, tant qu'aucun choix explicite n'est posé
      B. choix manuel, qui doit gagner dans les deux sens
@@ -331,52 +525,57 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    /* Neutres CHAUDS, symétriques du thème clair : la dominante bleue
-       du fond teintait la perception des médias posés dessus. */
-    --bg-canvas: #0d0d0c;
-    --bg-1:      #151513;
-    --bg-2:      #1c1c19;
-    --bg-3:      #24241f;
-    --bg-inset:  #100f0e;
+    --bg-canvas: #131211;
+    --bg-1:      #1c1a19;
+    --bg-2:      #262322;
+    --bg-3:      #322e2d;
+    --bg-inset:  #0e0d0c;
 
-    --border-1: #2a2a26;
-    --border-2: #3a3a34;
-    --border-3: #4c4b44;
+    --border-1: #35312f; /* filet décoratif, exempté */
+    --border-2: #807872; /* séparateur — 4.32:1 sur --bg-canvas, 3.10:1
+                            sur --bg-3, le fond le plus défavorable */
+    --border-3: #a29a93; /* bordure au survol — 6.75:1 */
 
-    --fg-1: #f4f3f0;
-    --fg-2: #cbc9c3;
-    --fg-3: #928f88; /* 5.5:1 sur --bg-2 */
-    --fg-4: #6a6862;
-    /* PIÈGE : l'accent étant devenu un aplat CLAIR en thème sombre, du
-       texte blanc dessus serait illisible. --fg-on-accent passe donc au
-       foncé. --fg-on-solid reste blanc : il habille les aplats
-       sémantiques (danger, succès), qui eux restent colorés et sombres. */
-    --fg-on-accent: #16150f;
-    --fg-on-solid:  #ffffff;
+    --fg-1: #f4f1ee; /* 16.6:1 sur --bg-canvas */
+    --fg-2: #cbc6c1;
+    --fg-3: #a29a93; /* 4.85:1 sur --bg-3, 6.75:1 sur --bg-canvas */
+    --fg-4: #7a736d;
+    /* L'aplat d'accent reste un rouge saturé dans les DEUX thèmes :
+       le texte posé dessus reste donc blanc. (L'ancienne palette
+       devait basculer ce jeton au foncé parce que son accent sombre
+       était un aplat CLAIR ; ce piège disparaît.) */
+    --fg-on-accent: #ffffff;
+    /* CORRECTION AA : --fg-on-solid était blanc en thème sombre alors
+       que les aplats sémantiques y sont CLAIRS (le toast de succès
+       donnait 2.70:1 — échec caractérisé, antérieur à ce lot). Il
+       passe à l'encre : 7.1:1 sur --success, 7.7:1 sur --danger,
+       7.8:1 sur --warning, 7.5:1 sur --info. */
+    --fg-on-solid:  #1a1614;
 
-    /* Accent = ENCRE INVERSÉE. Le thème clair pose du quasi-noir sur du
-       papier ; le thème sombre pose du quasi-blanc sur de l'encre. Même
-       parti pris, même contraste, aucune couleur décorative. */
-    --accent:        #f0efec;
-    --accent-hover:  #ffffff;
-    --accent-active: #d8d6d0;
-    --accent-soft:   #26251f;
-    --accent-border: #46443c;
+    --accent:        #ff6f52; /* 6.8:1 sur --bg-canvas, 4.9:1 sur --bg-3 */
+    --accent-hover:  #ff9783;
+    --accent-active: #ffc4b8;
+    --accent-soft:   #2e1109; /* --accent dessus : 6.4:1 */
+    --accent-border: #6b2413; /* teinte compagnon — voir le thème clair */
 
-    --accent-solid:        #f0efec; /* --fg-on-accent dessus : 15.9:1 */
-    --accent-solid-hover:  #ffffff; /* --fg-on-accent dessus : 17.6:1 */
-    --accent-solid-active: #d8d6d0; /* --fg-on-accent dessus : 12.4:1 */
+    /* Identiques au thème clair : un aplat de marque n'a pas de raison
+       de changer de couleur, seule sa lisibilité compte, et le blanc
+       tient dans les deux cas. */
+    --accent-solid:        #dd2b0f;
+    --accent-solid-hover:  #c62409;
+    --accent-solid-active: #ae1800;
 
-    --info:      #6fa8ff;
-    --info-soft: #14203a;
-
-    --success:      #35b364;
-    --success-soft: #10261a;
-    --warning:      #dd9030;
-    --warning-soft: #2a1e0c;
-    --danger:       #ef5a5f;
-    --danger-hover: #ff7175;
-    --danger-soft:  #2c1214;
+    --success:      #35b364; /* 4.98:1 sur --bg-3 */
+    --success-soft: #14281a;
+    --warning:      #dd9030; /* 5.18:1 sur --bg-3 */
+    --warning-soft: #2e2110;
+    /* CORRECTION AA : #ef5a5f ne donnait que 4.03:1 sur --bg-3.
+       Éclairci à #ff7377 — 5.10:1. */
+    --danger:       #ff7377;
+    --danger-hover: #ff9093;
+    --danger-soft:  #3a1416;
+    --info:         #6fa8ff; /* 5.58:1 sur --bg-3 */
+    --info-soft:    #172336;
 
     --chart-1: #4b8dfa;
     --chart-2: #35b364;
@@ -384,18 +583,53 @@
     --chart-4: #a279e0;
     --chart-5: #2fb3c2;
 
-    --selection-bg: #23324a;
-    --selection-fg: #f2f3f5;
+    --skeleton-base:  #24211f;
+    --skeleton-sheen: #302c2a;
 
-    --skeleton-base:  #1d2024;
-    --skeleton-sheen: #262a30;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .40);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, .55);
+    --shadow-lg: 0 12px 40px rgba(0, 0, 0, .70);
 
-    --shadow-low:    0 2px 4px rgba(0,0,0,.40);
-    --shadow-medium: 0 4px 24px rgba(0,0,0,.55);
-    --shadow-high:   0 8px 40px rgba(0,0,0,.70);
+    --scrollbar-color: rgba(244, 241, 238, .18);
+    --scrollbar-color-hover: rgba(244, 241, 238, .32);
 
-    --scrollbar-color: rgba(255,255,255,.14);
-    --scrollbar-color-hover: rgba(255,255,255,.26);
+    /* Rampes tonales — mêmes RÔLES, clarté inversée (règle 3). */
+    --color-neutral-100: #1c1a19;
+    --color-neutral-200: #262322;
+    --color-neutral-300: #322e2d;
+    --color-neutral-400: #423d3b;
+    --color-neutral-500: #5c5653;
+    --color-neutral-600: #7a736f;
+    --color-neutral-700: #9c948f;
+    --color-neutral-800: #c4bcb6;
+    --color-neutral-900: #e8e2dc;
+
+    --color-accent-100: #2e1109;
+    --color-accent-200: #451a0e;
+    --color-accent-300: #6b2413;
+    --color-accent-400: #96301a;
+    --color-accent-500: #c94526;
+    --color-accent-600: #e8613f;
+    --color-accent-700: #ff6f52; /* « le texte accent », côté sombre */
+    --color-accent-800: #ff9783;
+    --color-accent-900: #ffc4b8;
+
+    --color-accent-2-100: #2b1512;
+    --color-accent-2-200: #3f1e19;
+    --color-accent-2-300: #5f2b23;
+    --color-accent-2-400: #863c30;
+    --color-accent-2-500: #b05446;
+    --color-accent-2-600: #cf6d5c;
+    --color-accent-2-700: #e88a77;
+    --color-accent-2-800: #f4ab9b;
+    --color-accent-2-900: #fbccc0;
+
+    /* La marque, elle, ne bouge pas : c'est la même encre rouge.
+       Sur --bg-canvas sombre elle mesure 4.45:1, au-delà du seuil
+       3:1 des composants non textuels — mais elle reste, ici comme
+       en clair, GRAPHIQUE SEULE : jamais de texte dessus ni dedans. */
+    --color-accent:   #ec3013;
+    --color-accent-2: #e15b47;
   }
 }
 
@@ -403,45 +637,43 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg-canvas: #0d0d0c;
-  --bg-1:      #151513;
-  --bg-2:      #1c1c19;
-  --bg-3:      #24241f;
-  --bg-inset:  #100f0e;
+  --bg-canvas: #131211;
+  --bg-1:      #1c1a19;
+  --bg-2:      #262322;
+  --bg-3:      #322e2d;
+  --bg-inset:  #0e0d0c;
 
-  --border-1: #2a2a26;
-  --border-2: #3a3a34;
-  --border-3: #4c4b44;
+  --border-1: #35312f;
+  --border-2: #807872; /* voir le bloc A : 3.10:1 sur le fond le pire */
+  --border-3: #a29a93;
 
-  --fg-1: #f4f3f0;
-  --fg-2: #cbc9c3;
-  --fg-3: #928f88;
-  --fg-4: #6a6862;
-  /* Voir le bloc A : l'aplat d'accent est CLAIR en thème sombre, le
-     texte posé dessus doit donc être foncé. */
-  --fg-on-accent: #16150f;
-  --fg-on-solid:  #ffffff;
+  --fg-1: #f4f1ee;
+  --fg-2: #cbc6c1;
+  --fg-3: #a29a93;
+  --fg-4: #7a736d;
+  --fg-on-accent: #ffffff;
+  --fg-on-solid:  #1a1614; /* voir le bloc A : les aplats sémantiques
+                              sont CLAIRS en thème sombre. */
 
-  --accent:        #f0efec;
-  --accent-hover:  #ffffff;
-  --accent-active: #d8d6d0;
-  --accent-soft:   #26251f;
-  --accent-border: #46443c;
+  --accent:        #ff6f52;
+  --accent-hover:  #ff9783;
+  --accent-active: #ffc4b8;
+  --accent-soft:   #2e1109;
+  --accent-border: #6b2413;
 
-  --accent-solid:        #f0efec; /* --fg-on-accent dessus : 15.9:1 */
-  --accent-solid-hover:  #ffffff; /* --fg-on-accent dessus : 17.6:1 */
-  --accent-solid-active: #d8d6d0; /* --fg-on-accent dessus : 12.4:1 */
-
-  --info:      #6fa8ff;
-  --info-soft: #14203a;
+  --accent-solid:        #dd2b0f;
+  --accent-solid-hover:  #c62409;
+  --accent-solid-active: #ae1800;
 
   --success:      #35b364;
-  --success-soft: #10261a;
+  --success-soft: #14281a;
   --warning:      #dd9030;
-  --warning-soft: #2a1e0c;
-  --danger:       #ef5a5f;
-  --danger-hover: #ff7175;
-  --danger-soft:  #2c1214;
+  --warning-soft: #2e2110;
+  --danger:       #ff7377;
+  --danger-hover: #ff9093;
+  --danger-soft:  #3a1416;
+  --info:         #6fa8ff;
+  --info-soft:    #172336;
 
   --chart-1: #4b8dfa;
   --chart-2: #35b364;
@@ -449,18 +681,48 @@
   --chart-4: #a279e0;
   --chart-5: #2fb3c2;
 
-  --selection-bg: #23324a;
-  --selection-fg: #f2f3f5;
+  --skeleton-base:  #24211f;
+  --skeleton-sheen: #302c2a;
 
-  --skeleton-base:  #1d2024;
-  --skeleton-sheen: #262a30;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .40);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, .55);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, .70);
 
-  --shadow-low:    0 2px 4px rgba(0,0,0,.40);
-  --shadow-medium: 0 4px 24px rgba(0,0,0,.55);
-  --shadow-high:   0 8px 40px rgba(0,0,0,.70);
+  --scrollbar-color: rgba(244, 241, 238, .18);
+  --scrollbar-color-hover: rgba(244, 241, 238, .32);
 
-  --scrollbar-color: rgba(255,255,255,.14);
-  --scrollbar-color-hover: rgba(255,255,255,.26);
+  --color-neutral-100: #1c1a19;
+  --color-neutral-200: #262322;
+  --color-neutral-300: #322e2d;
+  --color-neutral-400: #423d3b;
+  --color-neutral-500: #5c5653;
+  --color-neutral-600: #7a736f;
+  --color-neutral-700: #9c948f;
+  --color-neutral-800: #c4bcb6;
+  --color-neutral-900: #e8e2dc;
+
+  --color-accent-100: #2e1109;
+  --color-accent-200: #451a0e;
+  --color-accent-300: #6b2413;
+  --color-accent-400: #96301a;
+  --color-accent-500: #c94526;
+  --color-accent-600: #e8613f;
+  --color-accent-700: #ff6f52;
+  --color-accent-800: #ff9783;
+  --color-accent-900: #ffc4b8;
+
+  --color-accent-2-100: #2b1512;
+  --color-accent-2-200: #3f1e19;
+  --color-accent-2-300: #5f2b23;
+  --color-accent-2-400: #863c30;
+  --color-accent-2-500: #b05446;
+  --color-accent-2-600: #cf6d5c;
+  --color-accent-2-700: #e88a77;
+  --color-accent-2-800: #f4ab9b;
+  --color-accent-2-900: #fbccc0;
+
+  --color-accent:   #ec3013;
+  --color-accent-2: #e15b47;
 }
 
 /* ============================================================
@@ -468,7 +730,8 @@
    ============================================================ */
 
 /* Filet plus fin sur écran dense : la hiérarchie reste lisible
-   sans épaissir le trait. */
+   sans épaissir le trait. NE TOUCHE PAS --divider-w : la règle de
+   structure Modernist fait 2px, sur tous les écrans. */
 @media (min-resolution: 2dppx) {
   :root { --border-w: 0.5px; }
 }

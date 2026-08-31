@@ -456,6 +456,11 @@ def list_media():
                 "file_url": file_url,
                 "thumb_url": thumb_url,
                 "caption": item.caption,
+                # Phrase du futur meme (Tri rapide). Exposee DANS LA LISTE et
+                # pas seulement dans la fiche : le Tri rapide empile des
+                # dizaines de cartes d'un coup, il ne peut pas aller chercher
+                # chaque phrase par une requete de detail.
+                "phrase": item.phrase,
                 "platform": item.platform,
                 "profile_id": item.profile_id,
                 "posted_at": item.posted_at,
@@ -670,6 +675,7 @@ def get_media(media_id: int):
             "media_url": item.media_url,
             "file_url": file_url,
             "caption": item.caption,
+            "phrase": item.phrase,
             "platform": item.platform,
             "profile_id": item.profile_id,
             "profile_username": profile.username if profile else None,
@@ -722,7 +728,12 @@ def add_comment(media_id: int):
         if not user_name or not text:
             return jsonify({"error": "user_name and text required"}), 400
 
-        item = db.query(MediaItem).get(media_id)
+        # `Query.get()` est un legacy SQLAlchemy 1.x : il emet une
+        # DeprecationWarning, que la suite traite en erreur (pytest.ini,
+        # filterwarnings = error) — aucun test ne pouvait donc exercer
+        # cette route. `Session.get()` est l'orthographe 2.0, strictement
+        # equivalente ; c'est celle qu'utilise deja `get_media`.
+        item = db.get(MediaItem, media_id)
         if not item:
             return jsonify({"error": "Media not found"}), 404
 
@@ -754,7 +765,12 @@ def delete_comment(media_id: int, comment_id: int):
     db = SessionLocal()
     try:
         user_name = request.args.get("user_name", "").strip()
-        comment = db.query(MediaComment).get(comment_id)
+        # `Query.get()` est un legacy SQLAlchemy 1.x : il emet une
+        # DeprecationWarning, que la suite traite en erreur (pytest.ini,
+        # filterwarnings = error) — aucun test ne pouvait donc exercer
+        # cette route. `Session.get()` est l'orthographe 2.0, strictement
+        # equivalente ; c'est celle qu'utilise deja `get_media`.
+        comment = db.get(MediaComment, comment_id)
         if not comment or comment.media_item_id != media_id:
             return jsonify({"error": "Comment not found"}), 404
         if comment.user_name != user_name:
@@ -790,7 +806,12 @@ def rate_media(media_id: int):
         if rating < 1 or rating > 5:
             return jsonify({"error": "Rating must be 1-5"}), 400
 
-        item = db.query(MediaItem).get(media_id)
+        # `Query.get()` est un legacy SQLAlchemy 1.x : il emet une
+        # DeprecationWarning, que la suite traite en erreur (pytest.ini,
+        # filterwarnings = error) — aucun test ne pouvait donc exercer
+        # cette route. `Session.get()` est l'orthographe 2.0, strictement
+        # equivalente ; c'est celle qu'utilise deja `get_media`.
+        item = db.get(MediaItem, media_id)
         if not item:
             return jsonify({"error": "Media not found"}), 404
 
@@ -834,6 +855,66 @@ def rate_media(media_id: int):
     except Exception as exc:
         db.rollback()
         logger.error("Error rating media: {}", exc)
+        return jsonify({"error": "Erreur serveur"}), 500
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Phrase du futur meme — refonte UI « PAS-A-PAS »
+# ---------------------------------------------------------------------------
+# Le Tri rapide de la galerie ecrit une phrase par media ; l'etape « Texte »
+# de l'editeur la relit pour pre-remplir le bandeau. C'est le SEUL ajout de
+# donnees du lot.
+#
+# POURQUOI UN ENDPOINT DEDIE, ET PAS UN CHAMP DE PLUS SUR /rate : la note vit
+# dans `media_ratings`, une table PAR UTILISATEUR (contrainte unique
+# media + user_name) ; la phrase est une colonne du media, une seule pour
+# tout le monde. Deux durees de vie, deux tables, deux routes. Le contrat est
+# en revanche calque sur `rate_media` a la ligne pres — meme verbe, meme
+# forme d'URL, meme SessionLocal/try/rollback/close, meme 404 sur media
+# inconnu, meme renvoi de la valeur telle qu'elle vient d'etre ecrite.
+
+#: Plafond de longueur. Un bandeau de meme tient en une ou deux lignes ; au-dela
+#: ce n'est plus une phrase, c'est un collage qui ne s'affichera jamais en
+#: entier sur le canvas. La borne evite aussi qu'un POST malformant fasse
+#: gonfler la base sans limite.
+PHRASE_MAX = 500
+
+
+@viewer_api_bp.route("/viewer/media/<int:media_id>/phrase", methods=["POST"])
+def set_media_phrase(media_id: int):
+    """Ecrit (ou efface) la phrase du futur meme d'un media."""
+    db = SessionLocal()
+    try:
+        data = request.get_json(force=True)
+        if "phrase" not in data:
+            return jsonify({"error": "phrase required"}), 400
+
+        phrase = data.get("phrase")
+        if phrase is None:
+            phrase = ""
+        if not isinstance(phrase, str):
+            return jsonify({"error": "phrase must be a string"}), 400
+
+        phrase = phrase.strip()
+        if len(phrase) > PHRASE_MAX:
+            return jsonify({"error": f"phrase must be <= {PHRASE_MAX} chars"}), 400
+
+        item = db.get(MediaItem, media_id)
+        if not item:
+            return jsonify({"error": "Media not found"}), 404
+
+        # Chaine vide -> NULL : un seul etat « pas de phrase » en base, donc un
+        # seul test cote client (`if (media.phrase)`), et une colonne qui reste
+        # vide tant que personne n'a trie.
+        item.phrase = phrase or None
+        db.commit()
+
+        return jsonify({"id": media_id, "phrase": item.phrase})
+    except Exception as exc:
+        db.rollback()
+        logger.error("Error setting media phrase: {}", exc)
         return jsonify({"error": "Erreur serveur"}), 500
     finally:
         db.close()

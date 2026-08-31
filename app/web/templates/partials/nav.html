@@ -20,12 +20,13 @@
   /* L'@import de DM Sans a été RETIRÉ ici : il était le repli des 4
      écrans historiques, et sa note disait « à retirer avec le
      dernier ». Les quatre (viewer, éditeur, calendrier, analytics)
-     chargent désormais tokens.css et composent en Inter — plus une
+     chargent désormais tokens.css et composent en ARCHIVO — plus une
      seule règle du projet ne demande DM Sans. L'import restait
      pourtant sur LES 8 PAGES : une famille complète téléchargée
      pour rien, depuis un <style> en plein <body>, donc bloquante.
-     tokens.css garde "DM Sans" en 3e position de --font-ui : si
-     Inter tombe, la pile continue de dégrader proprement. */
+     Depuis la refonte Modernist, Archivo est VENDORISÉE (@font-face
+     dans tokens.css) : plus aucune page ne dépend d'un CDN pour
+     composer, et la pile de repli reste système. */
 
   .s-header {
     position: sticky;
@@ -183,7 +184,7 @@
     border: 0;
     background: transparent;
     color: var(--fg-1, #16181d);
-    font-family: var(--font-ui, 'Inter', system-ui, sans-serif);
+    font-family: var(--font-ui, 'Archivo', system-ui, sans-serif);
   }
   /* Centrage horizontal explicite : poser margin-top seul écraserait
      le `margin: auto` par défaut de <dialog> et collerait la palette

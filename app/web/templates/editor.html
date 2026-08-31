@@ -20,14 +20,17 @@
       })();
     </script>
     <style>
-      html { background: #f4f5f7; }
-      @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #0a0b0d; } }
-      html[data-theme="dark"] { background: #0a0b0d; }
+      html { background: #f3f2f2; }
+      @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #131211; } }
+      html[data-theme="dark"] { background: #131211; }
     </style>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;450;500;600;700&display=swap" rel="stylesheet">
+    {#- ── TYPOGRAPHIE — PLUS AUCUN APPEL À GOOGLE FONTS ────────────────
+        Le lien Inter qui se trouvait ici bloquait le rendu de l'éditeur
+        sur une feuille de style tierce — exactement le risque qui a fait
+        rapatrier Fabric.js juste en dessous. La refonte Modernist compose
+        en ARCHIVO, vendorisée : @font-face dans tokens.css, .woff2 dans
+        /static/vendor/fonts/ avec sa licence OFL-Archivo.txt. -#}
     {#- ── Fabric.js — RAPATRIÉ EN LOCAL (lot D) ────────────────────────────
         Cette balise pointait sur https://cdnjs.cloudflare.com/…/5.3.1/fabric.min.js.
         Conséquences constatées : sur une machine sans accès sortant (ou si le
@@ -66,33 +69,218 @@
     {% set nav_active = 'editor' %}
     {% include "partials/nav.html" %}
 
-    <div class="app">
-        <aside class="sidebar" aria-label="Outils de composition">
+    {#- ══════════════════════════════════════════════════════════════════
+        ÉDITEUR « PAS-À-PAS » — Média → Cadrage → Texte → Export
+        ─────────────────────────────────────────────────────────────────
+        L'accordéon d'outils est remplacé par un PARCOURS. Ce n'est PAS
+        une réécriture fonctionnelle : chaque contrôle porte l'identifiant
+        qu'il portait déjà, editor.js le retrouve à la même adresse et fait
+        exactement le même geste. Seul l'ORDRE DE PRÉSENTATION change.
 
-            <!-- ============ Zone défilante : les outils ============ -->
-            <div class="sidebar__scroll">
+        Un seul balisage sert les deux tailles :
+          — sous 900px  : en-tête 56px, aperçu, panneau bas, barre d'étapes,
+                          « Retour » + « Continuer — <étape> » ;
+          — dès 900px   : rail d'étapes 190px | panneau 320px | plateau,
+                          les deux canvas côte à côte.
+        C'est `.editor-app[data-step]` qui commande : la CSS révèle le
+        panneau de l'étape courante, le JS ne fait que déplacer l'attribut.
+        Conséquence VOULUE : tous les contrôles restent DANS LE DOM à
+        toutes les étapes — un `document.getElementById` d'editor.js ne
+        peut jamais tomber sur un fantôme. -#}
+    <div class="app editor-app" data-step="1" id="editor-app">
 
-                <div class="side-head">
-                    <h1 class="side-title">Composition</h1>
-                    <button class="btn btn-ghost" id="reset-btn" type="button" title="Repartir d'une composition vide">
-                        R&eacute;initialiser
+        {#- ── En-tête du parcours (mobile) ────────────────────────────
+            Sur desktop la barre de navigation globale suffit : celui-ci
+            disparaît (editor.css §11). -#}
+        <header class="wiz-head">
+            <button class="wiz-head__back" id="wiz-back" type="button" aria-label="Retour">
+                <span aria-hidden="true">&#8592;</span>
+            </button>
+            <strong class="wiz-head__title">Nouveau meme</strong>
+            <span class="tag wiz-head__tag" id="wiz-step-tag">&Eacute;tape 1/4</span>
+        </header>
+
+        {#- ── Rail d'étapes (desktop) ───────────────────────────────── -#}
+        <nav class="wiz-rail" aria-label="&Eacute;tapes de composition">
+            <ol class="wiz-rail__list" id="wiz-rail-list">
+                <li><button class="wiz-rail__item is-current" type="button" data-goto="1" aria-current="step">
+                    <span class="wiz-rail__num">1</span><span class="wiz-rail__label">M&eacute;dia</span>
+                    <span class="wiz-rail__check" aria-hidden="true">&#10003;</span></button></li>
+                <li><button class="wiz-rail__item" type="button" data-goto="2">
+                    <span class="wiz-rail__num">2</span><span class="wiz-rail__label">Cadrage</span>
+                    <span class="wiz-rail__check" aria-hidden="true">&#10003;</span></button></li>
+                <li><button class="wiz-rail__item" type="button" data-goto="3">
+                    <span class="wiz-rail__num">3</span><span class="wiz-rail__label">Texte</span>
+                    <span class="wiz-rail__check" aria-hidden="true">&#10003;</span></button></li>
+                <li><button class="wiz-rail__item" type="button" data-goto="4">
+                    <span class="wiz-rail__num">4</span><span class="wiz-rail__label">Export</span>
+                    <span class="wiz-rail__check" aria-hidden="true">&#10003;</span></button></li>
+            </ol>
+            {# `reset-btn` n'a pas bougé d'identifiant : c'est toujours
+               `resetAll()` qui répond, avec la même portée. #}
+            <button class="btn btn-ghost wiz-rail__reset" id="reset-btn" type="button"
+                    title="Repartir d'une composition vide">R&eacute;initialiser</button>
+        </nav>
+
+        {#- ── Panneau de l'étape ──────────────────────────────────────
+            Quatre sections empilées ; la CSS n'en montre qu'une. -#}
+        <aside class="wiz-panel" aria-label="R&eacute;glages de l'&eacute;tape">
+            <div class="wiz-panel__scroll">
+
+            <!-- ═══════════ ÉTAPE 1 — MÉDIA ═══════════ -->
+            <section class="wiz-step" data-step="1" aria-labelledby="wiz-t1">
+                <div class="wiz-step__head">
+                    <h2 class="wiz-step__title" id="wiz-t1">M&eacute;dia</h2>
+                    <span class="media-type-badge image" id="media-type-badge" style="display: none;">Image</span>
+                </div>
+
+                {# Sources d'import — les TROIS sources existantes, dans
+                   l'ordre du handoff (la bibliothèque scrappée d'abord :
+                   c'est la source de tous les jours). #}
+                <div class="import-tabs" role="group" aria-label="Source du m&eacute;dia">
+                    <button class="import-tab active" type="button" data-source="library">
+                        <span class="import-tab-icon" aria-hidden="true">&#x1F4DA;</span>
+                        <span>Biblioth&egrave;que</span>
                     </button>
+                    <button class="import-tab" type="button" data-source="local">
+                        <span class="import-tab-icon" aria-hidden="true">&#x1F4BB;</span>
+                        <span>Ordi</span>
+                    </button>
+                    <button class="import-tab" type="button" data-source="drive">
+                        <span class="import-tab-icon" aria-hidden="true">&#x2601;</span>
+                        <span>Drive</span>
+                    </button>
+                </div>
+
+                {# Recherche — filtre PUREMENT CLIENT sur les vignettes déjà
+                   chargées (légende, plateforme, compte). Aucune requête
+                   supplémentaire : /api/viewer/media ne prend pas de `q`,
+                   en inventer un dépasserait « uniquement l'interface ». #}
+                <div class="wiz-search" id="library-search-wrap">
+                    <input type="search" class="text-input text-input--single" id="library-search"
+                           placeholder="Rechercher dans la biblioth&egrave;que&#8230;"
+                           aria-label="Rechercher dans la biblioth&egrave;que" autocomplete="off">
+                </div>
+
+                <!-- Dépôt local -->
+                <div class="upload-zone" id="upload-zone" style="display: none;">
+                    <div class="upload-icon" aria-hidden="true">&#x1F5BC;</div>
+                    <div class="upload-text"><strong>Clique</strong> ou glisse une image/vid&eacute;o</div>
+                </div>
+
+                <!-- Google Drive -->
+                <div class="drive-zone" id="drive-zone" style="display: none;">
+                    <div class="drive-browser" id="drive-browser">
+                        <div class="drive-loading" id="drive-loading" style="display: none;">
+                            <div class="loading-spinner" aria-hidden="true"></div>
+                            <span>Connexion &agrave; Google Drive...</span>
+                        </div>
+                        <div class="drive-connect" id="drive-connect">
+                            <div class="drive-icon" aria-hidden="true">
+                                <svg width="32" height="32" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+                                    <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
+                                    <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
+                                    <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
+                                    <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
+                                    <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+                                </svg>
+                            </div>
+                            <div class="drive-connect-text">Connecte-toi &agrave; Google Drive</div>
+                            <button class="btn btn-secondary" id="connect-drive-btn" type="button">
+                                Ouvrir Google Drive
+                            </button>
+                            <div class="drive-hint">S&eacute;lectionne des images ou vid&eacute;os depuis ton Drive</div>
+                        </div>
+                        <div class="drive-files" id="drive-files" style="display: none;">
+                            <!-- Rempli dynamiquement -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bibliothèque scrappée -->
+                <div class="drive-zone library-zone" id="library-zone">
+                    <div class="drive-folder-select">
+                        <span class="drive-folder-name">M&eacute;dias scrapp&eacute;s</span>
+                        <button class="drive-refresh-btn" type="button" onclick="loadLibraryMedia()">Actualiser</button>
+                    </div>
+                    {# Grille 3 colonnes (4 sur desktop) — la sélection est un
+                       ring INTÉRIEUR + un carré ✓, posés par editor.js. #}
+                    <div class="drive-files library-grid" id="library-grid">
+                        <!-- Rempli dynamiquement -->
+                    </div>
+                </div>
+
+                <input type="file" id="file-input" accept="image/*,video/*">
+
+                {# Ligne d'info de sélection — remplie par editor.js. #}
+                <p class="hint wiz-selinfo" id="wiz-selinfo">Touche un m&eacute;dia pour le choisir.</p>
+
+                <button class="btn btn-secondary" id="select-image-btn" type="button" style="display: none;">S&eacute;lectionner le m&eacute;dia</button>
+
+                <!-- Timeline vidéo -->
+                <div class="timeline-container" id="timeline-container" style="display: none;">
+                    <div class="timeline-header">
+                        <span>Trim vid&eacute;o</span>
+                        <span class="timeline-duration" id="trim-duration">0:00</span>
+                    </div>
+                    <div class="timeline-wrapper" id="timeline-wrapper">
+                        <div class="timeline-thumbnails" id="timeline-thumbnails"></div>
+                        <div class="timeline-selection" id="timeline-selection">
+                            <div class="timeline-handle start" id="handle-start"></div>
+                            <div class="timeline-handle end" id="handle-end"></div>
+                        </div>
+                        <div class="timeline-playhead" id="timeline-playhead"></div>
+                    </div>
+                    <div class="timeline-times">
+                        <span id="time-start">0:00</span>
+                        <span id="time-end">0:00</span>
+                    </div>
+                    <div class="video-controls">
+                        <button id="btn-play" type="button">Lecture</button>
+                        <button id="btn-preview" type="button">Aper&ccedil;u</button>
+                    </div>
+                </div>
+
+                <video id="video-source" muted playsinline></video>
+            </section>
+
+            <!-- ═══════════ ÉTAPE 2 — CADRAGE ═══════════ -->
+            <section class="wiz-step" data-step="2" aria-labelledby="wiz-t2">
+                <div class="wiz-step__head">
+                    <h2 class="wiz-step__title" id="wiz-t2">Cadrage</h2>
+                    <button class="btn btn-ghost wiz-step__reset" id="crop-reset-all" type="button"
+                            title="Zoom, position, hauteur, rotation et miroirs">Tout r&eacute;initialiser</button>
+                </div>
+
+                {# ---------- Zoom du média ----------
+                   Stepper −/+ 100→200 %, pas de 10. Le réglage FIN
+                   (jusqu'à 50 %) reste disponible sur le curseur, dans
+                   la retouche avancée en bas de cette étape : aucune
+                   valeur atteignable avant ne devient inatteignable.
+
+                   PREMIER de l'étape, avant le format : c'est l'ordre
+                   que donne le cahier des charges (« zoom boutons −/+,
+                   formats IG segmented »), et c'est le seul réglage de
+                   Cadrage qu'on utilise à CHAQUE composition. Rangé
+                   après les trois cartes de format et leur avertissement,
+                   il tombait sous la ligne de flottaison du panneau au
+                   doigt : le geste le plus courant de l'étape demandait
+                   un défilement. #}
+                <div class="ctl ctl--stack" id="zoom-ctl">
+                    <span class="ctl-label" id="lbl-zoom">Zoom du m&eacute;dia</span>
+                    <div class="stepper" role="group" aria-labelledby="lbl-zoom">
+                        <button class="stepper__btn" type="button" id="zoom-out-btn" aria-label="R&eacute;duire le m&eacute;dia">&#8722;</button>
+                        <output class="stepper__value" id="zoom-readout" for="image-scale">100&nbsp;%</output>
+                        <button class="stepper__btn" type="button" id="zoom-in-btn" aria-label="Agrandir le m&eacute;dia">+</button>
+                    </div>
                 </div>
 
                 {# ---------- Format du canvas Instagram ----------
                    Ne pilote QUE le plateau de gauche : le plateau TikTok est
                    fixe en 1080×1920 (9:16). Défaut : Portrait 4:5. #}
-                <section class="group" aria-labelledby="grp-format">
-                    <div class="group__head">
-                        <h2 class="group__title" id="grp-format">Format Instagram</h2>
-                        {# LOT B — chevron d'accordéon, visible UNIQUEMENT sous
-                           900px (editor.css). Sur desktop les groupes restent
-                           tous ouverts, rien ne change. #}
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-format">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
-                    </div>
+                <div class="ctl ctl--stack">
+                    <span class="ctl-label" id="grp-format">Format Instagram</span>
                     <div class="format-selector" role="group" aria-labelledby="grp-format">
                         <button class="format-btn" type="button" data-format="square" data-width="1080" data-height="1080">
                             <span class="format-btn__name">Feed</span>
@@ -113,148 +301,27 @@
                     <p class="hint hint--limits">
                         TikTok reste en <strong>1080&#215;1920</strong> &#8226; import <strong>100&nbsp;Mo</strong> max &#8226; export vid&eacute;o MP4 H.264
                     </p>
-                </section>
+                </div>
 
-                <!-- ---------- Média ---------- -->
-                <section class="group" aria-labelledby="grp-media">
-                    <div class="group__head">
-                        <h2 class="group__title" id="grp-media">M&eacute;dia</h2>
-                        <span class="media-type-badge image" id="media-type-badge" style="display: none;">Image</span>
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-media">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
+                <div class="ctl" id="frame-height-section">
+                    <div class="ctl-row">
+                        <label class="ctl-label" for="frame-height">Hauteur du cadre</label>
+                        <input type="range" class="slider" id="frame-height" min="30" max="100" value="100">
+                        <output class="slider-value" id="frame-height-value" for="frame-height">100%</output>
                     </div>
+                    {# Le plateau TikTok est plein écran : réduire son cadre
+                       recréerait des bandes — le curseur ne pilote qu'Instagram. #}
+                    <p class="hint">Instagram uniquement &#8212; le plateau TikTok reste plein &eacute;cran.</p>
+                </div>
 
-                    <!-- Sources d'import -->
-                    <div class="import-tabs" role="group" aria-label="Source du m&eacute;dia">
-                        <button class="import-tab active" type="button" data-source="local">
-                            <span class="import-tab-icon" aria-hidden="true">&#x1F4BB;</span>
-                            <span>Ordi</span>
-                        </button>
-                        <button class="import-tab" type="button" data-source="drive">
-                            <span class="import-tab-icon" aria-hidden="true">&#x2601;</span>
-                            <span>Drive</span>
-                        </button>
-                        <button class="import-tab" type="button" data-source="library">
-                            <span class="import-tab-icon" aria-hidden="true">&#x1F4DA;</span>
-                            <span>Biblioth&egrave;que</span>
-                        </button>
-                    </div>
-
-                    <!-- Dépôt local -->
-                    <div class="upload-zone" id="upload-zone">
-                        <div class="upload-icon" aria-hidden="true">&#x1F5BC;</div>
-                        <div class="upload-text"><strong>Clique</strong> ou glisse une image/vid&eacute;o</div>
-                    </div>
-
-                    <!-- Google Drive -->
-                    <div class="drive-zone" id="drive-zone" style="display: none;">
-                        <div class="drive-browser" id="drive-browser">
-                            <div class="drive-loading" id="drive-loading" style="display: none;">
-                                <div class="loading-spinner" aria-hidden="true"></div>
-                                <span>Connexion &agrave; Google Drive...</span>
-                            </div>
-                            <div class="drive-connect" id="drive-connect">
-                                <div class="drive-icon" aria-hidden="true">
-                                    <svg width="32" height="32" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
-                                        <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
-                                        <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
-                                        <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
-                                        <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/>
-                                        <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
-                                    </svg>
-                                </div>
-                                <div class="drive-connect-text">Connecte-toi &agrave; Google Drive</div>
-                                <button class="btn btn-secondary" id="connect-drive-btn" type="button">
-                                    Ouvrir Google Drive
-                                </button>
-                                <div class="drive-hint">S&eacute;lectionne des images ou vid&eacute;os depuis ton Drive</div>
-                            </div>
-                            <div class="drive-files" id="drive-files" style="display: none;">
-                                <!-- Rempli dynamiquement -->
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Bibliothèque scrappée -->
-                    <div class="drive-zone" id="library-zone" style="display: none;">
-                        <div class="drive-folder-select">
-                            <span class="drive-folder-name">M&eacute;dias scrapp&eacute;s</span>
-                            <button class="drive-refresh-btn" type="button" onclick="loadLibraryMedia()">Actualiser</button>
-                        </div>
-                        <div class="drive-files" id="library-grid">
-                            <!-- Rempli dynamiquement -->
-                        </div>
-                    </div>
-
-                    <input type="file" id="file-input" accept="image/*,video/*">
-                    <button class="btn btn-secondary" id="select-image-btn" type="button" style="display: none;">S&eacute;lectionner le m&eacute;dia</button>
-
-                    <!-- Timeline vidéo -->
-                    <div class="timeline-container" id="timeline-container" style="display: none;">
-                        <div class="timeline-header">
-                            <span>Trim vid&eacute;o</span>
-                            <span class="timeline-duration" id="trim-duration">0:00</span>
-                        </div>
-                        <div class="timeline-wrapper" id="timeline-wrapper">
-                            <div class="timeline-thumbnails" id="timeline-thumbnails"></div>
-                            <div class="timeline-selection" id="timeline-selection">
-                                <div class="timeline-handle start" id="handle-start"></div>
-                                <div class="timeline-handle end" id="handle-end"></div>
-                            </div>
-                            <div class="timeline-playhead" id="timeline-playhead"></div>
-                        </div>
-                        <div class="timeline-times">
-                            <span id="time-start">0:00</span>
-                            <span id="time-end">0:00</span>
-                        </div>
-                        <div class="video-controls">
-                            <button id="btn-play" type="button">Lecture</button>
-                            <button id="btn-preview" type="button">Aper&ccedil;u</button>
-                        </div>
-                    </div>
-
-                    <video id="video-source" muted playsinline></video>
-                </section>
-
-                {# ---------- Retouche image (LOT C) ----------
+                {# ---------- Retouche image ----------
                    Bloc RÉVÉLÉ par editor.js quand le média chargé est une
                    image (`#image-tools`). Tout est appliqué par Fabric.js
-                   côté client : recadrage via cropX/cropY, rotation via
-                   `angle`, retournement via flipX/flipY, réglages via les
-                   filtres intégrés. Aucun aller-retour serveur, donc aucun
-                   fichier temporaire et aucun worker bloqué. #}
-                <section class="group" id="image-tools" aria-labelledby="grp-retouche" style="display: none;">
-                    <div class="group__head">
-                        <h2 class="group__title" id="grp-retouche">Retouche de l'image</h2>
-                        <button class="btn btn-ghost" id="image-reset-btn" type="button"
-                                title="Annuler recadrage, rotation, retournement et r&eacute;glages">
-                            Annuler
-                        </button>
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-retouche">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
-                    </div>
+                   côté client. #}
+                <div class="image-tools" id="image-tools" style="display: none;">
 
                     <div class="ctl ctl--stack">
-                        <span class="ctl-label" id="lbl-crop">Recadrage au ratio</span>
-                        <div class="seg" role="group" aria-labelledby="lbl-crop" id="crop-group">
-                            <button class="seg__btn active" type="button" data-ratio="free">Libre</button>
-                            <button class="seg__btn" type="button" data-ratio="1">1:1</button>
-                            <button class="seg__btn" type="button" data-ratio="0.8">4:5</button>
-                            <button class="seg__btn" type="button" data-ratio="0.5625">9:16</button>
-                            <button class="seg__btn" type="button" data-ratio="1.7777778">16:9</button>
-                        </div>
-                        {# Les dimensions sont le seuil chiffré : on les affiche
-                           AVANT l'export, pas dans un message après coup. #}
-                        <p class="hint" id="crop-readout">Source&nbsp;: &#8212;</p>
-                    </div>
-
-                    <div class="ctl ctl--stack">
-                        <span class="ctl-label" id="lbl-orient">Rotation et retournement</span>
+                        <span class="ctl-label" id="lbl-orient">Rotation et miroir</span>
                         <div class="seg" role="group" aria-labelledby="lbl-orient">
                             <button class="seg__btn" type="button" id="rotate-left" title="Pivoter de 90&deg; vers la gauche">
                                 <span aria-hidden="true">&#8634;</span> 90&deg;
@@ -272,45 +339,184 @@
                         <p class="hint" id="orient-readout">Rotation&nbsp;: <strong>0&deg;</strong></p>
                     </div>
 
-                    <div class="ctl">
-                        <div class="ctl-row">
-                            <label class="ctl-label" for="adj-brightness">Luminosit&eacute;</label>
-                            <input type="range" class="slider" id="adj-brightness" min="-100" max="100" value="0">
-                            <output class="slider-value" id="adj-brightness-value" for="adj-brightness">0</output>
+                    {# Recadrage et réglages colorimétriques : présents et
+                       intacts, repliés par défaut. Le handoff ne les nomme
+                       pas dans le parcours court, la maquette desktop les
+                       montre dans cette même étape — ils y sont, sous un
+                       <details> natif (aucun JS, opérable au clavier). #}
+                    <details class="wiz-more">
+                        <summary class="wiz-more__summary">Retouche avanc&eacute;e &#8212; recadrage, couleurs, zoom fin</summary>
+                        <div class="wiz-more__body">
+                            <div class="ctl ctl--stack">
+                                <span class="ctl-label" id="lbl-crop">Recadrage au ratio</span>
+                                <div class="seg" role="group" aria-labelledby="lbl-crop" id="crop-group">
+                                    <button class="seg__btn active" type="button" data-ratio="free">Libre</button>
+                                    <button class="seg__btn" type="button" data-ratio="1">1:1</button>
+                                    <button class="seg__btn" type="button" data-ratio="0.8">4:5</button>
+                                    <button class="seg__btn" type="button" data-ratio="0.5625">9:16</button>
+                                    <button class="seg__btn" type="button" data-ratio="1.7777778">16:9</button>
+                                </div>
+                                {# Les dimensions sont le seuil chiffré : on les affiche
+                                   AVANT l'export, pas dans un message après coup. #}
+                                <p class="hint" id="crop-readout">Source&nbsp;: &#8212;</p>
+                            </div>
+
+                            <div class="ctl" id="image-scale-section" style="display: none;">
+                                <div class="ctl-row">
+                                    <label class="ctl-label" for="image-scale">Zoom fin</label>
+                                    <input type="range" class="slider" id="image-scale" min="50" max="200" value="100">
+                                    <output class="slider-value" id="image-scale-value" for="image-scale">100%</output>
+                                </div>
+                            </div>
+
+                            <div class="ctl">
+                                <div class="ctl-row">
+                                    <label class="ctl-label" for="adj-brightness">Luminosit&eacute;</label>
+                                    <input type="range" class="slider" id="adj-brightness" min="-100" max="100" value="0">
+                                    <output class="slider-value" id="adj-brightness-value" for="adj-brightness">0</output>
+                                </div>
+                            </div>
+
+                            <div class="ctl">
+                                <div class="ctl-row">
+                                    <label class="ctl-label" for="adj-contrast">Contraste</label>
+                                    <input type="range" class="slider" id="adj-contrast" min="-100" max="100" value="0">
+                                    <output class="slider-value" id="adj-contrast-value" for="adj-contrast">0</output>
+                                </div>
+                            </div>
+
+                            <div class="ctl">
+                                <div class="ctl-row">
+                                    <label class="ctl-label" for="adj-saturation">Saturation</label>
+                                    <input type="range" class="slider" id="adj-saturation" min="-100" max="100" value="0">
+                                    <output class="slider-value" id="adj-saturation-value" for="adj-saturation">0</output>
+                                </div>
+                            </div>
+
+                            <button class="btn btn-ghost" id="image-reset-btn" type="button"
+                                    title="Annuler recadrage, rotation, retournement et r&eacute;glages">
+                                Annuler la retouche
+                            </button>
                         </div>
-                    </div>
+                    </details>
+                </div>
+            </section>
 
-                    <div class="ctl">
-                        <div class="ctl-row">
-                            <label class="ctl-label" for="adj-contrast">Contraste</label>
-                            <input type="range" class="slider" id="adj-contrast" min="-100" max="100" value="0">
-                            <output class="slider-value" id="adj-contrast-value" for="adj-contrast">0</output>
-                        </div>
-                    </div>
+            <!-- ═══════════ ÉTAPE 3 — TEXTE ═══════════ -->
+            <section class="wiz-step" data-step="3" aria-labelledby="wiz-t3">
+                <div class="wiz-step__head">
+                    <h2 class="wiz-step__title" id="wiz-t3">Texte</h2>
+                </div>
 
-                    <div class="ctl">
-                        <div class="ctl-row">
-                            <label class="ctl-label" for="adj-saturation">Saturation</label>
-                            <input type="range" class="slider" id="adj-saturation" min="-100" max="100" value="0">
-                            <output class="slider-value" id="adj-saturation-value" for="adj-saturation">0</output>
-                        </div>
-                    </div>
-                </section>
+                <div class="ctl ctl--stack">
+                    <label class="ctl-label" for="meme-text">Texte du bandeau</label>
+                    {# Mention affichée par editor.js quand la phrase du Tri
+                       rapide a rempli le champ ; masquée dès la 1re frappe. #}
+                    <p class="wiz-prefill" id="wiz-prefill-note" style="display: none;">Pr&eacute;-rempli avec ta phrase du Tri rapide &#10003;</p>
+                    <textarea class="text-input" id="meme-text" placeholder="Quand tu r&eacute;alises que..."></textarea>
+                    {# Le plateau TikTok est PLEIN ÉCRAN : il n'a pas de bandeau
+                       de gabarit — son texte, c'est le POV ci-dessous. #}
+                    <p class="hint">Instagram uniquement &#8212; le plateau TikTok est plein &eacute;cran, son texte est le &#171;&nbsp;POV&nbsp;&#187;.</p>
+                </div>
 
-                {# ---------- Fichier de sortie (LOT C) ----------
-                   Masqué quand le média est une vidéo : l'export vidéo reste
-                   MP4 H.264 et ne connaît ni PNG, ni qualité, ni multiplicateur. #}
-                <section class="group" id="output-tools" aria-labelledby="grp-sortie">
-                    <div class="group__head">
-                        <h2 class="group__title" id="grp-sortie">Fichier de sortie</h2>
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-sortie">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
-                    </div>
-
+                {# Steppers : taille 24→72 px (pas de 2), interligne
+                   0,8→2,0 (pas de 0,1). Les curseurs d'origine restent la
+                   SOURCE DE VÉRITÉ — ils sont conservés, masqués à l'œil
+                   mais lus et écrits par les steppers, donc aucun
+                   gestionnaire d'editor.js n'a changé de cible. #}
+                <div class="wiz-steppers">
                     <div class="ctl ctl--stack">
-                        <span class="ctl-label" id="lbl-imgformat">Format</span>
+                        <span class="ctl-label" id="lbl-textsize">Taille</span>
+                        <div class="stepper" role="group" aria-labelledby="lbl-textsize">
+                            <button class="stepper__btn" type="button" id="text-size-down" aria-label="R&eacute;duire la taille du texte">&#8722;</button>
+                            <output class="stepper__value" id="text-size-readout" for="text-size">42&nbsp;px</output>
+                            <button class="stepper__btn" type="button" id="text-size-up" aria-label="Augmenter la taille du texte">+</button>
+                        </div>
+                    </div>
+                    <div class="ctl ctl--stack">
+                        <span class="ctl-label" id="lbl-lineheight">Interligne</span>
+                        <div class="stepper" role="group" aria-labelledby="lbl-lineheight">
+                            <button class="stepper__btn" type="button" id="line-height-down" aria-label="R&eacute;duire l'interligne">&#8722;</button>
+                            <output class="stepper__value" id="line-height-readout" for="line-height">1,2</output>
+                            <button class="stepper__btn" type="button" id="line-height-up" aria-label="Augmenter l'interligne">+</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="wiz-hidden-range">
+                    <label class="ctl-label" for="text-size">Taille du texte (r&eacute;glage fin)</label>
+                    <input type="range" class="slider" id="text-size" min="24" max="72" value="42">
+                    <output class="slider-value" id="text-size-value" for="text-size">42px</output>
+                    <label class="ctl-label" for="line-height">Interlignage (r&eacute;glage fin)</label>
+                    <input type="range" class="slider" id="line-height" min="80" max="200" value="120" step="5">
+                    <output class="slider-value" id="line-height-value" for="line-height">1.2</output>
+                </div>
+
+                {# <button> et pas <div> : editor.js n'écoute que `click`,
+                   et seul un vrai bouton déclenche `click` à Entrée/Espace. #}
+                <button class="toggle-row" id="overlay-toggle" type="button">
+                    <span>Texte sur l'image</span>
+                    <span class="toggle-switch" id="overlay-switch" aria-hidden="true"></span>
+                </button>
+                <input type="text" class="text-input text-input--single" id="overlay-text" placeholder="Texte overlay..." style="display: none;">
+
+                {# ---------- Texte TikTok « POV » ----------
+                   La typo TikTok (Proxima Nova SemiBold) est commerciale et
+                   interdite d'embarquement : on sert Montserrat SemiBold
+                   (licence OFL, vendorisée). Style natif TikTok CONSERVÉ,
+                   contour noir compris. #}
+                <div class="pov-tools" id="pov-tools">
+                    <div class="ctl ctl--stack">
+                        <label class="ctl-label" for="pov-text">Texte TikTok &#171;&nbsp;POV&nbsp;&#187;</label>
+                        <textarea class="text-input" id="pov-text" rows="2"
+                                  placeholder="POV&nbsp;: tu ouvres l'app&#8230;"></textarea>
+                    </div>
+                    <div class="ctl ctl--stack">
+                        <span class="ctl-label" id="lbl-pov-style">Style du bloc</span>
+                        <div class="seg" role="group" aria-labelledby="lbl-pov-style" id="pov-style-group">
+                            <button class="seg__btn active" type="button" data-povstyle="outline">Contour noir</button>
+                            <button class="seg__btn" type="button" data-povstyle="light">Fond blanc</button>
+                            <button class="seg__btn" type="button" data-povstyle="dark">Fond noir</button>
+                        </div>
+                        <p class="hint">Visible sur le canvas TikTok uniquement &#8212; glisse le bloc pour le placer.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ═══════════ ÉTAPE 4 — EXPORT ═══════════ -->
+            <section class="wiz-step" data-step="4" aria-labelledby="wiz-t4">
+                <div class="wiz-step__head">
+                    <h2 class="wiz-step__title" id="wiz-t4">Export</h2>
+                </div>
+
+                {# Deux cartes d'aperçu, chacune ALLUMANT ou ÉTEIGNANT son
+                   plateau. Elles ne portent AUCUN état propre : le clic
+                   relaie sur l'interrupteur du plateau (#toggle-ig /
+                   #toggle-tt), qui reste le seul point de vérité. #}
+                <div class="export-cards" id="export-cards">
+                    <button class="export-card is-on" type="button" data-pane="ig" aria-pressed="true">
+                        <span class="export-card__shot" id="export-shot-ig"></span>
+                        <span class="export-card__row">
+                            <span class="export-card__name">Instagram</span>
+                            <span class="tag tag--accent export-card__tag" id="export-tag-ig">activ&eacute;</span>
+                        </span>
+                        <span class="export-card__dims" id="export-card-dims-ig">1080&#215;1350 &#183; 4:5</span>
+                    </button>
+                    <button class="export-card is-on" type="button" data-pane="tt" aria-pressed="true">
+                        <span class="export-card__shot" id="export-shot-tt"></span>
+                        <span class="export-card__row">
+                            <span class="export-card__name">TikTok</span>
+                            <span class="tag tag--accent export-card__tag" id="export-tag-tt">activ&eacute;</span>
+                        </span>
+                        <span class="export-card__dims">1080&#215;1920 &#183; 9:16</span>
+                    </button>
+                </div>
+
+                {# Masqué quand le média est une vidéo : l'export vidéo reste
+                   MP4 H.264 et ne connaît ni PNG, ni qualité, ni multiplicateur. #}
+                <div class="output-tools" id="output-tools">
+                    <div class="ctl ctl--stack">
+                        <span class="ctl-label" id="lbl-imgformat">Format de fichier</span>
                         <div class="seg" role="group" aria-labelledby="lbl-imgformat" id="imgformat-group">
                             <button class="seg__btn active" type="button" data-imgformat="png">PNG</button>
                             <button class="seg__btn" type="button" data-imgformat="jpeg">JPEG</button>
@@ -326,7 +532,7 @@
                     </div>
 
                     <div class="ctl ctl--stack">
-                        <span class="ctl-label" id="lbl-size">Taille cible</span>
+                        <span class="ctl-label" id="lbl-size">Taille</span>
                         <div class="seg" role="group" aria-labelledby="lbl-size" id="size-group">
                             <button class="seg__btn" type="button" data-scale="0.5">&#215;0,5</button>
                             <button class="seg__btn active" type="button" data-scale="1">&#215;1</button>
@@ -334,152 +540,37 @@
                             <button class="seg__btn" type="button" data-scale="2">&#215;2</button>
                         </div>
                         <p class="hint hint--limits">
-                            Image export&eacute;e&nbsp;: <strong id="export-dims">1080&#215;1080&nbsp;px</strong>
+                            Fichier export&eacute;&nbsp;: <strong id="export-dims">1080&#215;1080&nbsp;px</strong>
                             <span id="export-format-label">PNG</span><br>
                             La copie envoy&eacute;e au Viewer est toujours en <strong>PNG</strong>, &agrave; cette m&ecirc;me taille.
                         </p>
                     </div>
-                </section>
-
-                <!-- ---------- Texte ---------- -->
-                <section class="group" aria-labelledby="grp-texte">
-                    <div class="group__head">
-                        <h2 class="group__title" id="grp-texte">Texte du bandeau</h2>
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-texte">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
-                    </div>
-                    <textarea class="text-input" id="meme-text" placeholder="Quand tu r&eacute;alises que..."></textarea>
-                    {# Le plateau TikTok est PLEIN ÉCRAN : il n'a pas de bandeau
-                       de gabarit — son texte, c'est le POV ci-dessous. #}
-                    <p class="hint">Instagram uniquement &#8212; le plateau TikTok est plein &eacute;cran, son texte est le &#171;&nbsp;POV&nbsp;&#187;.</p>
-
-                    {# <button> et pas <div> : editor.js n'écoute que `click`,
-                       et seul un vrai bouton déclenche `click` à Entrée/Espace.
-                       Le rendre opérable au clavier ne coûte donc aucune ligne
-                       de JS. #}
-                    <button class="toggle-row" id="overlay-toggle" type="button">
-                        <span>Texte sur l'image</span>
-                        <span class="toggle-switch" id="overlay-switch" aria-hidden="true"></span>
-                    </button>
-                    <input type="text" class="text-input text-input--single" id="overlay-text" placeholder="Texte overlay..." style="display: none;">
-                </section>
-
-                {# ---------- Texte TikTok « POV » ----------
-                   La typo TikTok (Proxima Nova SemiBold) est commerciale et
-                   interdite d'embarquement : on sert Montserrat SemiBold
-                   (licence OFL, vendorisée dans /static/vendor/fonts/ avec
-                   son OFL.txt). Style natif TikTok : un bloc arrondi PAR
-                   LIGNE, léger débord, texte centré. Position par glisser
-                   sur le canvas TikTok. #}
-                <section class="group" id="pov-tools" aria-labelledby="grp-pov">
-                    <div class="group__head">
-                        <h2 class="group__title" id="grp-pov">Texte TikTok &#171;&nbsp;POV&nbsp;&#187;</h2>
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-pov">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
-                    </div>
-                    <textarea class="text-input" id="pov-text" rows="2"
-                              placeholder="POV&nbsp;: tu ouvres l'app&#8230;"></textarea>
-                    <div class="ctl ctl--stack">
-                        <span class="ctl-label" id="lbl-pov-style">Style du bloc</span>
-                        <div class="seg" role="group" aria-labelledby="lbl-pov-style" id="pov-style-group">
-                            <button class="seg__btn active" type="button" data-povstyle="outline">Contour noir</button>
-                            <button class="seg__btn" type="button" data-povstyle="light">Fond blanc</button>
-                            <button class="seg__btn" type="button" data-povstyle="dark">Fond noir</button>
-                        </div>
-                        <p class="hint">Visible sur le canvas TikTok uniquement &#8212; glisse le bloc pour le placer.</p>
-                    </div>
-                </section>
-
-                <!-- ---------- Réglages fins ---------- -->
-                <section class="group" aria-labelledby="grp-reglages">
-                    <div class="group__head">
-                        <h2 class="group__title" id="grp-reglages">R&eacute;glages</h2>
-                        <button class="group__fold" type="button" aria-expanded="true"
-                                aria-labelledby="grp-reglages">
-                            <span class="group__fold-chevron" aria-hidden="true"></span>
-                        </button>
-                    </div>
-
-                    <div class="ctl">
-                        <div class="ctl-row">
-                            <label class="ctl-label" for="text-size">Taille du texte</label>
-                            <input type="range" class="slider" id="text-size" min="24" max="72" value="42">
-                            <output class="slider-value" id="text-size-value" for="text-size">42px</output>
-                        </div>
-                    </div>
-
-                    <div class="ctl">
-                        <div class="ctl-row">
-                            <label class="ctl-label" for="line-height">Interlignage</label>
-                            <input type="range" class="slider" id="line-height" min="80" max="200" value="120" step="5">
-                            <output class="slider-value" id="line-height-value" for="line-height">1.2</output>
-                        </div>
-                    </div>
-
-                    <div class="ctl" id="image-scale-section" style="display: none;">
-                        <div class="ctl-row">
-                            <label class="ctl-label" for="image-scale">Zoom image</label>
-                            <input type="range" class="slider" id="image-scale" min="50" max="200" value="100">
-                            <output class="slider-value" id="image-scale-value" for="image-scale">100%</output>
-                        </div>
-                    </div>
-
-                    <div class="ctl" id="frame-height-section">
-                        <div class="ctl-row">
-                            <label class="ctl-label" for="frame-height">Hauteur du cadre</label>
-                            <input type="range" class="slider" id="frame-height" min="30" max="100" value="100">
-                            <output class="slider-value" id="frame-height-value" for="frame-height">100%</output>
-                        </div>
-                        {# Le plateau TikTok est plein écran : réduire son cadre
-                           recréerait des bandes — le curseur ne pilote qu'Instagram. #}
-                        <p class="hint">Instagram uniquement &#8212; le plateau TikTok reste plein &eacute;cran.</p>
-                    </div>
-
-                    {# L'opacité du logo est fixée à 50 % (constante WATERMARK_OPACITY dans
-                       editor.js) : elle ne varie jamais d'une composition à l'autre, un
-                       réglage exposé n'apportait qu'un risque de la dérégler. #}
-                </section>
-
-            </div>
-
-            <!-- ============ Pied fixe : les actions ============ -->
-            <div class="sidebar__actions">
-                {# Avertissement honnête : l'export vidéo est traité par FFmpeg
-                   pendant la requête HTTP (app/editor/api.py). Rien ne le rend
-                   annulable côté client — on le dit AVANT le clic. #}
-                <p class="hint hint--warning" id="export-notice">
-                    <strong>Export vid&eacute;o</strong>&nbsp;: FFmpeg tourne pendant la requ&ecirc;te &#8212;
-                    plusieurs minutes possibles, sans interruption ni fermeture d'onglet.
-                </p>
-                <button class="btn btn-primary" id="export-btn" type="button" disabled>T&eacute;l&eacute;charger le meme</button>
-                <div class="actions-row">
-                    <button class="btn btn-secondary" id="save-meme-btn" type="button" disabled>Sauvegarder dans Viewer</button>
-                    <button class="btn btn-secondary" id="schedule-btn" type="button" disabled>Planifier</button>
                 </div>
-            </div>
+            </section>
+
+            </div>{# /.wiz-panel__scroll #}
+
         </aside>
 
+        {#- ── Plateau ────────────────────────────────────────────────
+            ÉDITEUR DOUBLE — une composition, deux rendus. Le média et le
+            texte alimentent les DEUX canvas ; le cadrage se règle PAR
+            canvas. L'interrupteur de chaque plateau retire le format des
+            exports et de la planification. -#}
         <main class="preview-area">
-            {# ÉDITEUR DOUBLE — une composition, deux rendus. Le média et le
-               texte alimentent les DEUX canvas ; le cadrage (position/zoom de
-               l'image dans le cadre) se règle PAR canvas. L'interrupteur de
-               chaque plateau retire le format des exports et de la
-               planification. #}
-            {# LOT B — basculeur de plateau, visible UNIQUEMENT sous 900px
-               (editor.css). Sur mobile un seul plateau est affiché à la
-               fois : deux côte à côte seraient illisibles. Le basculeur ne
-               touche PAS aux interrupteurs de fabrication (#toggle-ig/tt),
-               il choisit seulement le plateau À L'ÉCRAN. #}
+            {# Basculeur de plateau — visible sous 900px : deux canvas
+               côte à côte y seraient illisibles. Il ne touche PAS aux
+               interrupteurs de fabrication, il choisit le plateau
+               À L'ÉCRAN. #}
             <div class="stage-switch" id="stage-switch" role="group" aria-label="Plateau affich&eacute;">
                 <button class="stage-switch__btn active" type="button" data-stage="ig" aria-pressed="true">Instagram</button>
                 <button class="stage-switch__btn" type="button" data-stage="tt" aria-pressed="false">TikTok</button>
             </div>
             <div class="stages" id="stages">
-                <section class="canvas-stage" id="stage-ig" data-pane="ig">
+                <section class="canvas-stage is-selected" id="stage-ig" data-pane="ig">
+                    <div class="canvas-container">
+                        <canvas id="meme-canvas-ig"></canvas>
+                    </div>
                     <header class="stage-head">
                         <span class="stage-title">Instagram
                             <span class="stage-dims" id="stage-ig-dims">1080&#215;1350</span>
@@ -489,11 +580,11 @@
                             <span class="toggle-switch active" aria-hidden="true"></span>
                         </button>
                     </header>
-                    <div class="canvas-container">
-                        <canvas id="meme-canvas-ig"></canvas>
-                    </div>
                 </section>
                 <section class="canvas-stage" id="stage-tt" data-pane="tt">
+                    <div class="canvas-container">
+                        <canvas id="meme-canvas-tt"></canvas>
+                    </div>
                     <header class="stage-head">
                         <span class="stage-title">TikTok
                             <span class="stage-dims">1080&#215;1920</span>
@@ -503,29 +594,56 @@
                             <span class="toggle-switch active" aria-hidden="true"></span>
                         </button>
                     </header>
-                    <div class="canvas-container">
-                        <canvas id="meme-canvas-tt"></canvas>
-                    </div>
                 </section>
             </div>
-            {# LOT B — zoom du média au doigt, visible UNIQUEMENT sous 900px.
-               Le build Fabric vendorisé (5.3.1 standard, sans Event.js) ne
-               gère pas le pincement : ces deux boutons font le même geste
-               que le slider « Zoom image » (les deux plateaux ensemble). #}
-            <div class="preview-zoom" id="preview-zoom">
-                <button class="preview-zoom__btn" id="zoom-out-btn" type="button" aria-label="R&eacute;duire le m&eacute;dia">&#8722;</button>
-                <button class="preview-zoom__btn" id="zoom-in-btn" type="button" aria-label="Agrandir le m&eacute;dia">+</button>
-            </div>
-            <p class="help-text">
-                Cadre fixe &#8226; glisse l'image pour la repositionner &#8212; le cadrage se r&egrave;gle par canvas &#8226; zoom au slider ou aux poign&eacute;es
+            <p class="help-text" id="help-text">
+                Glisse l'image dans le cadre &#8226; le logo se pose tout seul
             </p>
         </main>
+
+        {#- ── Barre d'étapes (mobile) ────────────────────────────────
+            Quatre colonnes ; l'étape courante porte un soulignement
+            INTÉRIEUR de 4px, les étapes faites un ✓ à .55 d'opacité. -#}
+        <nav class="wiz-steps" id="wiz-steps" aria-label="Progression">
+            <button class="wiz-steps__cell is-current" type="button" data-goto="1" aria-current="step">
+                <span class="wiz-steps__num">1</span><span class="wiz-steps__label">M&eacute;dia</span>
+            </button>
+            <button class="wiz-steps__cell" type="button" data-goto="2">
+                <span class="wiz-steps__num">2</span><span class="wiz-steps__label">Cadrage</span>
+            </button>
+            <button class="wiz-steps__cell" type="button" data-goto="3">
+                <span class="wiz-steps__num">3</span><span class="wiz-steps__label">Texte</span>
+            </button>
+            <button class="wiz-steps__cell" type="button" data-goto="4">
+                <span class="wiz-steps__num">4</span><span class="wiz-steps__label">Export</span>
+            </button>
+        </nav>
+
+        {#- ── Actions ────────────────────────────────────────────────
+            Étapes 1→3 : « Retour » + « Continuer — <étape suivante> ».
+            Étape 4    : téléchargement, sauvegarde, planification. -#}
+        <div class="wiz-actions">
+            <div class="wiz-actions__nav" id="wiz-actions-nav">
+                <button class="btn btn-secondary wiz-prev" id="wiz-prev" type="button">Retour</button>
+                <button class="btn btn-primary wiz-next" id="wiz-next" type="button" disabled>Continuer &#8212; Cadrage</button>
+            </div>
+            <div class="wiz-actions__export" id="wiz-actions-export">
+                {# Avertissement honnête : l'export vidéo est traité par FFmpeg
+                   pendant la requête HTTP (app/editor/api.py). Rien ne le rend
+                   annulable côté client — on le dit AVANT le clic. #}
+                <p class="hint hint--warning" id="export-notice">
+                    <strong>Export vid&eacute;o</strong>&nbsp;: FFmpeg tourne pendant la requ&ecirc;te &#8212;
+                    plusieurs minutes possibles, sans interruption ni fermeture d'onglet.
+                </p>
+                <button class="btn btn-primary" id="export-btn" type="button" disabled>T&eacute;l&eacute;charger le meme</button>
+                <div class="actions-row">
+                    <button class="btn btn-secondary" id="save-meme-btn" type="button" disabled>Sauvegarder dans M&eacute;dias</button>
+                    <button class="btn btn-secondary" id="schedule-btn" type="button" disabled>Planifier</button>
+                </div>
+            </div>
+        </div>
     </div>
 
-    {# ---------- Planification double ----------
-       Le bouton « Planifier » propose UN post par plateau actif — même
-       date/heure proposée pour les deux, modifiable avant validation.
-       <dialog> natif : aucune boîte système, fermeture par Échap. #}
     <dialog id="schedule-dialog" aria-labelledby="schedule-dialog-title">
         <form method="dialog" class="schedule-form" id="schedule-form">
             <h2 id="schedule-dialog-title">Planifier les posts</h2>
