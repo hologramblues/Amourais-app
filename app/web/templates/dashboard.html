@@ -76,75 +76,10 @@
   </ul>
 </div>
 
-<!-- Quick Download -->
-<div class="s-section">
-  <h2>Quick Download</h2>
-  <p>Colle un lien Instagram, TikTok, Twitter/X ou Reddit pour télécharger le média.</p>
-  <div class="s-input-group">
-    <input
-      type="url"
-      id="quick-dl-url"
-      placeholder="https://www.instagram.com/p/ABC123/ ..."
-    >
-    <button id="quick-dl-btn" onclick="quickDownload()" class="s-btn-primary">
-      Télécharger
-    </button>
-  </div>
-  <div id="quick-dl-status" class="mt-1"></div>
-</div>
-
-<script>
-function quickDownload() {
-  const urlInput = document.getElementById('quick-dl-url');
-  const btn = document.getElementById('quick-dl-btn');
-  const statusDiv = document.getElementById('quick-dl-status');
-  const url = urlInput.value.trim();
-
-  if (!url) {
-    statusDiv.innerHTML = '<small class="text-error">Colle une URL valide</small>';
-    return;
-  }
-
-  btn.disabled = true;
-  btn.setAttribute('aria-busy', 'true');
-  btn.textContent = 'En cours...';
-  statusDiv.innerHTML = '<small class="text-secondary">Envoi en cours...</small>';
-
-  fetch('/api/quick-download', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: url })
-  })
-  .then(r => r.json().then(data => ({ ok: r.ok, data })))
-  .then(({ ok, data }) => {
-    if (!ok) {
-      statusDiv.innerHTML = `<small class="text-error">${data.error || 'Erreur inconnue'}</small>`;
-    } else {
-      const platform = data.platform || '';
-      const postId = data.post_id || '';
-      statusDiv.innerHTML =
-        `<small class="text-success">${data.message || 'Lancement OK'}</small>` +
-        `<br><small class="text-muted">${platform} — ${postId}. Le média apparaîtra dans l'écran Médias.</small>`;
-      urlInput.value = '';
-    }
-  })
-  .catch(err => {
-    statusDiv.innerHTML = `<small class="text-error">Erreur réseau : ${err.message}</small>`;
-  })
-  .finally(() => {
-    btn.disabled = false;
-    btn.removeAttribute('aria-busy');
-    btn.textContent = 'Télécharger';
-  });
-}
-
-document.getElementById('quick-dl-url').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    quickDownload();
-  }
-});
-</script>
+{# Quick Download DÉPLACÉ vers la bibliothèque (viewer), sous les filtres :
+   coller un lien produit un média, sa place est là où ce média atterrit —
+   pas sur un écran de synthèse qu'on ne consulte pas en travaillant.
+   Le formulaire ET son script vivent désormais dans viewer.html/viewer.js. #}
 
 <!-- Recent Jobs -->
 <div class="s-section">

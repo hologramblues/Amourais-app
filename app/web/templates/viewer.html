@@ -175,6 +175,24 @@
     <button type="button" class="btn btn--sm v-chips__clear" id="btn-clear-filters">Tout effacer</button>
   </div>
 
+  {# ---------- Quick Download ----------
+     DÉPLACÉ DEPUIS LE DASHBOARD. Coller un lien produit un média : sa place
+     est donc dans la bibliothèque, là où ce média atterrit, et non sur un
+     écran de synthèse qu'on ne consulte pas en travaillant. Juste sous les
+     filtres, visible au doigt comme au clavier. #}
+  <form class="v-qdl" id="v-qdl" autocomplete="off">
+    <label class="v-qdl__label" for="quick-dl-url">Coller un lien</label>
+    <div class="v-qdl__row">
+      <input class="v-qdl__input" type="url" id="quick-dl-url" inputmode="url"
+             placeholder="Instagram, TikTok, Twitter/X ou Reddit…"
+             aria-describedby="quick-dl-status">
+      <button class="btn btn--primary v-qdl__btn" type="submit" id="quick-dl-btn">
+        T&eacute;l&eacute;charger
+      </button>
+    </div>
+    <div class="v-qdl__status" id="quick-dl-status" role="status" aria-live="polite"></div>
+  </form>
+
   <!-- La barre de sélection n'est plus ici : la maquette la pose EN BAS
        de l'écran, au ras des vignettes qu'on vient de cocher (§4). Elle
        vit désormais juste avant </body>, en barre fixe. -->

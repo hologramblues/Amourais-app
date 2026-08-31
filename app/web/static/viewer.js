@@ -3246,6 +3246,7 @@
 
     installerBarre();
     installerPopovers();
+    initQuickDownload();
     installerGrille();
     installerGestesTri();
     installerClavier();
@@ -3293,5 +3294,65 @@
     annulerTri: annulerTri,
     rendreTri: rendreTri,
     toast: toast,
+    initQuickDownload: initQuickDownload,
   };
+
+  // ==========================================================
+  // QUICK DOWNLOAD — déplacé du dashboard vers la bibliothèque
+  // ----------------------------------------------------------
+  // Coller un lien PRODUIT un média : sa place est là où ce média
+  // atterrit. L'ancien bloc vivait sur le dashboard, avec son
+  // propre <script> et un affichage d'état maison ; ici il passe
+  // par les toasts de la refonte, comme le reste de l'écran.
+  // ==========================================================
+  function initQuickDownload() {
+    var form = $("v-qdl");
+    if (!form) return;
+    var champ = $("quick-dl-url");
+    var bouton = $("quick-dl-btn");
+    var etat = $("quick-dl-status");
+
+    function dire(texte, genre) {
+      if (!etat) return;
+      etat.textContent = texte;
+      etat.dataset.ton = genre || "";
+    }
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var url = (champ.value || "").trim();
+      if (!url) { dire("Colle d'abord un lien.", "danger"); champ.focus(); return; }
+
+      bouton.disabled = true;
+      var libelle = bouton.textContent;
+      bouton.textContent = "En cours…";
+      dire("Envoi en cours…");
+
+      fetch("/api/quick-download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url }),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (!res.ok) {
+            // L'échec reste VISIBLE et nommé : c'est la règle de tout ce
+            // chantier, un téléchargement raté ne doit pas passer pour un
+            // succès silencieux.
+            dire(res.d.error || "Échec du téléchargement.", "danger");
+            return;
+          }
+          champ.value = "";
+          dire("Téléchargement lancé — le média arrivera dans la bibliothèque.");
+          toast("Téléchargement lancé ✓");
+        })
+        .catch(function () {
+          dire("Réseau indisponible — rien n'a été lancé.", "danger");
+        })
+        .finally(function () {
+          bouton.disabled = false;
+          bouton.textContent = libelle;
+        });
+    });
+  }
 })();

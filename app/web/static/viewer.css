@@ -1670,3 +1670,54 @@
   font-weight: var(--weight-medium);
   box-shadow: var(--shadow-medium);
 }
+
+/* ---- Quick Download ----
+   Déplacé du dashboard : coller un lien produit un média, sa place est dans
+   la bibliothèque où ce média atterrit. Posé juste sous les filtres, il suit
+   la même grille et reste utilisable au doigt (cible 44px, champ pleine
+   largeur sur petit écran). */
+.v-qdl {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-5) var(--sp-6);
+    border-bottom: 2px solid var(--border-1);
+    background: var(--bg-1);
+}
+.v-qdl__label {
+    font-size: var(--text-micro);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--ls-caps);
+    text-transform: uppercase;
+    color: var(--fg-3);
+}
+.v-qdl__row { display: flex; gap: var(--sp-4); }
+.v-qdl__input {
+    flex: 1;
+    min-width: 0;
+    min-height: var(--tap-min);
+    padding: 0 var(--sp-5);
+    border: var(--border-w) solid var(--border-2);
+    border-radius: 0;
+    background: var(--bg-inset);
+    color: var(--fg-1);
+    font-family: var(--font-ui);
+    font-size: var(--text-small);
+}
+.v-qdl__input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+.v-qdl__btn { min-height: var(--tap-min); flex: none; }
+.v-qdl__status:empty { display: none; }
+.v-qdl__status {
+    font-size: var(--text-mini);
+    color: var(--fg-2);
+}
+.v-qdl__status[data-ton="danger"] { color: var(--danger); }
+
+@media (max-width: 640px) {
+    /* Au doigt : le bouton passe sous le champ plutôt que de l'écraser. */
+    .v-qdl__row { flex-direction: column; }
+    .v-qdl__btn { width: 100%; }
+}
