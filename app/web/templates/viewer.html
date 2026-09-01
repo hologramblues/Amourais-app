@@ -381,9 +381,21 @@
     <div class="sidebar-header">
       <div class="media-info" id="lb-info"></div>
       <div class="media-caption" id="lb-caption"></div>
+      {# IDÉE DE VANNE — le meme champ `phrase` que le Tri rapide, mais
+         accessible sur N'IMPORTE QUEL media, sans passer par le tri. La
+         phrase part ensuite dans l'editeur, ou elle pre-remplit l'etape
+         Texte : c'est le pont entre « j'ai une idee en regardant » et
+         « je la compose ». Enregistrement automatique a la sortie du champ. #}
+      <div class="lb-phrase">
+        <label class="lb-phrase__label" for="lb-phrase">Ton id&eacute;e de vanne</label>
+        <textarea class="lb-phrase__input" id="lb-phrase" rows="2" maxlength="500"
+                  placeholder="Elle partira dans l'&eacute;diteur avec le m&eacute;dia&hellip;"></textarea>
+        <span class="lb-phrase__etat" id="lb-phrase-etat" role="status" aria-live="polite"></span>
+      </div>
+
       <div class="lb-actions">
         <a class="btn btn--sm" id="lb-post-link" href="#" target="_blank" rel="noopener">Post d'origine ↗</a>
-        <a class="btn btn--sm" id="lb-edit-btn" href="#">Éditer</a>
+        <a class="btn btn--sm btn--primary" id="lb-edit-btn" href="#">Envoyer &agrave; l'&eacute;diteur</a>
         <a class="btn btn--sm" id="lb-download-btn" href="#">Télécharger</a>
       </div>
     </div>

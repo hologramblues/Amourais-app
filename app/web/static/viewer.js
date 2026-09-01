@@ -1262,9 +1262,24 @@
     if (item.post_url) { lien.href = item.post_url; lien.hidden = false; }
     else lien.hidden = true;
 
+    // IDÉE DE VANNE — même champ `phrase` que le Tri rapide, ici sur
+    // n'importe quel média. On la remplit à l'ouverture de la fiche.
+    var phraseInput = $("lb-phrase");
+    var phraseBloc = phraseInput && phraseInput.parentElement;
+    if (phraseInput) {
+      phraseInput.value = item.phrase || "";
+      // Un meme n'a pas d'idée de vanne à porter : il EST déjà composé.
+      if (phraseBloc) phraseBloc.hidden = !!item.isMeme;
+      phraseInput._item = item;
+    }
+
     var edit = $("lb-edit-btn");
     if (item.isMeme) edit.hidden = true;
-    else { edit.hidden = false; edit.href = "/editor?media_id=" + item.id; edit.textContent = "Éditer"; }
+    else {
+      edit.hidden = false;
+      edit.href = "/editor?media_id=" + item.id;
+      edit.textContent = "Envoyer à l'éditeur";
+    }
 
     var dl = $("lb-download-btn");
     if (item.file_url) {
@@ -2849,6 +2864,42 @@
   }
 
   /** Écrit la phrase si — et seulement si — elle a changé. */
+  /** Champ « idée de vanne » de la fiche : enregistrement et passage à l'éditeur.
+   *
+   *  LE POINT DÉLICAT est le clic sur « Envoyer à l'éditeur » : la navigation
+   *  partirait AVANT que le POST de la phrase n'aboutisse, et la phrase tout
+   *  juste tapée serait perdue — précisément celle qu'on veut retrouver. On
+   *  retient donc la navigation le temps de l'enregistrement, puis on part. */
+  function installerPhraseFiche() {
+    var champ = $("lb-phrase");
+    var etat = $("lb-phrase-etat");
+    if (!champ) return;
+
+    champ.addEventListener("change", function () {
+      var item = champ._item;
+      if (!item) return;
+      if (etat) etat.textContent = "Enregistrement…";
+      enregistrerPhrase(item, champ.value).then(function () {
+        if (etat) etat.textContent = "";
+      });
+    });
+
+    var bouton = $("lb-edit-btn");
+    if (!bouton) return;
+    bouton.addEventListener("click", function (e) {
+      var item = champ._item;
+      if (!item) return;
+      var v = (champ.value || "").trim();
+      if (v === (item.phrase || "")) return; // rien de neuf : on laisse partir
+      e.preventDefault();
+      var cible = bouton.href;
+      if (etat) etat.textContent = "Enregistrement…";
+      enregistrerPhrase(item, v).finally(function () {
+        window.location.href = cible;
+      });
+    });
+  }
+
   function enregistrerPhrase(item, valeur) {
     var v = (valeur || "").trim();
     var avant = item.phrase || "";
@@ -3247,6 +3298,7 @@
     installerBarre();
     installerPopovers();
     initQuickDownload();
+    installerPhraseFiche();
     installerGrille();
     installerGestesTri();
     installerClavier();
