@@ -54,112 +54,121 @@
 <div class="v-chrome" id="v-chrome">
   <div class="v-toolbar" role="toolbar" aria-label="Outils de la bibliothèque">
 
-    <div class="v-tabs" role="tablist" aria-label="Bibliothèque">
-      <button class="v-tab is-active" data-tab="media" role="tab" aria-selected="true">
-        Médias <span class="v-tab__count num" id="count-media">—</span>
-      </button>
-      <button class="v-tab" data-tab="memes" role="tab" aria-selected="false">
-        Memes <span class="v-tab__count num" id="count-memes">—</span>
-      </button>
-    </div>
+    {# Le compteur est SORTI de la zone défilante. Il était dedans, en
+       `position: sticky; right: 0` avec un fond opaque : dès que la barre
+       débordait, il restait épinglé à droite et RECOUVRAIT le bouton qui
+       passait dessous — « Tri rapide », le dernier de la rangée. Le fond
+       opaque était censé l'éviter ; il le provoquait. Ici, la barre a deux
+       enfants : ce qui défile, et le compteur qui ne défile pas. Plus rien
+       ne peut passer sous lui. #}
+    <div class="v-toolbar__scroll">
 
-    <div class="v-search">
-      <label class="visually-hidden" for="f-q">Rechercher dans les légendes</label>
-      <input type="search" id="f-q" class="v-search__input" placeholder="Rechercher…  ( / )"
-             autocomplete="off" spellcheck="false">
-    </div>
+      <div class="v-tabs" role="tablist" aria-label="Bibliothèque">
+        <button class="v-tab is-active" data-tab="media" role="tab" aria-selected="true">
+          Médias <span class="v-tab__count num" id="count-media">—</span>
+        </button>
+        <button class="v-tab" data-tab="memes" role="tab" aria-selected="false">
+          Memes <span class="v-tab__count num" id="count-memes">—</span>
+        </button>
+      </div>
 
-    <!-- Panneau de filtres : les valeurs et leurs comptes viennent du
-         serveur, recalculés sous les filtres déjà actifs (V13). -->
-    <div class="v-pop" id="pop-filters">
-      <button type="button" class="btn v-pop__trigger" aria-expanded="false" aria-haspopup="true">
-        Filtres <span class="v-pop__badge num" id="filters-badge" hidden>0</span>
-      </button>
-      <div class="v-pop__panel popover" role="dialog" aria-label="Filtres" hidden>
-        <div class="v-facets" id="v-facets"></div>
-        <div class="v-facets__dates">
-          <label class="v-facets__label" for="f-from">Du</label>
-          <input type="date" id="f-from" class="v-date">
-          <label class="v-facets__label" for="f-to">au</label>
-          <input type="date" id="f-to" class="v-date">
+      <div class="v-search">
+        <label class="visually-hidden" for="f-q">Rechercher dans les légendes</label>
+        <input type="search" id="f-q" class="v-search__input" placeholder="Rechercher…  ( / )"
+               autocomplete="off" spellcheck="false">
+      </div>
+
+      <!-- Panneau de filtres : les valeurs et leurs comptes viennent du
+           serveur, recalculés sous les filtres déjà actifs (V13). -->
+      <div class="v-pop" id="pop-filters">
+        <button type="button" class="btn v-pop__trigger" aria-expanded="false" aria-haspopup="true">
+          Filtres <span class="v-pop__badge num" id="filters-badge" hidden>0</span>
+        </button>
+        <div class="v-pop__panel popover" role="dialog" aria-label="Filtres" hidden>
+          <div class="v-facets" id="v-facets"></div>
+          <div class="v-facets__dates">
+            <label class="v-facets__label" for="f-from">Du</label>
+            <input type="date" id="f-from" class="v-date">
+            <label class="v-facets__label" for="f-to">au</label>
+            <input type="date" id="f-to" class="v-date">
+          </div>
         </div>
       </div>
-    </div>
 
-    <label class="visually-hidden" for="f-sort">Tri</label>
-    <select id="f-sort" class="v-select">
-      <option value="date_desc">Plus récents</option>
-      <option value="date_asc">Plus anciens</option>
-      <option value="rating_desc">Mieux notés</option>
-      <option value="rating_asc">Moins notés</option>
-      <option value="size_desc">Plus lourds</option>
-      <option value="size_asc">Plus légers</option>
-    </select>
+      <label class="visually-hidden" for="f-sort">Tri</label>
+      <select id="f-sort" class="v-select">
+        <option value="date_desc">Plus récents</option>
+        <option value="date_asc">Plus anciens</option>
+        <option value="rating_desc">Mieux notés</option>
+        <option value="rating_asc">Moins notés</option>
+        <option value="size_desc">Plus lourds</option>
+        <option value="size_asc">Plus légers</option>
+      </select>
 
-    <label class="visually-hidden" for="f-group">Grouper par</label>
-    <select id="f-group" class="v-select">
-      <option value="none">Sans groupe</option>
-      <option value="day">Par jour</option>
-      <option value="week">Par semaine</option>
-      <option value="month">Par mois</option>
-      <option value="profile">Par profil</option>
-    </select>
+      <label class="visually-hidden" for="f-group">Grouper par</label>
+      <select id="f-group" class="v-select">
+        <option value="none">Sans groupe</option>
+        <option value="day">Par jour</option>
+        <option value="week">Par semaine</option>
+        <option value="month">Par mois</option>
+        <option value="profile">Par profil</option>
+      </select>
 
-    <div class="v-seg" role="group" aria-label="Disposition">
-      <button type="button" class="v-seg__btn is-active" data-layout="justified"
-              title="Ratios d'origine préservés">Ratios</button>
-      <button type="button" class="v-seg__btn" data-layout="grid"
-              title="Vignettes carrées, alignées">Carrés</button>
-    </div>
-
-    <!-- V1 : contrôle de densité visible en permanence, 3 paliers de
-         tokens.css (--thumb-sm 120 / --thumb-md 168 / --thumb-lg 240). -->
-    <div class="v-density">
-      <span class="v-density__mark" aria-hidden="true">▪</span>
-      <label class="visually-hidden" for="f-density">Densité de la grille</label>
-      <input type="range" id="f-density" min="0" max="2" step="1" value="1"
-             aria-valuetext="moyenne">
-      <span class="v-density__mark v-density__mark--lg" aria-hidden="true">◼</span>
-    </div>
-
-    <div class="v-pop" id="pop-display">
-      <button type="button" class="btn v-pop__trigger" aria-expanded="false" aria-haspopup="true">Affichage</button>
-      <div class="v-pop__panel popover" role="dialog" aria-label="Propriétés affichées" hidden>
-        <p class="menu-label">Sur chaque vignette</p>
-        <label class="v-check"><input type="checkbox" data-prop="platform"> Plateforme</label>
-        <label class="v-check"><input type="checkbox" data-prop="date" checked> Date</label>
-        <label class="v-check"><input type="checkbox" data-prop="rating" checked> Note</label>
-        <label class="v-check"><input type="checkbox" data-prop="duration" checked> Durée</label>
-        <label class="v-check"><input type="checkbox" data-prop="usage" checked> Usage</label>
-        <label class="v-check"><input type="checkbox" data-prop="dims"> Dimensions</label>
+      <div class="v-seg" role="group" aria-label="Disposition">
+        <button type="button" class="v-seg__btn is-active" data-layout="justified"
+                title="Ratios d'origine préservés">Ratios</button>
+        <button type="button" class="v-seg__btn" data-layout="grid"
+                title="Vignettes carrées, alignées">Carrés</button>
       </div>
-    </div>
 
-    <button type="button" class="btn v-inspector-toggle" id="btn-inspector"
-            aria-pressed="false" title="Panneau d'inspection (I)">Fiche</button>
+      <!-- V1 : contrôle de densité visible en permanence, 3 paliers de
+           tokens.css (--thumb-sm 120 / --thumb-md 168 / --thumb-lg 240). -->
+      <div class="v-density">
+        <span class="v-density__mark" aria-hidden="true">▪</span>
+        <label class="visually-hidden" for="f-density">Densité de la grille</label>
+        <input type="range" id="f-density" min="0" max="2" step="1" value="1"
+               aria-valuetext="moyenne">
+        <span class="v-density__mark v-density__mark--lg" aria-hidden="true">◼</span>
+      </div>
 
-    <!-- V20 : les collections vivent dans une colonne latérale permanente,
-         pas dans un menu. Le bouton ne fait que la replier. -->
-    <button type="button" class="btn" id="btn-collections"
-            aria-pressed="true" aria-controls="v-collections"
-            title="Colonne des collections (C)">Collections</button>
+      <div class="v-pop" id="pop-display">
+        <button type="button" class="btn v-pop__trigger" aria-expanded="false" aria-haspopup="true">Affichage</button>
+        <div class="v-pop__panel popover" role="dialog" aria-label="Propriétés affichées" hidden>
+          <p class="menu-label">Sur chaque vignette</p>
+          <label class="v-check"><input type="checkbox" data-prop="platform"> Plateforme</label>
+          <label class="v-check"><input type="checkbox" data-prop="date" checked> Date</label>
+          <label class="v-check"><input type="checkbox" data-prop="rating" checked> Note</label>
+          <label class="v-check"><input type="checkbox" data-prop="duration" checked> Durée</label>
+          <label class="v-check"><input type="checkbox" data-prop="usage" checked> Usage</label>
+          <label class="v-check"><input type="checkbox" data-prop="dims"> Dimensions</label>
+        </div>
+      </div>
 
-    <!-- V27 : l'écran des doublons est un écran, pas une modale : il
-         remplace la grille et garde la barre d'outils au-dessus. -->
-    <button type="button" class="btn" id="btn-doublons"
-            aria-pressed="false" aria-controls="v-dup"
-            title="Rechercher les doublons">Doublons</button>
+      <button type="button" class="btn v-inspector-toggle" id="btn-inspector"
+              aria-pressed="false" title="Panneau d'inspection (I)">Fiche</button>
 
-    <!-- ═══ TRI RAPIDE (refonte « PAS-À-PAS », §3) ═══
-         L'entrée du mode plein écran où l'on note et où l'on écrit la
-         phrase du futur meme, une carte à la fois. C'est un mode PENSÉ
-         AU DOIGT, d'où le bouton primaire : c'est la seule action de
-         cette barre qui ouvre un écran entier. -->
-    <button type="button" class="btn btn--primary" id="btn-tri"
-            aria-haspopup="dialog" aria-controls="v-tri"
-            title="Trier au swipe : note + phrase du meme">⇄ Tri rapide</button>
+      <!-- V20 : les collections vivent dans une colonne latérale permanente,
+           pas dans un menu. Le bouton ne fait que la replier. -->
+      <button type="button" class="btn" id="btn-collections"
+              aria-pressed="true" aria-controls="v-collections"
+              title="Colonne des collections (C)">Collections</button>
 
-    <span class="toolbar__spacer"></span>
+      <!-- V27 : l'écran des doublons est un écran, pas une modale : il
+           remplace la grille et garde la barre d'outils au-dessus. -->
+      <button type="button" class="btn" id="btn-doublons"
+              aria-pressed="false" aria-controls="v-dup"
+              title="Rechercher les doublons">Doublons</button>
+
+      <!-- ═══ TRI RAPIDE (refonte « PAS-À-PAS », §3) ═══
+           L'entrée du mode plein écran où l'on note et où l'on écrit la
+           phrase du futur meme, une carte à la fois. C'est un mode PENSÉ
+           AU DOIGT, d'où le bouton primaire : c'est la seule action de
+           cette barre qui ouvre un écran entier. -->
+      <button type="button" class="btn btn--primary" id="btn-tri"
+              aria-haspopup="dialog" aria-controls="v-tri"
+              title="Trier au swipe : note + phrase du meme">⇄ Tri rapide</button>
+
+      </div>
 
     <!-- V16 : le total de la vue courante, en chiffre, toujours à l'écran. -->
     <output class="v-total" id="v-total" for="f-q">
@@ -313,6 +322,14 @@
   <header class="v-tri__head">
     <strong class="v-tri__titre">Tri rapide</strong>
     <span class="v-tri__compteur num" id="tri-compteur">0 / 0</span>
+    <!-- La corbeille : « Passer » y dépose, ce bouton la vide. Masqué tant
+         qu'elle est vide — un bouton destructeur ne s'affiche pas quand il
+         n'a rien à détruire. -->
+    <button type="button" class="v-tri__corbeille" id="btn-tri-corbeille" hidden>
+      <span aria-hidden="true">&#x1F5D1;</span>
+      <span class="num" id="tri-corbeille-n">0</span>
+      <span class="v-tri__corbeille-mot">Vider</span>
+    </button>
     <button type="button" class="v-tri__fermer" id="btn-tri-close"
             aria-label="Fermer le tri rapide">&#x2715;</button>
   </header>

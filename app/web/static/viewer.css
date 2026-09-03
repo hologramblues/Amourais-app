@@ -85,17 +85,28 @@
    veut qu'une. On ne RETIRE aucun contrôle pour y arriver : la rangée
    défile horizontalement dans son propre conteneur, exactement comme
    elle le faisait déjà sous 768px. Rien ne disparaît, rien ne s'empile. */
+/* La barre a DEUX enfants : la zone qui défile, et le compteur qui reste.
+   Le débordement vit désormais sur l'enfant, plus sur la barre elle-même —
+   c'est ce qui empêche le compteur de recouvrir le dernier bouton. */
 .v-toolbar {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  overflow-x: auto;
   gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-4);
-  scrollbar-width: none;
 }
-.v-toolbar::-webkit-scrollbar { display: none; }
-.v-toolbar > * { flex-shrink: 0; }
+.v-toolbar__scroll {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--sp-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.v-toolbar__scroll::-webkit-scrollbar { display: none; }
+.v-toolbar__scroll > * { flex-shrink: 0; }
 
 .v-toolbar .btn,
 .v-toolbar button,
@@ -322,10 +333,11 @@
    Le fond opaque est ce qui l'empêche de se superposer aux contrôles
    qui passent dessous. */
 .v-total {
-  position: sticky;
-  right: 0;
+  /* Plus de `position: sticky` : le compteur est hors de la zone défilante,
+     rien ne passe plus dessous — donc plus besoin de fond opaque pour s'en
+     protéger, ni du recouvrement que ce fond causait. */
+  flex: 0 0 auto;
   padding: 0 var(--sp-3) 0 var(--sp-5);
-  background: var(--bg-1);
   font-size: var(--text-mini);
   color: var(--fg-3);
   white-space: nowrap;
@@ -1419,6 +1431,35 @@
   font-size: var(--text-mini);
   font-weight: var(--weight-medium);
   font-variant-numeric: var(--numeric);
+}
+/* La corbeille se tient à côté du compteur, en creux : contour, pas de
+   remplissage. Le seul aplat d'accent de cet en-tête reste l'avancement du
+   tri — un bouton destructeur ne réclame pas le regard avant lui. Il ne
+   vire au rouge qu'au survol, au moment où il est sur le point d'agir. */
+.v-tri__corbeille {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--border-width) solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--fg-default);
+  font-size: var(--text-mini);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: var(--numeric);
+  cursor: pointer;
+}
+.v-tri__corbeille:hover,
+.v-tri__corbeille:focus-visible {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.v-tri__corbeille[hidden] { display: none; }
+/* Sur un téléphone l'en-tête est déjà serré : le chiffre suffit, le mot
+   « Vider » part. L'intitulé accessible reste porté par aria-label. */
+@media (max-width: 560px) {
+  .v-tri__corbeille-mot { display: none; }
 }
 .v-tri__fermer {
   margin-left: auto;

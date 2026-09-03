@@ -436,19 +436,48 @@ def test_la_grille_reserve_la_place_de_la_barre_du_bas(css, js):
     assert 'document.body.classList.toggle("has-selbar", n > 0);' in js
 
 
-def test_le_total_de_la_vue_reste_visible_quoi_quil_arrive(css):
-    """V16 : le total est le seul chiffre exigé SOUS LES YEUX en
-    permanence. La barre défilant désormais à l'horizontale, il faut le
-    coller au bord droit — sinon il sort du champ sur une fenêtre étroite."""
-    assert re.search(
-        r"\.v-total\s*\{[^}]*position:\s*sticky;[^}]*right:\s*0;", css, re.S,
+def test_le_total_de_la_vue_reste_visible_quoi_quil_arrive(css, html):
+    """V16 : le total est le seul chiffre exigé SOUS LES YEUX en permanence.
+
+    Il l'obtenait par `position: sticky; right: 0` DANS la barre défilante,
+    avec un fond opaque — et ce fond RECOUVRAIT le dernier bouton de la
+    rangée (« Tri rapide ») dès que la barre débordait. Le compteur est donc
+    désormais HORS de la zone qui défile : il reste visible par construction,
+    et plus rien ne peut passer dessous.
+
+    L'invariant testé est plus fort que l'ancien : on vérifie la STRUCTURE
+    (deux enfants, le débordement porté par le seul enfant défilant) plutôt
+    qu'une astuce de positionnement.
+    """
+    # Le compteur est un frère de la zone défilante, pas un enfant.
+    i_scroll = html.index('v-toolbar__scroll')
+    i_total = html.index('class="v-total"')
+    assert i_total > i_scroll, "le compteur doit venir APRÈS la zone défilante"
+    assert '</div>' in html[i_scroll:i_total], (
+        "la zone défilante doit être FERMÉE avant le compteur — sinon il "
+        "redevient un enfant de ce qui défile"
+    )
+    # Le débordement vit sur l'enfant, pas sur la barre.
+    bloc_scroll = css[css.index(".v-toolbar__scroll {"):]
+    bloc_scroll = bloc_scroll[:bloc_scroll.index("}")]
+    assert "overflow-x: auto;" in bloc_scroll
+    # Et le compteur n'est plus collé par-dessus quoi que ce soit.
+    bloc_total = css[css.index(".v-total {"):]
+    bloc_total = bloc_total[:bloc_total.index("}")]
+    # Commentaires RETIRÉS avant la recherche : ce bloc EXPLIQUE longuement
+    # pourquoi il n'est plus sticky, et une recherche naïve sur le texte
+    # entier retomberait sur cette explication. (Même piège que le test du
+    # point d'entrée Docker, où « setpriv » survivait dans un commentaire.)
+    declarations = re.sub(r"/\*.*?\*/", "", bloc_total, flags=re.S)
+    assert "position: sticky" not in declarations, (
+        "sticky ferait de nouveau passer les boutons SOUS le compteur"
     )
 
 
 def test_la_barre_doutils_tient_sur_une_seule_rangee(css):
     """§4 : une rangée. Elle défile plutôt que de s'empiler — c'est ce qui
     permet de n'avoir RETIRÉ aucun contrôle pour y arriver."""
-    bloc = css[css.index(".v-toolbar {"):css.index(".v-toolbar::-webkit-scrollbar")]
+    bloc = css[css.index(".v-toolbar__scroll {"):css.index(".v-toolbar__scroll::-webkit-scrollbar")]
     assert "flex-wrap: nowrap;" in bloc
     assert "overflow-x: auto;" in bloc
 

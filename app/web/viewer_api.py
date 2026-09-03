@@ -1932,3 +1932,203 @@ def remove_from_collection(collection_id: int):
         return jsonify({"error": "Erreur serveur"}), 500
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Corbeille — la sortie « Passer » du tri rapide
+# ---------------------------------------------------------------------------
+#
+# La corbeille est une COLLECTION ORDINAIRE nommée « Corbeille », pas une
+# colonne sur les médias ni une table à part. Trois conséquences voulues :
+#   - elle apparaît dans la barre latérale comme les autres, on peut donc
+#     l'ouvrir et regarder ce qu'on y a jeté avant de vider ;
+#   - « Passer » n'efface RIEN : il pose une appartenance, réversible par le
+#     bouton Annuler du tri comme par un retrait manuel ;
+#   - la seule opération destructrice est « Vider », explicite, confirmée,
+#     et déclenchée par le propriétaire — jamais par un glissé du doigt.
+CORBEILLE_NOM = "Corbeille"
+
+
+def _corbeille(db, creer: bool = False):
+    """La collection corbeille. `creer=True` la crée si elle manque.
+
+    Recherche insensible à la casse, comme l'unicité des noms de collection :
+    sans ça, une corbeille renommée « corbeille » à la main donnerait DEUX
+    corbeilles, dont une invisible du tri.
+    """
+    collection = (
+        db.query(Collection)
+        .filter(func.lower(Collection.name) == CORBEILLE_NOM.lower())
+        .first()
+    )
+    if collection is None and creer:
+        collection = Collection(name=CORBEILLE_NOM)
+        db.add(collection)
+        db.commit()
+        db.refresh(collection)
+    return collection
+
+
+def _etat_corbeille(db) -> dict:
+    """Ce que l'écran doit savoir AVANT de proposer de vider.
+
+    `aussi_ailleurs` compte les médias jetés qui appartiennent en plus à une
+    autre collection. Vider les supprime quand même — mais le dialogue le
+    dit, au lieu de faire disparaître sans prévenir un média rangé ailleurs.
+    """
+    collection = _corbeille(db)
+    if collection is None:
+        return {"id": None, "count": 0, "aussi_ailleurs": 0}
+
+    dedans = (
+        db.query(CollectionItem.media_item_id)
+        .filter(CollectionItem.collection_id == collection.id)
+        .subquery()
+    )
+    count = db.query(func.count()).select_from(dedans).scalar() or 0
+    aussi_ailleurs = (
+        db.query(func.count(func.distinct(CollectionItem.media_item_id)))
+        .filter(
+            CollectionItem.collection_id != collection.id,
+            CollectionItem.media_item_id.in_(db.query(dedans.c.media_item_id)),
+        )
+        .scalar()
+    ) or 0
+    return {"id": collection.id, "count": count, "aussi_ailleurs": aussi_ailleurs}
+
+
+@viewer_api_bp.route("/viewer/corbeille")
+def get_corbeille():
+    """Compteur de la corbeille — lu à l'ouverture du tri et après chaque geste."""
+    db = SessionLocal()
+    try:
+        return jsonify(_etat_corbeille(db))
+    except Exception as exc:
+        logger.error("Lecture de la corbeille : {}", exc)
+        return jsonify({"error": "Erreur serveur"}), 500
+    finally:
+        db.close()
+
+
+@viewer_api_bp.route("/viewer/corbeille/items", methods=["POST"])
+def corbeille_ajouter():
+    """Jette des médias à la corbeille. Crée la collection au premier jet."""
+    db = SessionLocal()
+    try:
+        data = request.get_json(silent=True) or {}
+        ids = data.get("ids")
+        if not isinstance(ids, list) or not ids:
+            return jsonify({"error": "ids doit lister au moins un média"}), 400
+        if len(ids) > 500:
+            return jsonify({"error": "Maximum 500 médias par lot"}), 400
+
+        collection = _corbeille(db, creer=True)
+        ajoutes = _ajouter_a_la_collection(db, collection.id, ids)
+        return jsonify({"ajoutes": ajoutes, "corbeille": _etat_corbeille(db)})
+    except Exception as exc:
+        db.rollback()
+        logger.error("Jet à la corbeille : {}", exc)
+        return jsonify({"error": "Erreur serveur"}), 500
+    finally:
+        db.close()
+
+
+@viewer_api_bp.route("/viewer/corbeille/items", methods=["DELETE"])
+def corbeille_retirer():
+    """Ressort des médias de la corbeille — c'est « Annuler » du tri.
+
+    Corbeille absente = rien à ressortir : on répond 200 avec 0 retiré, et
+    surtout PAS 404. Annuler un « Passer » ne doit jamais afficher d'erreur
+    au propriétaire pour une collection que le serveur n'a pas encore créée.
+    """
+    db = SessionLocal()
+    try:
+        data = request.get_json(silent=True) or {}
+        ids = data.get("ids")
+        if not isinstance(ids, list) or not ids:
+            return jsonify({"error": "ids doit lister au moins un média"}), 400
+        if len(ids) > 500:
+            return jsonify({"error": "Maximum 500 médias par lot"}), 400
+
+        collection = _corbeille(db)
+        retires = 0
+        if collection is not None:
+            voulus = [i for i in ids if isinstance(i, int)]
+            if voulus:
+                liens = (
+                    db.query(CollectionItem)
+                    .filter(
+                        CollectionItem.collection_id == collection.id,
+                        CollectionItem.media_item_id.in_(voulus),
+                    )
+                    .all()
+                )
+                for lien in liens:
+                    db.delete(lien)
+                retires = len(liens)
+                db.commit()
+        return jsonify({"retires": retires, "corbeille": _etat_corbeille(db)})
+    except Exception as exc:
+        db.rollback()
+        logger.error("Retrait de la corbeille : {}", exc)
+        return jsonify({"error": "Erreur serveur"}), 500
+    finally:
+        db.close()
+
+
+@viewer_api_bp.route("/viewer/corbeille/vider", methods=["POST"])
+def corbeille_vider():
+    """Supprime DÉFINITIVEMENT les médias de la corbeille (base + fichiers).
+
+    Le client n'envoie AUCUNE liste d'identifiants : le serveur supprime ce
+    qui est dans la corbeille, rien d'autre. Un lot d'ids fourni par la page
+    serait la seule façon qu'un bug d'affichage — ou une requête forgée —
+    fasse détruire des médias que le propriétaire n'a jamais jetés.
+
+    Ordre repris de `batch_delete_media` : la base d'abord, le disque
+    ensuite. Un commit refusé laisse alors TOUT en place ; l'ordre inverse
+    laisserait des lignes pointant vers des fichiers déjà détruits.
+    """
+    db = SessionLocal()
+    try:
+        collection = _corbeille(db)
+        if collection is None:
+            return jsonify({"supprimes": 0, "errors": 0, "corbeille": _etat_corbeille(db)})
+
+        ids = [
+            row[0]
+            for row in db.query(CollectionItem.media_item_id)
+            .filter(CollectionItem.collection_id == collection.id)
+            .all()
+        ]
+        if not ids:
+            return jsonify({"supprimes": 0, "errors": 0, "corbeille": _etat_corbeille(db)})
+
+        items = db.query(MediaItem).filter(MediaItem.id.in_(ids)).all()
+        chemins = [Path(item.local_path).name for item in items if item.local_path]
+        # Identifiants relevés AVANT le delete : après le commit, lire .id
+        # sur une instance supprimée peut repartir en base pour rien.
+        supprimes_ids = [item.id for item in items]
+        for item in items:
+            db.delete(item)  # cascade : commentaires, notes, appartenances
+        supprimes = len(items)
+        db.commit()
+
+        errors = _effacer_les_fichiers(chemins)
+        logger.info("Corbeille vidée : {} médias supprimés ({} fichiers en échec)",
+                    supprimes, errors)
+        return jsonify({
+            "supprimes": supprimes,
+            # Les identifiants détruits : la page les retire de sa grille et
+            # de la pile de tri sans recharger, et sans garder de vignettes
+            # mortes pointant vers des fichiers qui n'existent plus.
+            "supprimes_ids": supprimes_ids,
+            "errors": errors,
+            "corbeille": _etat_corbeille(db),
+        })
+    except Exception as exc:
+        db.rollback()
+        logger.error("Vidage de la corbeille : {}", exc)
+        return jsonify({"error": "Erreur serveur"}), 500
+    finally:
+        db.close()

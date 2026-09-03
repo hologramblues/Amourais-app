@@ -80,6 +80,7 @@
       drag: null,      // origine du glissé, null hors geste
       minuterie: null,
       jeton: 0,        // annule la réponse d'une carte déjà quittée
+      corbeille: null, // {id, count, aussi_ailleurs} — relu à chaque geste
     },
 
     // ─── Doublons (V27/V28/V29) ──────────────────────────────
@@ -1828,6 +1829,26 @@
       });
       ligne.appendChild(pick);
 
+      // La Corbeille n'est pas une collection comme les autres : la renommer
+      // en ferait perdre la trace au tri (qui en recréerait une vide), et la
+      // « supprimer » ne ferait que relâcher son contenu sans rien effacer —
+      // deux gestes qui mentent. Elle n'offre donc qu'une action : vider.
+      if (c.name.toLowerCase() === "corbeille") {
+        var vider = el("button", "v-col-row__act v-col-row__act--danger", "🗑");
+        vider.type = "button";
+        vider.title = "Vider la corbeille";
+        vider.setAttribute("aria-label", "Vider la corbeille");
+        vider.addEventListener("click", function () {
+          // L'état vient du serveur : la barre latérale s'ouvre hors du tri,
+          // sans compteur en mémoire, et le dialogue doit annoncer le vrai
+          // nombre — pas zéro.
+          chargerCorbeille().then(viderCorbeille);
+        });
+        ligne.appendChild(vider);
+        hote.appendChild(ligne);
+        return;
+      }
+
       var renommer = el("button", "v-col-row__act", "✎");
       renommer.type = "button";
       renommer.title = "Renommer « " + c.name + " »";
@@ -2627,6 +2648,10 @@
       return;
     }
     state.tri.ouvert = true;
+    // La corbeille survit à la fermeture du tri : on relit son compteur à
+    // l'ouverture, sinon le bouton « Vider » resterait caché sur un stock
+    // hérité de la session précédente.
+    chargerCorbeille();
     // Le pied du Tri rapide occupe le bas de l'écran : les toasts doivent
     // se poser au-dessus de lui, pas dessus (règle CSS `.tri-ouvert`).
     document.body.classList.add("tri-ouvert");
@@ -2952,12 +2977,138 @@
     state.tri.anim = action === "keep" ? TRI_SORTIE : -TRI_SORTIE;
     appliquerGesteTri();
     toast(action === "keep" ? "Gardé ✓" : "Passé");
+    if (action !== "keep") jeterALaCorbeille(item.id);
     clearTimeout(state.tri.minuterie);
     state.tri.minuterie = setTimeout(function () {
       state.tri.hist.push({ id: item.id, action: action });
       state.tri.index += 1;
       rendreTri();
     }, TRI_DUREE);
+  }
+
+  // ---- Corbeille -------------------------------------------------------
+  // « Passer » ne détruit rien : il pose le média dans la collection
+  // Corbeille, visible dans la barre latérale comme les autres. Le seul
+  // geste destructeur est « Vider », confirmé, en haut de cet écran.
+
+  /** Dépose un média à la corbeille. Un échec réseau ne bloque PAS le tri. */
+  function jeterALaCorbeille(id) {
+    return envoyer(API + "/corbeille/items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [id] }),
+    })
+      .then(function (d) { majCorbeille(d.corbeille); })
+      .catch(function () {
+        // Le média reste dans la bibliothèque : le tri continue, mais on le
+        // dit, sinon le compteur mentirait au moment de vider.
+        notifier("Ce média n'a pas pu être mis à la corbeille.", "danger");
+      });
+  }
+
+  /** Ressort un média de la corbeille — le pendant de « Annuler ». */
+  function ressortirDeLaCorbeille(id) {
+    return envoyer(API + "/corbeille/items", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [id] }),
+    })
+      .then(function (d) { majCorbeille(d.corbeille); })
+      .catch(function () {});
+  }
+
+  function chargerCorbeille() {
+    return fetch(API + "/corbeille")
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (!d.error) majCorbeille(d); })
+      .catch(function () {});
+  }
+
+  /** Affiche le compteur. Corbeille vide = bouton absent, pas grisé. */
+  function majCorbeille(etat) {
+    if (!etat) return;
+    state.tri.corbeille = etat;
+    var bouton = $("btn-tri-corbeille");
+    if (!bouton) return;
+    var n = etat.count || 0;
+    $("tri-corbeille-n").textContent = n;
+    bouton.hidden = n === 0;
+    bouton.setAttribute(
+      "aria-label",
+      "Vider la corbeille : " + n + (n > 1 ? " médias" : " média")
+    );
+  }
+
+  function viderCorbeille() {
+    var etat = state.tri.corbeille || { count: 0, aussi_ailleurs: 0 };
+    var n = etat.count || 0;
+    // Le bouton reste dans la barre latérale même à vide : un clic doit dire
+    // qu'il n'y a rien, pas rester muet comme un bouton cassé.
+    if (!n) { toast("La corbeille est vide."); return; }
+    var texte = "Les fichiers et leurs commentaires seront effacés du disque "
+      + "et de la base. Cette action est irréversible.";
+    // Un média jeté peut avoir été rangé ailleurs un autre jour : le dire
+    // AVANT, pas le faire disparaître d'une collection qu'on croyait sûre.
+    if (etat.aussi_ailleurs) {
+      texte += " " + etat.aussi_ailleurs
+        + (etat.aussi_ailleurs > 1
+            ? " de ces médias appartiennent aussi à une autre collection."
+            : " de ces médias appartient aussi à une autre collection.");
+    }
+    confirmer(
+      "Vider la corbeille (" + n + (n > 1 ? " médias" : " média") + ") ?",
+      texte,
+      "Supprimer définitivement"
+    ).then(function (ok) {
+      if (!ok) return;
+      // Aucune liste d'identifiants n'est envoyée : le serveur supprime ce
+      // qu'IL a dans la corbeille (voir corbeille_vider côté Python).
+      envoyer(API + "/corbeille/vider", { method: "POST" })
+        .then(function (d) {
+          majCorbeille(d.corbeille);
+          purgerDeLaVue(d.supprimes_ids || []);
+          notifier(
+            d.supprimes + (d.supprimes > 1 ? " médias supprimés." : " média supprimé."),
+            "success"
+          );
+          chargerFacettes();
+          // Le compteur de la barre latérale vient de tomber à zéro : sans
+          // ce rechargement, la Corbeille y afficherait encore son stock.
+          chargerCollections();
+        })
+        .catch(function () {
+          notifier("Le vidage a échoué : la corbeille est inchangée.", "danger");
+        });
+    });
+  }
+
+  /**
+   * Retire de la vue les médias que le serveur vient de détruire.
+   *
+   * Sans ça, la grille garderait des vignettes mortes et le tri continuerait
+   * de présenter des cartes dont la note et la phrase partiraient en 404.
+   * L'index du tri est reculé du nombre de cartes disparues DERRIÈRE lui,
+   * sinon vider sauterait autant de médias non triés.
+   */
+  function purgerDeLaVue(ids) {
+    if (!ids || !ids.length) return;
+    var perdus = {};
+    ids.forEach(function (i) { perdus[i] = true; });
+
+    var recul = 0;
+    state.items.forEach(function (it, i) {
+      if (perdus[it.id] && i < state.tri.index) recul += 1;
+    });
+    state.items = state.items.filter(function (it) { return !perdus[it.id]; });
+    state.total = Math.max(0, state.total - ids.length);
+    state.tri.index = Math.max(0, state.tri.index - recul);
+    state.tri.hist = state.tri.hist.filter(function (h) { return !perdus[h.id]; });
+    ids.forEach(function (i) { state.selection.delete(i); });
+
+    majSelection();
+    majTotal();
+    mettreEnPage();
+    if (state.tri.ouvert) rendreTri();
   }
 
   /** Annuler DÉPILE la dernière décision et revient sur sa carte. */
@@ -2970,7 +3121,10 @@
     // perdre une phrase dans cet écran serait de se raviser.
     enregistrerPhraseCourante();
     clearTimeout(state.tri.minuterie);
-    state.tri.hist.pop();
+    var derniere = state.tri.hist.pop();
+    // Annuler un « Passer » le ressort de la corbeille : sans ça, un média
+    // repris puis gardé resterait dans la liste des condamnés.
+    if (derniere && derniere.action !== "keep") ressortirDeLaCorbeille(derniere.id);
     state.tri.index = Math.max(0, state.tri.index - 1);
     state.tri.anim = 0;
     state.tri.dx = 0;
@@ -3032,6 +3186,7 @@
 
     $("btn-tri").addEventListener("click", ouvrirTri);
     $("btn-tri-close").addEventListener("click", fermerTri);
+    $("btn-tri-corbeille").addEventListener("click", viderCorbeille);
     $("btn-tri-retour").addEventListener("click", fermerTri);
     $("btn-tri-restart").addEventListener("click", recommencerTri);
     $("btn-tri-undo").addEventListener("click", annulerTri);
