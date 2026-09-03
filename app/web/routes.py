@@ -3,6 +3,7 @@ Flask Blueprint for page routes (HTML pages).
 """
 from __future__ import annotations
 
+import hashlib
 import os
 from datetime import datetime
 from pathlib import Path
@@ -40,11 +41,19 @@ pages_bp = Blueprint("pages", __name__)
 # inline : aucun fichier binaire à servir, aucune couleur brute hors
 # de l'aplat d'accent, et le fond transparent laisse l'onglet du
 # navigateur suivre son propre thème.
+# Le dessin reprend celui de l'icône d'écran d'accueil (static/icons/) :
+# aplat d'encre, S blanc, ombre portée rouge décalée — la construction du
+# logotype de marque, lettre blanche sur ombre rouge. Coins VIFS : le rayon
+# de 7 px et le bleu #2f6fe0 d'avant venaient d'un système de design que
+# l'application n'a plus.
 _FAVICON_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
-    '<rect width="32" height="32" rx="7" fill="#2f6fe0"/>'
-    '<text x="16" y="23" font-size="19" text-anchor="middle" fill="#ffffff">'
-    "⚔</text></svg>"
+    '<rect width="32" height="32" fill="#131211"/>'
+    '<text x="17.4" y="24.4" font-size="27" font-weight="800" text-anchor="middle"'
+    ' font-family="Archivo, Helvetica, Arial, sans-serif" fill="#ff0000">S</text>'
+    '<text x="16" y="23" font-size="27" font-weight="800" text-anchor="middle"'
+    ' font-family="Archivo, Helvetica, Arial, sans-serif" fill="#ffffff">S</text>'
+    "</svg>"
 )
 
 
@@ -53,6 +62,59 @@ def favicon():
     resp = make_response(_FAVICON_SVG)
     resp.headers["Content-Type"] = "image/svg+xml"
     resp.headers["Cache-Control"] = "public, max-age=604800"
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# Service worker (PWA)
+# ---------------------------------------------------------------------------
+# Il est servi DEPUIS LA RACINE, jamais depuis /static/. La portée d'un
+# service worker ne peut pas remonter au-dessus de son propre chemin :
+# /static/sw.js ne contrôlerait que /static/, c'est-à-dire aucune page.
+#
+# Le fichier est renvoyé tel quel, à une ligne près : `BUILD` reçoit
+# l'empreinte des fichiers statiques. Les navigateurs n'installent un
+# nouveau worker que si ses OCTETS changent — avec une constante écrite à la
+# main, une correction de CSS partirait en production derrière un worker
+# identique, qui continuerait de servir l'ancien cache. Ici, toucher au
+# moindre asset change l'empreinte, donc le fichier, donc le worker.
+_SW_SOURCE = Path(__file__).resolve().parent / "static" / "sw.js"
+
+
+def _empreinte_statiques() -> str:
+    """Empreinte courte des fichiers statiques : nom + taille + mtime.
+
+    Assez fine pour bouger dès qu'un fichier change, assez grossière pour
+    ne pas relire des mégaoctets à chaque requête.
+    """
+    racine = _SW_SOURCE.parent
+    marques = []
+    for chemin in sorted(racine.rglob("*")):
+        if chemin.is_file():
+            st = chemin.stat()
+            marques.append(f"{chemin.relative_to(racine)}:{st.st_size}:{int(st.st_mtime)}")
+    return hashlib.sha256("|".join(marques).encode("utf-8")).hexdigest()[:12]
+
+
+@pages_bp.route("/sw.js")
+def service_worker():
+    try:
+        source = _SW_SOURCE.read_text(encoding="utf-8")
+    except OSError as exc:
+        # Pas de worker plutôt qu'un worker cassé : un 404 laisse simplement
+        # l'application fonctionner comme un site ordinaire.
+        logger.error("Service worker illisible : {}", exc)
+        return "", 404
+
+    source = source.replace('const BUILD = "dev";',
+                            f'const BUILD = "{_empreinte_statiques()}";', 1)
+    resp = make_response(source)
+    resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+    # JAMAIS de cache sur le worker lui-même : c'est le fichier qui décide
+    # de tous les autres. Un worker figé dans le cache HTTP est exactement
+    # la panne qu'on ne peut plus corriger à distance.
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Service-Worker-Allowed"] = "/"
     return resp
 
 

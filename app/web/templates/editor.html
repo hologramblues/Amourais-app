@@ -64,6 +64,8 @@
        Il ne style aucun élément, il ne fait que déclarer des variables. #}
     <link rel="stylesheet" href="/static/tokens.css?v={{ asset_version('tokens.css') }}">
     <link rel="stylesheet" href="/static/editor.css?v={{ asset_version('editor.css') }}">
+
+  {% include "partials/pwa.html" %}
 </head>
 <body>
     {% set nav_active = 'editor' %}

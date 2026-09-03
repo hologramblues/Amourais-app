@@ -1,0 +1,51 @@
+{#- ═══════════════════════════════════════════════════════════════════════
+    APPLICATION INSTALLABLE (PWA) — à inclure dans le <head> de CHAQUE page.
+
+    Pourquoi un partiel et pas un simple bloc dans layout.html : quatre des
+    huit écrans (viewer, éditeur, calendrier, statistiques) sont autonomes et
+    n'héritent pas du gabarit. Poser ces balises dans layout.html seul
+    laisserait la bibliothèque — qui est justement le `start_url` du
+    manifeste — sans manifeste ni service worker. On ne pourrait pas
+    installer l'application depuis l'écran par lequel on entre.
+
+    `crossorigin="use-credentials"` n'est PAS décoratif : le manifeste est
+    téléchargé sans les identifiants de la page, et l'application tourne
+    derrière une authentification HTTP Basic. Sans cet attribut, la requête
+    repart en 401, le manifeste n'est jamais lu, et l'application n'est pas
+    installable — sans le moindre message d'erreur visible.
+
+    Les deux `theme-color` suivent le thème du téléphone : sur iOS en mode
+    autonome, c'est cette couleur qui peint la barre d'état. Une valeur
+    unique donnerait une bande claire au-dessus d'une application sombre.
+    ═══════════════════════════════════════════════════════════════════ -#}
+<link rel="manifest" href="/static/manifest.webmanifest?v={{ asset_version('manifest.webmanifest') }}" crossorigin="use-credentials">
+<meta name="theme-color" content="#f3f2f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131211" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+{#- « default », PAS « black-translucent ». Translucide fait passer la page
+    SOUS l'heure et sous la barre d'accueil : le haut de la barre d'outils et
+    les boutons du tri rapide, qui tiennent le bas de l'écran, se
+    retrouveraient dessous. Le rattraper demande `viewport-fit=cover` et des
+    marges `env(safe-area-inset-*)` qu'aucun test d'ici ne peut vérifier —
+    l'iPhone n'est pas dans cette machine. En « default », iOS écarte
+    lui-même le contenu des zones dangereuses. -#}
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="SAMOURAÏS">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png?v={{ asset_version('icons/apple-touch-icon.png') }}">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png?v={{ asset_version('icons/icon-192.png') }}">
+
+{#- Enregistrement du service worker. Il ne doit rien retarder de ce qui
+    s'affiche, d'où le `load`. Et il n'est même pas fatal : un échec laisse
+    l'application marcher exactement comme avant, en site ordinaire — c'est
+    pour ça que le catch ne montre rien à l'écran. Les navigateurs ne
+    l'acceptent qu'en HTTPS ou sur localhost ; ailleurs, `serviceWorker` est
+    absent et la garde suffit. -#}
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .catch(function (e) { console.warn('Service worker non enregistré :', e); });
+    });
+  }
+</script>

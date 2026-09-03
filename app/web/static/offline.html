@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAMOURAIS — hors ligne</title>
+<!--
+  Page de secours du service worker. Elle est VOLONTAIREMENT autonome :
+  aucun CSS, aucune police, aucun script venu d'ailleurs. Le seul moment où
+  elle s'affiche est celui où le réseau ne répond pas — c'est-à-dire le seul
+  moment où une dépendance externe serait certaine de manquer.
+  Les couleurs sont écrites en dur pour la même raison : tokens.css peut ne
+  pas être dans le cache.
+-->
+<style>
+  :root { color-scheme: light dark; }
+  html { background: #f3f2f2; color: #131211; }
+  @media (prefers-color-scheme: dark) {
+    html { background: #131211; color: #eae9e9; }
+    .cadre { border-color: #322e2d !important; }
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    font: 400 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .cadre {
+    max-width: 380px;
+    border: 2px solid #d7d3d3;
+    padding: 32px 24px;
+  }
+  .marque {
+    display: block;
+    width: 64px;
+    height: 64px;
+    margin-bottom: 24px;
+  }
+  h1 {
+    margin: 0 0 12px;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  p { margin: 0 0 20px; }
+  button {
+    border: 0;
+    border-radius: 0;
+    background: #ae1800;
+    color: #fff;
+    padding: 12px 20px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: #8f1300; }
+</style>
+</head>
+<body>
+  <div class="cadre">
+    <img class="marque" src="/static/icons/icon-192.png" alt="" width="64" height="64">
+    <h1>Pas de réseau</h1>
+    <p>
+      SAMOURAIS a besoin du serveur pour lire la médiathèque, lancer un
+      scrape ou publier. Rien n'a été perdu : reviens dès que la connexion
+      est revenue.
+    </p>
+    <button type="button" onclick="location.reload()">Réessayer</button>
+  </div>
+</body>
+</html>

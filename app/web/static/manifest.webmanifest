@@ -1,0 +1,53 @@
+{
+  "name": "SAMOURAIS SCRAPPER",
+  "short_name": "SAMOURAÏS",
+  "description": "Scraper, trier, monter et programmer les médias des profils suivis.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "/viewer",
+  "scope": "/",
+  "id": "/",
+  "display": "standalone",
+  "background_color": "#f3f2f2",
+  "theme_color": "#f3f2f2",
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Bibliothèque",
+      "short_name": "Médias",
+      "url": "/viewer",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Éditeur",
+      "short_name": "Éditeur",
+      "url": "/editor",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Calendrier",
+      "short_name": "Calendrier",
+      "url": "/calendar",
+      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

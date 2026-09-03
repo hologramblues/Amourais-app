@@ -1204,7 +1204,7 @@ def test_les_pages_sont_toutes_servies_par_le_meme_blueprint():
     """Assertion statique : les 8 pages listées ici sont bien les 8 routes réelles.
 
     Si quelqu'un ajoute une page sans l'ajouter au smoke test, ce test le dit.
-    Les routes techniques (`/health`, `/favicon.ico`, `/media/*`,
+    Les routes techniques (`/health`, `/favicon.ico`, `/sw.js`, `/media/*`,
     `/auth/google*`) sont exclues : elles ne rendent pas d'écran et
     n'ont donc rien à faire dans le smoke test des pages.
     """
@@ -1215,7 +1215,7 @@ def test_les_pages_sont_toutes_servies_par_le_meme_blueprint():
         for regle in create_app().url_map.iter_rules()
         if str(regle).count("/") == 1
         and "<" not in str(regle)
-        and str(regle) not in ("/health", "/static", "/favicon.ico")
+        and str(regle) not in ("/health", "/static", "/favicon.ico", "/sw.js")
     }
 
     assert regles == set(PAGES)
