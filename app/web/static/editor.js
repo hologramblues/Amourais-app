@@ -60,6 +60,10 @@
         const WATERMARK_FRAME_RATIO = 0.45; // Instagram — 0.70 était trop gros, 0.32 trop petit
         const WATERMARK_TIKTOK_RATIO  = 0.30; // TikTok — plus discret qu'Instagram, mais lisible
         const WATERMARK_BLEED_RATIO = 0.035;
+        //: Décalage de la première image d'une vidéo. À t=0 le décodeur
+        //: n'a souvent rien rendu et l'aperçu sort NOIR — impossible de
+        //: cadrer. Même valeur que le hash perceptuel du pipeline.
+        const PREMIERE_IMAGE_S = 0.1;
         //: TikTok : RETRAIT depuis le bord droit (et non débord). Le cadre y
         //: occupe tout le canvas — déborder revient à sortir de l'image.
         const WATERMARK_TIKTOK_INSET = 0.035;
@@ -1111,8 +1115,17 @@
                 imageScaleValue.textContent = '100%';
                 selectImageBtn.style.display = 'block';
                 
-                // Capture first frame for canvas preview
-                captureVideoFrame(0);
+                // PREMIÈRE IMAGE VISIBLE, pas l'instant zéro. À t=0 le
+                // décodage n'a souvent rien produit : on capturait une image
+                // NOIRE, et le cadrage se faisait à l'aveugle. Le module de
+                // hash perceptuel avait déjà tranché pareil (pipeline.py :
+                // « on prend une image de référence à 0,1 s — pas l'image
+                // zéro, souvent noire »). On aligne l'éditeur dessus, en
+                // bornant pour les vidéos plus courtes que le décalage.
+                const debut = Math.min(PREMIERE_IMAGE_S, (videoSource.duration || 1) / 2);
+                state.trimStart = debut;
+                captureVideoFrame(debut);
+                updateTimelineUI();
                 
                 exportBtn.disabled = false;
                 exportBtn.textContent = 'Exporter la vidéo';

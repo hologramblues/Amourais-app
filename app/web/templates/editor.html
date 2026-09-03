@@ -218,30 +218,6 @@
 
                 <button class="btn btn-secondary" id="select-image-btn" type="button" style="display: none;">S&eacute;lectionner le m&eacute;dia</button>
 
-                <!-- Timeline vidéo -->
-                <div class="timeline-container" id="timeline-container" style="display: none;">
-                    <div class="timeline-header">
-                        <span>Trim vid&eacute;o</span>
-                        <span class="timeline-duration" id="trim-duration">0:00</span>
-                    </div>
-                    <div class="timeline-wrapper" id="timeline-wrapper">
-                        <div class="timeline-thumbnails" id="timeline-thumbnails"></div>
-                        <div class="timeline-selection" id="timeline-selection">
-                            <div class="timeline-handle start" id="handle-start"></div>
-                            <div class="timeline-handle end" id="handle-end"></div>
-                        </div>
-                        <div class="timeline-playhead" id="timeline-playhead"></div>
-                    </div>
-                    <div class="timeline-times">
-                        <span id="time-start">0:00</span>
-                        <span id="time-end">0:00</span>
-                    </div>
-                    <div class="video-controls">
-                        <button id="btn-play" type="button">Lecture</button>
-                        <button id="btn-preview" type="button">Aper&ccedil;u</button>
-                    </div>
-                </div>
-
                 <video id="video-source" muted playsinline></video>
             </section>
 
@@ -623,7 +599,38 @@
         {#- ── Barre d'étapes (mobile) ────────────────────────────────
             Quatre colonnes ; l'étape courante porte un soulignement
             INTÉRIEUR de 4px, les étapes faites un ✓ à .55 d'opacité. -#}
-        <nav class="wiz-steps" id="wiz-steps" aria-label="Progression">
+                    {# TIMELINE VIDÉO — SORTIE DU PARCOURS.
+               Elle vivait dans l'étape 1 : dès qu'on passait au Cadrage, on
+               perdait le repère de lecture alors que c'est précisément là
+               qu'on cadre une image de la vidéo. Posée ici, hors des
+               <section class="wiz-step">, elle reste visible aux 4 étapes.
+               Masquée par défaut : `editor.js` la révèle quand le média
+               importé est une vidéo. #}
+<!-- Timeline vidéo -->
+            <div class="timeline-container" id="timeline-container" style="display: none;">
+                <div class="timeline-header">
+                    <span>Trim vid&eacute;o</span>
+                    <span class="timeline-duration" id="trim-duration">0:00</span>
+                </div>
+                <div class="timeline-wrapper" id="timeline-wrapper">
+                    <div class="timeline-thumbnails" id="timeline-thumbnails"></div>
+                    <div class="timeline-selection" id="timeline-selection">
+                        <div class="timeline-handle start" id="handle-start"></div>
+                        <div class="timeline-handle end" id="handle-end"></div>
+                    </div>
+                    <div class="timeline-playhead" id="timeline-playhead"></div>
+                </div>
+                <div class="timeline-times">
+                    <span id="time-start">0:00</span>
+                    <span id="time-end">0:00</span>
+                </div>
+                <div class="video-controls">
+                    <button id="btn-play" type="button">Lecture</button>
+                    <button id="btn-preview" type="button">Aper&ccedil;u</button>
+                </div>
+            </div>
+
+<nav class="wiz-steps" id="wiz-steps" aria-label="Progression">
             <button class="wiz-steps__cell is-current" type="button" data-goto="1" aria-current="step">
                 <span class="wiz-steps__num">1</span><span class="wiz-steps__label">M&eacute;dia</span>
             </button>
